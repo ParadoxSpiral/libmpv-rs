@@ -254,12 +254,12 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
     type Item = Result<Vec<Result<Event, Error>>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let observed = self.all_observed.lock();
+        let mut observed = self.all_observed.lock();
         if observed.is_empty() || self.last_no_associated_ev {
             mem::drop(observed);
             unsafe { (*self.notification).1.wait(&mut (*self.notification).0.lock()) };
+            observed = self.all_observed.lock();
         }
-        let mut observed = self.all_observed.lock();
 
         let mut ret_events = vec![];
         if observed.is_empty() {
