@@ -74,6 +74,7 @@ extern "C" fn event_callback(d: *mut libc::c_void) {
 
 #[doc(hidden)]
 #[derive(Clone, Debug, PartialEq)]
+/// Designed for internal use.
 pub struct InnerEvent {
     event: Event,
     err: Option<Error>,
@@ -806,6 +807,7 @@ unsafe impl<'parent> Sync for Client<'parent> {}
 
 #[doc(hidden)]
 #[allow(missing_docs)]
+/// Designed for internal use.
 pub trait MpvMarker {
     // FIXME: Most of these can go once `Associated Items` lands
     fn initialized(&self) -> bool;
