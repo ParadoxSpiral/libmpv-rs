@@ -197,7 +197,7 @@ pub struct EventIter<'parent, P>
     local_to_observe: Vec<Event>,
     all_observed: &'parent Mutex<Vec<InnerEvent>>,
     last_no_associated_ev: bool,
-    _marker: PhantomData<&'parent P>,
+    _does_not_outlive: PhantomData<&'parent P>,
 }
 
 impl<'parent, P> Drop for EventIter<'parent, P>
@@ -292,8 +292,8 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
                 }
             }
             if !observed.is_empty() {
-                unsafe { (*self.notification).1.notify_all() };
                 mem::drop(observed);
+                unsafe { (*self.notification).1.notify_all() };
             }
         } else {
             let mut index = vec![];
@@ -320,8 +320,8 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
                 observed.remove(i - n);
             }
             if !observed.is_empty() {
-                unsafe { (*self.notification).1.notify_all() };
                 mem::drop(observed);
+                unsafe { (*self.notification).1.notify_all() };
             }
         }
         if !ret_events.is_empty() {
@@ -797,7 +797,7 @@ pub struct Client<'parent> {
     ev_to_observe: Option<Mutex<Vec<Event>>>,
     ev_observed: Option<Mutex<Vec<InnerEvent>>>,
     ev_to_observe_properties: Option<Mutex<HashMap<String, usize>>>,
-    _marker: PhantomData<&'parent Parent>,
+    _does_not_outlive: PhantomData<&'parent Parent>,
 }
 
 unsafe impl Send for Parent {}
@@ -1048,7 +1048,7 @@ impl<'parent> Parent {
                 ev_to_observe: ev_to_observe,
                 ev_to_observe_properties: ev_to_observe_properties,
                 ev_observed: ev_observed,
-                _marker: PhantomData,
+                _does_not_outlive: PhantomData::<&Self>,
             };
             Ok(instance)
         } else {
@@ -1251,7 +1251,7 @@ impl<'parent, T> MpvInstance<'parent, T> for T
                 local_to_observe: evs,
                 all_observed: self.ev_observed().as_ref().unwrap(),
                 last_no_associated_ev: false,
-                _marker: PhantomData,
+                _does_not_outlive: PhantomData::<&Self>,
             })
         } else {
             Err(Error::EventsDisabled)
