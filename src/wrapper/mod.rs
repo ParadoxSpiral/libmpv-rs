@@ -1323,9 +1323,6 @@ impl<'parent, T> MpvInstance<'parent, T> for T
             match data {
                 &mut Data::String(_) |
                 &mut Data::OsdString(_) => {
-
-                    println!("___ENTERING DANGER ZONE___");
-
                     let ptr = CString::new("").unwrap().into_raw();
 
                     let err = mpv_err((), unsafe {
@@ -1337,38 +1334,44 @@ impl<'parent, T> MpvInstance<'parent, T> for T
                                                           *mut libc::c_void>(ptr))
                     });
 
+                    let ret = unsafe { CString::from_raw(ptr) };
                     if err.is_err() {
-                        println!("___LEAVING DANGER ZONE___");
                         return Err(err.unwrap_err());
                     } else {
-                        let ptr = unsafe { CString::from_raw(ptr) };
-                        let bytes = ptr.as_bytes();
-                        let data = {
-                            encoding::decode(bytes,
-                                             encoding::DecoderTrap::Strict,
-                                             encoding::all::ASCII)
-                                .0
-                                .or_else(|_| Err(Error::UnsupportedEncoding(Vec::from(bytes))))
+                        let data = if cfg!(windows) {
+                            // Mpv claims that all strings returned on windows are UTF-8.
+                            ret.to_str().unwrap().to_owned()
+                        } else {
+                            let bytes = ret.as_bytes();
+
+                            println!("!!!!_DANGER_ZONE_!!!!");
+                            // It should be this
+                            println!("ref: {:?}", "トゥッティ！".as_bytes());
+                            // But we got this
+                            println!("got: {:?}", bytes);
+                            // Which is this in utf-8
+                            println!("ldc: {}", String::from_utf8_lossy(bytes).into_owned());
+                            // This is what the OsString is capable of (protip: nothing)
+                            use std::ffi::OsStr;
+                            use std::os::unix::ffi::OsStrExt;
+                            println!("OsS: {:?}", OsStr::from_bytes(bytes));
+
+                            let tmp = encoding::decode(bytes,
+                                                       encoding::DecoderTrap::Strict,
+                                                       encoding::all::ASCII)
+                                          .0
+                                          .or_else(|_| {
+                                              Err(Error::UnsupportedEncoding(Vec::from(bytes)))
+                                          });
+
+                            // And this in the guessed encoding
+                            println!("gue: {:?}", tmp);
+                            tmp.unwrap()
                         };
 
-                        // It should be this
-                        println!("ref: {:?}", "トゥッティ！".as_bytes());
-                        // But we got this
-                        println!("got: {:?}", bytes);
-                        // Which is this in utf-8
-                        println!("ldc: {}", String::from_utf8_lossy(bytes).into_owned());
-                        // This is what the OsString is capable of (protip: nothing)
-                        use std::ffi::OsStr;
-                        use std::os::unix::ffi::OsStrExt;
-                        println!("OsS: {:?}", OsStr::from_bytes(bytes));
-                        // And this in the guessed encoding
-                        println!("gue: {:?}", data);
-
-                        println!("___LEAVING DANGER ZONE___");
-
                         match prop.data {
-                            Data::String(_) => Data::String(data.unwrap()),
-                            Data::OsdString(_) => Data::OsdString(data.unwrap()),
+                            Data::String(_) => Data::String(data),
+                            Data::OsdString(_) => Data::OsdString(data),
                             _ => unreachable!(),
                         }
                     }
