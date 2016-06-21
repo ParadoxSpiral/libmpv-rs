@@ -227,7 +227,7 @@ impl<'parent, P> Drop for EventIter<'parent, P>
             false
         };
 
-        let mut new_to = Vec::with_capacity(all_to_observe.len() - self.local_to_observe.len());
+        let mut new_to = Vec::with_capacity(all_to_observe.len());
         let mut new_obd = Vec::with_capacity(all_observed.len());
         for outer_ev in &self.local_to_observe {
             for elem in all_to_observe.iter()
@@ -296,6 +296,7 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
                 unsafe { (*self.notification).1.notify_all() };
             }
         } else {
+            // TODO: Simplify this
             let mut index = vec![];
             for (i, event) in observed.iter().enumerate() {
                 for o_e_id in &self.local_to_observe {
