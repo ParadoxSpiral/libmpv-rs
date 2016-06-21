@@ -208,6 +208,8 @@ impl<'parent, P> Drop for EventIter<'parent, P>
         let mut all_observed = self.all_observed.lock();
         let mut all_to_observe_properties = self.all_to_observe_properties.lock();
 
+        // Returns true if outer and inner event match, in the case of the event
+        // being a property, unobserve it.
         let mut compare_ev_unobserve = |outer_ev: &Event, inner_ev: &Event| -> bool {
             if let Event::PropertyChange(ref outer_prop) = *outer_ev {
                 if let Event::PropertyChange(ref inner_prop) = *inner_ev {
@@ -226,6 +228,7 @@ impl<'parent, P> Drop for EventIter<'parent, P>
             false
         };
 
+        // This removes all events for which compare_ev_unobserve returns true.
         let mut new_to = Vec::with_capacity(all_to_observe.len());
         let mut new_obd = Vec::with_capacity(all_observed.len());
         for outer_ev in &self.local_to_observe {
@@ -412,10 +415,12 @@ impl EndFile {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 #[allow(missing_docs)]
 /// Represents the data of an `Event::PropertyChange`. The `data` field is equal to the value of
 /// the property.
+///
+/// Partial equality only imples that only the names are equal.
 pub struct Property {
     pub name: String,
     pub data: Data,
@@ -440,6 +445,12 @@ impl Property {
             name: name.into(),
             data: data,
         }
+    }
+}
+
+impl PartialEq<Property> for Property {
+    fn eq(&self, other: &Property) -> bool {
+        self.name == other.name
     }
 }
 
