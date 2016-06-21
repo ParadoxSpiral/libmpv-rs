@@ -1176,8 +1176,8 @@ pub trait MpvInstance<'parent, P>
     fn unpause(&self) -> Result<(), Error>;
 }
 
-impl<'parent, T> MpvInstance<'parent, T> for T
-    where T: MpvMarker + 'parent
+impl<'parent, P> MpvInstance<'parent, P> for P
+    where P: MpvMarker + 'parent
 {
     /// Enable a given `Event`. Note that any event of `Event` is enabled by default,
     /// except for `Event::Tick`.
@@ -1201,7 +1201,7 @@ impl<'parent, T> MpvInstance<'parent, T> for T
     /// Observe given `Event`s.
     /// Returns an `EventIter`, on which `next` can be called that blocks while waiting for new
     /// `Event`s.
-    fn observe_all(&self, events: Vec<Event>) -> Result<EventIter<T>, Error> {
+    fn observe_all(&self, events: Vec<Event>) -> Result<EventIter<P>, Error> {
         if self.check_events() {
             let mut observe = self.ev_to_observe().as_ref().unwrap().lock();
             let mut properties = self.ev_to_observe_properties().as_ref().unwrap().lock();
