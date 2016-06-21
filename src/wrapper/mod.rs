@@ -193,7 +193,7 @@ pub struct EventIter<'parent, P>
     ctx: *mut MpvHandle,
     notification: *mut (Mutex<bool>, Condvar),
     all_to_observe: &'parent Mutex<Vec<Event>>,
-    all_to_observe_properties: &'parent Mutex<HashMap<String, usize>>,
+    all_to_observe_properties: &'parent Mutex<HashMap<String, libc::uint64_t>>,
     local_to_observe: Vec<Event>,
     all_observed: &'parent Mutex<Vec<InnerEvent>>,
     last_no_associated_ev: bool,
@@ -208,14 +208,13 @@ impl<'parent, P> Drop for EventIter<'parent, P>
         let mut all_observed = self.all_observed.lock();
         let mut all_to_observe_properties = self.all_to_observe_properties.lock();
 
-        let mut compare_ev_unobsorve = |outer_ev: &Event, inner_ev: &Event| -> bool {
+        let mut compare_ev_unobserve = |outer_ev: &Event, inner_ev: &Event| -> bool {
             if let Event::PropertyChange(ref outer_prop) = *outer_ev {
                 if let Event::PropertyChange(ref inner_prop) = *inner_ev {
                     if outer_prop.name == inner_prop.name {
                         unsafe {
                             mpv_unobserve_property(self.ctx, *all_to_observe_properties.get(
-                                                                        &outer_prop.name).unwrap()
-                                                                        as libc::uint64_t);
+                                                                        &outer_prop.name).unwrap());
                         }
                         all_to_observe_properties.remove(&outer_prop.name);
                         return true;
@@ -232,13 +231,13 @@ impl<'parent, P> Drop for EventIter<'parent, P>
         for outer_ev in &self.local_to_observe {
             for elem in all_to_observe.iter()
                                       .skip_while(|inner_ev| {
-                                          compare_ev_unobsorve(outer_ev, *inner_ev)
+                                          compare_ev_unobserve(outer_ev, *inner_ev)
                                       }) {
                 new_to.push(elem.clone());
             }
             for elem in all_observed.iter()
                                     .skip_while(|inner_ev| {
-                                        compare_ev_unobsorve(outer_ev, (**inner_ev).as_event())
+                                        compare_ev_unobserve(outer_ev, (**inner_ev).as_event())
                                     }) {
                 new_obd.push(elem.clone());
             }
@@ -782,7 +781,7 @@ pub struct Parent {
     check_events: bool,
     ev_iter_notification: Option<*mut (Mutex<bool>, Condvar)>,
     ev_to_observe: Option<Mutex<Vec<Event>>>,
-    ev_to_observe_properties: Option<Mutex<HashMap<String, usize>>>,
+    ev_to_observe_properties: Option<Mutex<HashMap<String, libc::uint64_t>>>,
     ev_observed: Option<Mutex<Vec<InnerEvent>>>,
 }
 
@@ -797,7 +796,7 @@ pub struct Client<'parent> {
     ev_iter_notification: Option<*mut (Mutex<bool>, Condvar)>,
     ev_to_observe: Option<Mutex<Vec<Event>>>,
     ev_observed: Option<Mutex<Vec<InnerEvent>>>,
-    ev_to_observe_properties: Option<Mutex<HashMap<String, usize>>>,
+    ev_to_observe_properties: Option<Mutex<HashMap<String, libc::uint64_t>>>,
     _does_not_outlive: PhantomData<&'parent Parent>,
 }
 
@@ -816,7 +815,7 @@ pub trait MpvMarker {
     fn check_events(&self) -> bool;
     fn ev_iter_notification(&self) -> &Option<*mut (Mutex<bool>, Condvar)>;
     fn ev_to_observe(&self) -> &Option<Mutex<Vec<Event>>>;
-    fn ev_to_observe_properties(&self) -> &Option<Mutex<HashMap<String, usize>>>;
+    fn ev_to_observe_properties(&self) -> &Option<Mutex<HashMap<String, libc::uint64_t>>>;
     fn ev_observed(&self) -> &Option<Mutex<Vec<InnerEvent>>>;
     fn drop_ev_iter_step(&mut self) {
         if self.check_events() {
@@ -849,7 +848,7 @@ impl MpvMarker for Parent {
         &self.ev_to_observe
     }
     #[inline]
-    fn ev_to_observe_properties(&self) -> &Option<Mutex<HashMap<String, usize>>> {
+    fn ev_to_observe_properties(&self) -> &Option<Mutex<HashMap<String, libc::uint64_t>>> {
         &self.ev_to_observe_properties
     }
     #[inline]
@@ -880,7 +879,7 @@ impl<'parent> MpvMarker for Client<'parent> {
         &self.ev_to_observe
     }
     #[inline]
-    fn ev_to_observe_properties(&self) -> &Option<Mutex<HashMap<String, usize>>> {
+    fn ev_to_observe_properties(&self) -> &Option<Mutex<HashMap<String, libc::uint64_t>>> {
         &self.ev_to_observe_properties
     }
     #[inline]
@@ -1241,7 +1240,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                                                       name.as_ptr(),
                                                       elem.data.format() as libc::c_int)))
                 }
-                properties.insert(elem.name.clone(), id);
+                properties.insert(elem.name.clone(), id as libc::uint64_t);
             }
 
             Ok(EventIter {
