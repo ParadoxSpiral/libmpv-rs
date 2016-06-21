@@ -263,7 +263,7 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
             observed = self.all_observed.lock();
         }
 
-        let mut ret_events = vec![];
+        let mut ret_events = Vec::with_capacity(observed.len());
         if observed.is_empty() {
             let all_to_observe = self.all_to_observe.lock();
             let o_iter = (*all_to_observe).clone();
@@ -299,7 +299,7 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
             }
         } else {
             // TODO: Simplify this
-            let mut index = vec![];
+            let mut index = Vec::with_capacity(observed.len());
             for (i, event) in observed.iter().enumerate() {
                 for o_e_id in &self.local_to_observe {
                     if event.event.as_id() == o_e_id.as_id() {
