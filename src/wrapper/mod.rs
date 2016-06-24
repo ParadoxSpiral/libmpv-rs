@@ -65,11 +65,9 @@ fn mpv_err<T>(ret: T, err_val: libc::c_int) -> Result<T, Error> {
     }
 }
 
-extern "C" fn event_callback(d: *mut libc::c_void) {
-    unsafe {
-        let data = mem::transmute::<*mut libc::c_void, *mut (Mutex<bool>, Condvar)>(d);
-        (*data).1.notify_one();
-    }
+unsafe extern "C" fn event_callback(d: *mut libc::c_void) {
+    let data = mem::transmute::<*mut libc::c_void, *mut (Mutex<bool>, Condvar)>(d);
+    (*data).1.notify_one();
 }
 
 #[doc(hidden)]

@@ -320,7 +320,7 @@ extern "C" {
                           -> *mut MpvEvent;
     pub fn mpv_wakeup(ctx: *mut prototype::MpvHandle);
     pub fn mpv_set_wakeup_callback(ctx: *mut prototype::MpvHandle,
-                                   cb: extern "C" fn(*mut libc::c_void),
+                                   cb: unsafe extern "C" fn(*mut libc::c_void),
                                    d: *mut libc::c_void);
     pub fn mpv_get_wakeup_pipe(ctx: *mut prototype::MpvHandle) -> libc::c_int;
     pub fn mpv_wait_async_requests(ctx: *mut prototype::MpvHandle);
