@@ -57,11 +57,11 @@ macro_rules! data_ptr {
     )
 }
 
-fn mpv_err<T>(ret: T, v: libc::c_int) -> Result<T, Error> {
-    if v == 0 {
+fn mpv_err<T>(ret: T, err_val: libc::c_int) -> Result<T, Error> {
+    if err_val == 0 {
         Ok(ret)
     } else {
-        Err(Error::Mpv(MpvError::from_i32(v).unwrap()))
+        Err(Error::Mpv(MpvError::from_i32(err_val).unwrap()))
     }
 }
 
@@ -449,6 +449,7 @@ impl Property {
 }
 
 impl PartialEq<Property> for Property {
+    #[inline]
     fn eq(&self, other: &Property) -> bool {
         self.name == other.name
     }
