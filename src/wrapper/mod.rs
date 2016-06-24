@@ -264,7 +264,6 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
         let mut ret_events = Vec::with_capacity(observed.len());
         if observed.is_empty() {
             let all_to_observe = self.all_to_observe.lock();
-            let o_iter = (*all_to_observe).clone();
             let mut last = false;
             'events: loop {
                 let event = unsafe { &*mpv_wait_event(self.ctx, 0f64 as libc::c_double) };
@@ -284,7 +283,7 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
                         continue 'events;
                     }
                 }
-                for ob_ev_id in &o_iter {
+                for ob_ev_id in &*all_to_observe {
                     if ev_id == ob_ev_id.as_id() {
                         observed.push(event.as_inner_event());
                         continue 'events;
@@ -1165,6 +1164,7 @@ impl<'parent> Client<'parent> {
     }
 }
 
+#[doc(hidden)]
 #[allow(missing_docs)]
 /// Functions that an abstraction of libmpv should cover.
 pub trait MpvInstance<'parent, P>
