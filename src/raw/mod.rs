@@ -82,26 +82,6 @@ pub struct MpvNode {
     pub format: MpvFormat,
 }
 
-impl MpvNode {
-    #[inline]
-    pub fn get_inner(&self) -> ::Data {
-        // TODO: this.
-        unimplemented!();
-    }
-}
-
-impl PartialEq for MpvNode {
-    #[inline]
-    fn eq(&self, other: &MpvNode) -> bool {
-        self.get_inner() == other.get_inner()
-    }
-
-    #[inline]
-    fn ne(&self, other: &MpvNode) -> bool {
-        self.get_inner() == other.get_inner()
-    }
-}
-
 #[repr(C)]
 #[derive(Debug)]
 pub struct MpvNodeList {

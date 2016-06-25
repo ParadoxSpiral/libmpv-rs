@@ -277,20 +277,21 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
                         continue;
                     }
                 }
-                for local_ob_ev_id in &self.local_to_observe {
-                    if ev_id == local_ob_ev_id.as_id() {
+                for local_ob_ev in &self.local_to_observe {
+                    if ev_id == local_ob_ev.as_id() {
                         ret_events.push(event.as_event());
                         continue 'events;
                     }
                 }
-                for ob_ev_id in &*all_to_observe {
-                    if ev_id == ob_ev_id.as_id() {
+                for all_ob_ev in &*all_to_observe {
+                    if ev_id == all_ob_ev.as_id() {
                         observed.push(event.as_inner_event());
                         continue 'events;
                     }
                 }
             }
             if !observed.is_empty() {
+                // Dropping early means less spinning in the notified iter
                 mem::drop(observed);
                 unsafe { (*self.notification).1.notify_all() };
             }
@@ -484,6 +485,8 @@ pub enum Error {
     OsdStringWrite,
     /// Mpv returned a string that uses an unsupported codec. Inside are the raw bytes cast to u8.
     UnsupportedEncoding(Vec<u8>),
+    /// The library was compiled against a different mpv version than what is present on the system.
+    VersionMismatch(u32),
     /// Mpv returned null while creating the core.
     Null,
 }
@@ -753,6 +756,8 @@ pub enum SubOp<'a> {
     SeekBackward,
 }
 
+// TODO: when NonZero is stabelized, use it
+
 impl MpvError {
     #[inline]
     fn as_val(&self) -> libc::c_int {
@@ -774,12 +779,29 @@ impl MpvFormat {
     }
 }
 
-// TODO: more
+impl MpvNode {
+    #[inline]
+    pub fn get_inner(&self) -> ::Data {
+        // TODO: this.
+        unimplemented!();
+    }
+}
+
+impl PartialEq for MpvNode {
+    #[inline]
+    fn eq(&self, other: &MpvNode) -> bool {
+        self.get_inner() == other.get_inner()
+    }
+
+    #[inline]
+    fn ne(&self, other: &MpvNode) -> bool {
+        self.get_inner() == other.get_inner()
+    }
+}
+
+// TODO: impl Into<MpvNode> for types
+
 /// Represents an mpv instance from which `Client`s can be spawned.
-///
-/// The mpv manual is very helpful with regards to confusion about syntax for commands,
-/// however there is an effort to catch common mistakes that may result in unexpected behaviour.
-/// See `command`.
 ///
 /// # Panics
 /// Any method on this struct may panic if any argument contains invalid utf-8.
@@ -923,73 +945,76 @@ impl<'parent> Parent {
     ///
     ///```$ mpv --show-profile=libmpv```
     pub fn new(check_events: bool) -> Result<Parent, Error> {
+        let api_version = unsafe { mpv_client_api_version() };
+        if super::MPV_CLIENT_API_VERSION != api_version {
+            return Err(Error::VersionMismatch(api_version));
+        }
+
         let ctx = unsafe { mpv_create() };
         if ctx == ptr::null_mut() {
-            Err(Error::Null)
-        } else {
+            return Err(Error::Null);
+        }
 
-            unsafe {
-                // Disable deprecated events.
-                try!(mpv_err((), mpv_request_event(ctx, MpvEventId::TracksChanged, 0)));
-                try!(mpv_err((), mpv_request_event(ctx, MpvEventId::TrackSwitched, 0)));
-                try!(mpv_err((), mpv_request_event(ctx, MpvEventId::Pause, 0)));
-                try!(mpv_err((), mpv_request_event(ctx, MpvEventId::Unpause, 0)));
-                try!(mpv_err((),
-                             mpv_request_event(ctx, MpvEventId::ScriptInputDispatch, 0)));
-                try!(mpv_err((), mpv_request_event(ctx, MpvEventId::MetadataUpdate, 0)));
-                try!(mpv_err((), mpv_request_event(ctx, MpvEventId::ChapterChange, 0)));
-            }
+        unsafe {
+            // Disable deprecated events.
+            try!(mpv_err((), mpv_request_event(ctx, MpvEventId::TracksChanged, 0)));
+            try!(mpv_err((), mpv_request_event(ctx, MpvEventId::TrackSwitched, 0)));
+            try!(mpv_err((), mpv_request_event(ctx, MpvEventId::Pause, 0)));
+            try!(mpv_err((), mpv_request_event(ctx, MpvEventId::Unpause, 0)));
+            try!(mpv_err((),
+                         mpv_request_event(ctx, MpvEventId::ScriptInputDispatch, 0)));
+            try!(mpv_err((), mpv_request_event(ctx, MpvEventId::MetadataUpdate, 0)));
+            try!(mpv_err((), mpv_request_event(ctx, MpvEventId::ChapterChange, 0)));
+        }
 
-            let (ev_iter_notification, ev_to_observe, ev_to_observe_properties, ev_observed) =
-                if check_events {
-                    let ev_iter_notification = Box::into_raw(box (Mutex::new(false),
-                                                                  Condvar::new()));
-                    unsafe {
-                        mpv_set_wakeup_callback(ctx,
+        let (ev_iter_notification, ev_to_observe, ev_to_observe_properties, ev_observed) =
+            if check_events {
+                let ev_iter_notification = Box::into_raw(box (Mutex::new(false), Condvar::new()));
+                unsafe {
+                    mpv_set_wakeup_callback(ctx,
                                             event_callback,
                                             mem::transmute::<*mut (Mutex<bool>, Condvar),
                                                              *mut libc::c_void>
                                                              (ev_iter_notification));
-                    }
+                }
 
-                    (Some(ev_iter_notification),
-                     Some(Mutex::new(Vec::with_capacity(10))),
-                     Some(Mutex::new(HashMap::new())),
-                     Some(Mutex::new(Vec::with_capacity(10))))
-                } else {
-                    unsafe {
-                        // Disable remaining events
-                        try!(mpv_err((), mpv_request_event(ctx, MpvEventId::LogMessage, 0)));
-                        try!(mpv_err((), mpv_request_event(ctx, MpvEventId::GetPropertyReply, 0)));
-                        try!(mpv_err((), mpv_request_event(ctx, MpvEventId::SetPropertyReply, 0)));
-                        try!(mpv_err((), mpv_request_event(ctx, MpvEventId::CommandReply, 0)));
-                        try!(mpv_err((), mpv_request_event(ctx, MpvEventId::StartFile, 0)));
-                        try!(mpv_err((), mpv_request_event(ctx, MpvEventId::EndFile, 0)));
-                        try!(mpv_err((), mpv_request_event(ctx, MpvEventId::FileLoaded, 0)));
-                        try!(mpv_err((), mpv_request_event(ctx, MpvEventId::Idle, 0)));
-                        try!(mpv_err((), mpv_request_event(ctx, MpvEventId::ClientMessage, 0)));
-                        try!(mpv_err((), mpv_request_event(ctx, MpvEventId::VideoReconfig, 0)));
-                        try!(mpv_err((), mpv_request_event(ctx, MpvEventId::AudioReconfig, 0)));
-                        try!(mpv_err((), mpv_request_event(ctx, MpvEventId::Seek, 0)));
-                        try!(mpv_err((), mpv_request_event(ctx, MpvEventId::PlaybackRestart, 0)));
-                        try!(mpv_err((), mpv_request_event(ctx, MpvEventId::PropertyChange, 0)));
-                        try!(mpv_err((), mpv_request_event(ctx, MpvEventId::QueueOverflow, 0)));
-                    }
+                (Some(ev_iter_notification),
+                 Some(Mutex::new(Vec::with_capacity(10))),
+                 Some(Mutex::new(HashMap::new())),
+                 Some(Mutex::new(Vec::with_capacity(10))))
+            } else {
+                unsafe {
+                    // Disable remaining events
+                    try!(mpv_err((), mpv_request_event(ctx, MpvEventId::LogMessage, 0)));
+                    try!(mpv_err((), mpv_request_event(ctx, MpvEventId::GetPropertyReply, 0)));
+                    try!(mpv_err((), mpv_request_event(ctx, MpvEventId::SetPropertyReply, 0)));
+                    try!(mpv_err((), mpv_request_event(ctx, MpvEventId::CommandReply, 0)));
+                    try!(mpv_err((), mpv_request_event(ctx, MpvEventId::StartFile, 0)));
+                    try!(mpv_err((), mpv_request_event(ctx, MpvEventId::EndFile, 0)));
+                    try!(mpv_err((), mpv_request_event(ctx, MpvEventId::FileLoaded, 0)));
+                    try!(mpv_err((), mpv_request_event(ctx, MpvEventId::Idle, 0)));
+                    try!(mpv_err((), mpv_request_event(ctx, MpvEventId::ClientMessage, 0)));
+                    try!(mpv_err((), mpv_request_event(ctx, MpvEventId::VideoReconfig, 0)));
+                    try!(mpv_err((), mpv_request_event(ctx, MpvEventId::AudioReconfig, 0)));
+                    try!(mpv_err((), mpv_request_event(ctx, MpvEventId::Seek, 0)));
+                    try!(mpv_err((), mpv_request_event(ctx, MpvEventId::PlaybackRestart, 0)));
+                    try!(mpv_err((), mpv_request_event(ctx, MpvEventId::PropertyChange, 0)));
+                    try!(mpv_err((), mpv_request_event(ctx, MpvEventId::QueueOverflow, 0)));
+                }
 
-                    (None, None, None, None)
-                };
+                (None, None, None, None)
+            };
 
-            Ok(Parent {
-                ctx: ctx,
-                initialized: AtomicBool::new(false),
-                suspension_count: AtomicUsize::new(0),
-                check_events: check_events,
-                ev_iter_notification: ev_iter_notification,
-                ev_to_observe: ev_to_observe,
-                ev_to_observe_properties: ev_to_observe_properties,
-                ev_observed: ev_observed,
-            })
-        }
+        Ok(Parent {
+            ctx: ctx,
+            initialized: AtomicBool::new(false),
+            suspension_count: AtomicUsize::new(0),
+            check_events: check_events,
+            ev_iter_notification: ev_iter_notification,
+            ev_to_observe: ev_to_observe,
+            ev_to_observe_properties: ev_to_observe_properties,
+            ev_observed: ev_observed,
+        })
     }
 
     /// Create a client with `name`, that is connected to the core of `self`, but has an own queue
@@ -1158,7 +1183,7 @@ impl<'parent> Parent {
 }
 
 impl<'parent> Client<'parent> {
-    /// Returns the name associated with the instance, useful for debugging.
+    /// Returns the name associated with the instance.
     pub fn name(&self) -> &str {
         unsafe { CStr::from_ptr(mpv_client_name(self.ctx())).to_str().unwrap() }
     }
@@ -1174,7 +1199,7 @@ pub trait MpvInstance<'parent, P>
     fn disable_event(&self, e: Event) -> Result<(), Error>;
     fn observe_all(&self, events: Vec<Event>) -> Result<EventIter<P>, Error>;
     unsafe fn command(&self, cmd: Command) -> Result<(), Error>;
-    fn set_property(&self, opt: Property) -> Result<(), Error>;
+    fn set_property(&self, prop: Property) -> Result<(), Error>;
     fn get_property(&self, prop: Property) -> Result<Property, Error>;
     fn seek(&self, seek: Seek) -> Result<(), Error>;
     fn screenshot(&self, st: Screenshot) -> Result<(), Error>;
@@ -1293,10 +1318,10 @@ impl<'parent, P> MpvInstance<'parent, P> for P
 
     #[allow(match_ref_pats)]
     /// Set the value of a property.
-    fn set_property(&self, opt: Property) -> Result<(), Error> {
-        let data = &mut opt.data.clone();
+    fn set_property(&self, prop: Property) -> Result<(), Error> {
+        let data = &mut prop.data.clone();
         let format = data.format().as_val();
-        let name = CString::new(opt.name).unwrap().into_raw();
+        let name = CString::new(prop.name).unwrap().into_raw();
         let ret = match data {
             &mut Data::OsdString(_) => Err(Error::OsdStringWrite),
             &mut Data::String(ref v) => {
