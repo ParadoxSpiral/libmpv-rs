@@ -29,18 +29,16 @@ fn options_properties() {
     // TODO: Cover all `Data` variants.
 
     let mpv = Parent::new(false).unwrap();
-    mpv.set_option(Property::new("volume", Data::new(0.))).unwrap();
+    mpv.set_option(Property::new("volume", Data::new(0))).unwrap();
     mpv.init().unwrap();
 
-    assert_eq!(Data::new(0.),
-               mpv.get_property(Property::new("volume", Data::new(69.)))
-                  .unwrap()
-                  .data);
+    assert_eq!(Data::new(0),
+               mpv.get_property("volume", &Format::Int64)
+                  .unwrap());
 
-    mpv.set_property(Property::new("volume", Data::new(4.))).unwrap();
+    mpv.set_property(Property::new("volume", Data::new(4))).unwrap();
 
-    assert_eq!(Data::new(4.),
-               mpv.get_property(Property::new("volume", Data::new(69.)))
-                  .unwrap()
-                  .data);
+    assert_eq!(Data::new(4),
+               mpv.get_property("volume", &Format::Int64)
+                  .unwrap());
 }

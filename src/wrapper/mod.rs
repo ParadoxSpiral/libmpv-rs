@@ -536,11 +536,6 @@ impl Data {
             _ => unreachable!(),
         }
     }
-
-    #[inline(always)]
-    fn size(&self) -> usize {
-        mem::size_of_val(&self)
-    }
 }
 
 impl Into<Data> for String {
@@ -762,7 +757,34 @@ pub enum SubOp<'a> {
     SeekBackward,
 }
 
-// TODO: when NonZero is stabelized, use it
+#[allow(missing_docs)]
+/// Equivalent to subset of MpvFormat used by the public API.
+pub enum Format {
+    String = 1,
+    OsdString = 2,
+    Flag = 3,
+    Int64 = 4,
+    Double = 5,
+    Node = 6,
+}
+
+impl Format {
+    #[inline(always)]
+    fn as_mpv_format(&self) -> &MpvFormat {
+        unsafe { mem::transmute::<&Format, &MpvFormat>(&self) }
+    }
+
+    #[inline(always)]
+    fn size(&self) -> usize {
+        match *self {
+            Format::Flag => mem::size_of::<bool>(),
+            Format::Int64 => mem::size_of::<libc::int64_t>(),
+            Format::Double => mem::size_of::<libc::c_double>(),
+            Format::Node => mem::size_of::<MpvNode>(),
+            _ => unreachable!(),
+        }
+    }
+}
 
 impl MpvError {
     #[inline(always)]
@@ -1125,9 +1147,9 @@ impl<'parent> Parent {
 
                 let ret = mpv_err((), unsafe {
                     mpv_set_option(self.ctx(),
-                                     name,
-                                     format,
-                                     mem::transmute::<*mut libc::c_char, *mut libc::c_void>(data))
+                                   name,
+                                   format,
+                                   mem::transmute::<*mut libc::c_char, *mut libc::c_void>(data))
                 });
                 unsafe {
                     CString::from_raw(data);
@@ -1218,8 +1240,8 @@ pub trait MpvInstance<'parent, P>
     unsafe fn command(&self, cmd: &Command) -> Result<(), Error>;
     /// Set a given `Property` with `prop`, using it's value.
     fn set_property(&self, prop: Property) -> Result<(), Error>;
-    /// Get the value of a given `Property`.
-    fn get_property(&self, prop: Property) -> Result<Property, Error>;
+    /// Get the `Data` of a given named property.
+    fn get_property(&self, name: &str, format: &Format) -> Result<Data, Error>;
     /// Seek in a way defined by `Seek`.
     fn seek(&self, seek: &Seek) -> Result<(), Error>;
     /// Take a screenshot in a way defined by `Screenshot`.
@@ -1378,84 +1400,77 @@ impl<'parent, P> MpvInstance<'parent, P> for P
 
     #[allow(match_ref_pats)]
     /// Get the value of a property.
-    fn get_property(&self, prop: Property) -> Result<Property, Error> {
-        Ok(Property::new(&prop.name, {
-            let data = &mut prop.data.clone();
-            let format = data.format();
-            match data {
-                &mut Data::String(_) |
-                &mut Data::OsdString(_) => {
-                    let ptr = CString::new("").unwrap().into_raw();
+    fn get_property(&self, name: &str, format: &Format) -> Result<Data, Error> {
+        let name = CString::new(name).unwrap();
+        let format = format;
+        Ok(match *format {
+            Format::String |
+            Format::OsdString => {
+                let ptr = CString::new("").unwrap().into_raw();
 
-                    let err = mpv_err((), unsafe {
-                        let name = CString::new(prop.name.clone()).unwrap();
-                        mpv_get_property(self.ctx(),
-                                         name.as_ptr(),
-                                         format.as_val(),
-                                         mem::transmute::<*mut libc::c_char,
-                                                          *mut libc::c_void>(ptr))
-                    });
+                let err = mpv_err((), unsafe {
+                    mpv_get_property(self.ctx(),
+                                     name.as_ptr(),
+                                     format.as_mpv_format().as_val(),
+                                     mem::transmute::<*mut libc::c_char, *mut libc::c_void>(ptr))
+                });
 
-                    let ret = unsafe { CString::from_raw(ptr) };
-                    if err.is_err() {
-                        return Err(err.unwrap_err());
+                let ret = unsafe { CString::from_raw(ptr) };
+                if err.is_err() {
+                    return Err(err.unwrap_err());
+                } else {
+                    let data = if cfg!(windows) {
+                        // Mpv claims that all strings returned on windows are UTF-8.
+                        ret.to_str().unwrap().to_owned()
                     } else {
-                        let data = if cfg!(windows) {
-                            // Mpv claims that all strings returned on windows are UTF-8.
-                            ret.to_str().unwrap().to_owned()
-                        } else {
-                            let bytes = ret.as_bytes();
+                        let bytes = ret.as_bytes();
 
-                            println!("!!!!_DANGER_ZONE_!!!!");
-                            // It should be this
-                            println!("ref: {:?}", "トゥッティ！".as_bytes());
-                            // But we got this
-                            println!("got: {:?}", bytes);
-                            // Which is this in utf-8
-                            println!("ldc: {}", String::from_utf8_lossy(bytes).into_owned());
-                            // This is what the OsString is capable of (protip: nothing)
-                            use std::ffi::OsStr;
-                            use std::os::unix::ffi::OsStrExt;
-                            println!("OsS: {:?}", OsStr::from_bytes(bytes));
+                        println!("!!!!_DANGER_ZONE_!!!!");
+                        // It should be this
+                        println!("ref: {:?}", "トゥッティ！".as_bytes());
+                        // But we got this
+                        println!("got: {:?}", bytes);
+                        // Which is this in utf-8
+                        println!("ldc: {}", String::from_utf8_lossy(bytes).into_owned());
+                        // This is what the OsString is capable of (protip: nothing)
+                        use std::ffi::OsStr;
+                        use std::os::unix::ffi::OsStrExt;
+                        println!("OsS: {:?}", OsStr::from_bytes(bytes));
 
-                            let tmp = encoding::decode(bytes,
-                                                       encoding::DecoderTrap::Strict,
-                                                       encoding::all::ASCII)
-                                          .0
-                                          .or_else(|_| {
-                                              Err(Error::UnsupportedEncoding(Vec::from(bytes)))
-                                          });
+                        let tmp = encoding::decode(bytes,
+                                                   encoding::DecoderTrap::Strict,
+                                                   encoding::all::ASCII)
+                                      .0
+                                      .or_else(|_| {
+                                          Err(Error::UnsupportedEncoding(Vec::from(bytes)))
+                                      });
 
-                            // And this in the guessed encoding
-                            println!("gue: {:?}", tmp);
-                            tmp.unwrap()
-                        };
-
-                        match prop.data {
-                            Data::String(_) => Data::String(data),
-                            Data::OsdString(_) => Data::OsdString(data),
-                            _ => unreachable!(),
-                        }
-                    }
-                }
-                _ => {
-                    let ptr = unsafe {
-                        libc::malloc(data.size() as libc::size_t) as *mut libc::c_void
+                        // And this in the guessed encoding
+                        println!("gue: {:?}", tmp);
+                        tmp.unwrap()
                     };
 
-                    let err = mpv_err((), unsafe {
-                        let name = CString::new(prop.name.clone()).unwrap();
-                        mpv_get_property(self.ctx(), name.as_ptr(), format.as_val(), ptr)
-                    });
-
-                    if err.is_err() {
-                        return Err(err.unwrap_err());
-                    } else {
-                        Data::from_raw(format, ptr)
+                    match *format {
+                        Format::String => Data::String(data),
+                        Format::OsdString => Data::OsdString(data),
+                        _ => unreachable!(),
                     }
                 }
             }
-        }))
+            _ => {
+                let ptr = unsafe { libc::malloc(format.size() as libc::size_t) as *mut libc::c_void };
+
+                let err = mpv_err((), unsafe {
+                    mpv_get_property(self.ctx(), name.as_ptr(), format.as_mpv_format().as_val(), ptr)
+                });
+
+                if err.is_err() {
+                    return Err(err.unwrap_err());
+                } else {
+                    Data::from_raw(*format.as_mpv_format(), ptr)
+                }
+            }
+        })
     }
 
     // --- Convenience command functions ---
@@ -1467,19 +1482,19 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         match *seek {
             Seek::RelativeForward(d) => unsafe {
                 self.command(&Command::new("seek",
-                                          Some(vec![format!("{}", d.as_secs()),
-                                                    "relative".into()])))
+                                           Some(vec![format!("{}", d.as_secs()),
+                                                     "relative".into()])))
 
             },
             Seek::RelativeBackward(d) => unsafe {
                 self.command(&Command::new("seek",
-                                          Some(vec![format!("-{}", d.as_secs()),
-                                                    "relative".into()])))
+                                           Some(vec![format!("-{}", d.as_secs()),
+                                                     "relative".into()])))
             },
             Seek::Absolute(d) => unsafe {
                 self.command(&Command::new("seek",
-                                          Some(vec![format!("{}", d.as_secs()),
-                                                    "absolute".into()])))
+                                           Some(vec![format!("{}", d.as_secs()),
+                                                     "absolute".into()])))
             },
             Seek::RelativePercent(p) => {
                 if p > 100 {
@@ -1489,8 +1504,8 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                 } else {
                     unsafe {
                         self.command(&Command::new("seek",
-                                                  Some(vec![format!("{}", p),
-                                                            "relative-percent".into()])))
+                                                   Some(vec![format!("{}", p),
+                                                             "relative-percent".into()])))
                     }
                 }
 
@@ -1502,8 +1517,8 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                 } else {
                     unsafe {
                         self.command(&Command::new("seek",
-                                                  Some(vec![format!("{}", p),
-                                                            "absolute-percent".into()])))
+                                                   Some(vec![format!("{}", p),
+                                                             "absolute-percent".into()])))
                     }
                 }
             }
@@ -1524,22 +1539,22 @@ impl<'parent, P> MpvInstance<'parent, P> for P
             },
             Screenshot::SubtitlesFile(ref p) => unsafe {
                 self.command(&Command::new("screenshot",
-                                          Some(vec![p.to_str().unwrap().into(),
-                                                    "subtitles".into()])))
+                                           Some(vec![p.to_str().unwrap().into(),
+                                                     "subtitles".into()])))
             },
             Screenshot::Video => unsafe {
                 self.command(&Command::new("screenshot", Some(vec!["video".into()])))
             },
             Screenshot::VideoFile(ref p) => unsafe {
                 self.command(&Command::new("screenshot",
-                                          Some(vec![p.to_str().unwrap().into(), "video".into()])))
+                                           Some(vec![p.to_str().unwrap().into(), "video".into()])))
             },
             Screenshot::Window => unsafe {
                 self.command(&Command::new("screenshot", Some(vec!["window".into()])))
             },
             Screenshot::WindowFile(ref p) => unsafe {
                 self.command(&Command::new("screenshot",
-                                          Some(vec![p.to_str().unwrap().into(), "window".into()])))
+                                           Some(vec![p.to_str().unwrap().into(), "window".into()])))
             },
         }
     }
@@ -1561,13 +1576,13 @@ impl<'parent, P> MpvInstance<'parent, P> for P
             },
             PlaylistOp::LoadlistReplace(p) => unsafe {
                 self.command(&Command::new("loadlist",
-                                          Some(vec![format!("\"{}\"", p.to_str().unwrap()),
-                                                    "replace".into()])))
+                                           Some(vec![format!("\"{}\"", p.to_str().unwrap()),
+                                                     "replace".into()])))
             },
             PlaylistOp::LoadlistAppend(p) => unsafe {
                 self.command(&Command::new("loadlist",
-                                          Some(vec![format!("\"{}\"", p.to_str().unwrap()),
-                                                    "append".into()])))
+                                           Some(vec![format!("\"{}\"", p.to_str().unwrap()),
+                                                     "append".into()])))
             },
             PlaylistOp::Clear => unsafe { self.command(&Command::new("playlist-clear", None)) },
             PlaylistOp::RemoveCurrent => unsafe {
@@ -1578,7 +1593,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
             },
             PlaylistOp::Move((old, new)) => unsafe {
                 self.command(&Command::new("playlist-move",
-                                          Some(vec![format!("{}", new), format!("{}", old)])))
+                                           Some(vec![format!("{}", new), format!("{}", old)])))
             },
             PlaylistOp::Shuffle => unsafe { self.command(&Command::new("playlist-shuffle", None)) },
             PlaylistOp::Loadfiles(lfiles) => {
@@ -1620,64 +1635,64 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         match *op {
             SubOp::AddSelect(p, t, l) => unsafe {
                 self.command(&Command::new("sub-add",
-                                          Some(vec![format!("\"{}\"", p.to_str().unwrap()),
-                                                    format!("select{}{}",
-                                                            if t.is_some() {
-                                                                format!(" {}", t.unwrap())
-                                                            } else {
-                                                                "".into()
-                                                            },
-                                                            if l.is_some() {
-                                                                format!(" {}", l.unwrap())
-                                                            } else {
-                                                                "".into()
-                                                            })])))
+                                           Some(vec![format!("\"{}\"", p.to_str().unwrap()),
+                                                     format!("select{}{}",
+                                                             if t.is_some() {
+                                                                 format!(" {}", t.unwrap())
+                                                             } else {
+                                                                 "".into()
+                                                             },
+                                                             if l.is_some() {
+                                                                 format!(" {}", l.unwrap())
+                                                             } else {
+                                                                 "".into()
+                                                             })])))
             },
             SubOp::AddAuto(p, t, l) => unsafe {
                 self.command(&Command::new("sub-add",
-                                          Some(vec![format!("\"{}\"", p.to_str().unwrap()),
-                                                    format!("auto{}{}",
-                                                            if t.is_some() {
-                                                                format!(" {}", t.unwrap())
-                                                            } else {
-                                                                "".into()
-                                                            },
-                                                            if l.is_some() {
-                                                                format!(" {}", l.unwrap())
-                                                            } else {
-                                                                "".into()
-                                                            })])))
+                                           Some(vec![format!("\"{}\"", p.to_str().unwrap()),
+                                                     format!("auto{}{}",
+                                                             if t.is_some() {
+                                                                 format!(" {}", t.unwrap())
+                                                             } else {
+                                                                 "".into()
+                                                             },
+                                                             if l.is_some() {
+                                                                 format!(" {}", l.unwrap())
+                                                             } else {
+                                                                 "".into()
+                                                             })])))
             },
             SubOp::AddCached(p, t, l) => unsafe {
                 self.command(&Command::new("sub-add",
-                                          Some(vec![format!("\"{}\"", p.to_str().unwrap()),
-                                                    format!("cached{}{}",
-                                                            if t.is_some() {
-                                                                format!(" {}", t.unwrap())
-                                                            } else {
-                                                                "".into()
-                                                            },
-                                                            if l.is_some() {
-                                                                format!(" {}", l.unwrap())
-                                                            } else {
-                                                                "".into()
-                                                            })])))
+                                           Some(vec![format!("\"{}\"", p.to_str().unwrap()),
+                                                     format!("cached{}{}",
+                                                             if t.is_some() {
+                                                                 format!(" {}", t.unwrap())
+                                                             } else {
+                                                                 "".into()
+                                                             },
+                                                             if l.is_some() {
+                                                                 format!(" {}", l.unwrap())
+                                                             } else {
+                                                                 "".into()
+                                                             })])))
             },
             SubOp::Remove(i) => unsafe {
                 self.command(&Command::new("sub-remove",
-                                          if i.is_some() {
-                                              Some(vec![format!("{}", i.unwrap())])
-                                          } else {
-                                              None
-                                          }))
+                                           if i.is_some() {
+                                               Some(vec![format!("{}", i.unwrap())])
+                                           } else {
+                                               None
+                                           }))
             },
             SubOp::Reload(i) => unsafe {
                 self.command(&Command::new("sub-reload",
-                                          if i.is_some() {
-                                              Some(vec![format!("{}", i.unwrap())])
-                                          } else {
-                                              None
-                                          }))
+                                           if i.is_some() {
+                                               Some(vec![format!("{}", i.unwrap())])
+                                           } else {
+                                               None
+                                           }))
             },
             SubOp::Step(i) => unsafe {
                 self.command(&Command::new("sub-step", Some(vec![format!("{}", i)])))
@@ -1696,13 +1711,13 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     fn cycle(&self, property: &str, up: &bool) -> Result<(), Error> {
         unsafe {
             self.command(&Command::new("cycle",
-                                      Some(vec![property.into(),
-                                                if *up {
-                                                    "up"
-                                                } else {
-                                                    "down"
-                                                }
-                                                .into()])))
+                                       Some(vec![property.into(),
+                                                 if *up {
+                                                     "up"
+                                                 } else {
+                                                     "down"
+                                                 }
+                                                 .into()])))
         }
     }
 
@@ -1710,7 +1725,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     fn multiply(&self, property: &str, factor: &usize) -> Result<(), Error> {
         unsafe {
             self.command(&Command::new("multiply",
-                                      Some(vec![property.into(), format!("{}", factor)])))
+                                       Some(vec![property.into(), format!("{}", factor)])))
         }
     }
 
