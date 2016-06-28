@@ -19,13 +19,12 @@
 #![deny(missing_docs)]
 #![feature(alloc_system, box_syntax, const_fn, stmt_expr_attributes)]
 
-//! This crate provides abstractions for libmpv of the mpv media player. It is dynamically checked
-//! that no client is used after their parent exited, if no command that has similar behaviour to
-//! `quit` was used.
+//! This crate provides abstractions for libmpv of the mpv media player. It is guaranteed
+//! that no `Client` or `EventIter` is used after their `Parent` exited, if no `command` that has
+//! similar behaviour to `quit` was used.
 //!
 //! # Examples
 //!
-//! FIXME:
 //! TO BE DONE
 
 extern crate alloc_system;
