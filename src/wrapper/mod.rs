@@ -57,6 +57,7 @@ macro_rules! data_ptr {
     )
 }
 
+#[inline(always)]
 fn mpv_err<T>(ret: T, err_val: libc::c_int) -> Result<T, Error> {
     if err_val == 0 {
         Ok(ret)
@@ -79,7 +80,7 @@ pub struct InnerEvent {
 }
 
 impl InnerEvent {
-    #[inline]
+    #[inline(always)]
     fn as_result(&self) -> Result<Event, Error> {
         if self.err.is_some() {
             Err(self.err.clone().unwrap())
@@ -87,7 +88,7 @@ impl InnerEvent {
             Ok(self.event.clone())
         }
     }
-    #[inline]
+    #[inline(always)]
     fn as_event(&self) -> &Event {
         &self.event
     }
@@ -111,7 +112,7 @@ pub enum Event {
 }
 
 impl Event {
-    #[inline]
+    #[inline(always)]
     fn as_id(&self) -> MpvEventId {
         match *self {
             Event::LogMessage(_) => MpvEventId::LogMessage,
@@ -130,7 +131,7 @@ impl Event {
 }
 
 impl MpvEvent {
-    #[inline]
+    #[inline(always)]
     fn as_event(&self) -> Result<Event, Error> {
         try!(mpv_err((), self.error));
         Ok(match self.event_id {
@@ -150,7 +151,7 @@ impl MpvEvent {
             _ => unreachable!(),
         })
     }
-    #[inline]
+    #[inline(always)]
     fn as_inner_event(&self) -> InnerEvent {
         InnerEvent {
             event: match self.event_id {
@@ -291,7 +292,8 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
                 }
             }
             if !observed.is_empty() {
-                // Dropping early means less spinning in the notified iter
+                // Dropping early means less spinning in the notified iter, and parking_lot is
+                // biased towards uncontended locks
                 mem::drop(observed);
                 unsafe { (*self.notification).1.notify_all() };
             }
@@ -346,7 +348,7 @@ pub struct LogMessage {
 }
 
 impl LogMessage {
-    #[inline]
+    #[inline(always)]
     fn from_raw(raw: *mut libc::c_void) -> LogMessage {
         let raw = unsafe { &mut *(raw as *mut MpvEventLogMessage) };
         LogMessage {
@@ -359,7 +361,7 @@ impl LogMessage {
 }
 
 impl MpvEventEndFile {
-    #[inline]
+    #[inline(always)]
     fn from_raw(raw: *mut libc::c_void) -> MpvEventEndFile {
         let raw = unsafe { &mut *(raw as *mut MpvEventEndFile) };
         MpvEventEndFile {
@@ -389,7 +391,7 @@ pub struct EndFile {
 }
 
 impl EndFile {
-    #[inline]
+    #[inline(always)]
     fn from_raw(raw: MpvEventEndFile) -> EndFile {
         EndFile {
             reason: match raw.reason {
@@ -425,7 +427,7 @@ pub struct Property {
 }
 
 impl Property {
-    #[inline]
+    #[inline(always)]
     fn from_raw(raw: *mut libc::c_void) -> Property {
         let raw = unsafe { &mut *(raw as *mut MpvEventProperty) };
         Property {
@@ -447,7 +449,7 @@ impl Property {
 }
 
 impl PartialEq<Property> for Property {
-    #[inline]
+    #[inline(always)]
     fn eq(&self, other: &Property) -> bool {
         self.name == other.name
     }
@@ -513,7 +515,7 @@ impl Data {
         val.into()
     }
 
-    #[inline]
+    #[inline(always)]
     fn format(&self) -> MpvFormat {
         match *self {
             Data::String(_) => MpvFormat::String,
@@ -525,7 +527,7 @@ impl Data {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     fn from_raw(fmt: MpvFormat, ptr: *mut libc::c_void) -> Data {
         match fmt {
             MpvFormat::Flag => Data::Flag(unsafe { *(ptr as *mut i64) } != 0),
@@ -538,35 +540,35 @@ impl Data {
 }
 
 impl Into<Data> for String {
-    #[inline]
+    #[inline(always)]
     fn into(self) -> Data {
         Data::String(self)
     }
 }
 
 impl Into<Data> for bool {
-    #[inline]
+    #[inline(always)]
     fn into(self) -> Data {
         Data::Flag(self)
     }
 }
 
 impl Into<Data> for isize {
-    #[inline]
+    #[inline(always)]
     fn into(self) -> Data {
         Data::Int64(self as i64)
     }
 }
 
 impl Into<Data> for f64 {
-    #[inline]
+    #[inline(always)]
     fn into(self) -> Data {
         Data::Double(self)
     }
 }
 
 impl Into<Data> for MpvNode {
-    #[inline]
+    #[inline(always)]
     fn into(self) -> Data {
         Data::Node(self)
     }
@@ -622,7 +624,7 @@ pub enum FileState {
 }
 
 impl FileState {
-    #[inline]
+    #[inline(always)]
     fn val(&self) -> &str {
         match *self {
             FileState::Replace => "replace",
@@ -759,7 +761,7 @@ pub enum SubOp<'a> {
 // TODO: when NonZero is stabelized, use it
 
 impl MpvError {
-    #[inline]
+    #[inline(always)]
     fn as_val(&self) -> libc::c_int {
         *self as libc::c_int
     }
@@ -773,28 +775,23 @@ impl MpvError {
 }
 
 impl MpvFormat {
-    #[inline]
+    #[inline(always)]
     fn as_val(self) -> libc::c_int {
         self as libc::c_int
     }
 }
 
 impl MpvNode {
-    #[inline]
-    pub fn get_inner(&self) -> ::Data {
+    #[inline(always)]
+    fn get_inner(&self) -> ::Data {
         // TODO: this.
         unimplemented!();
     }
 }
 
 impl PartialEq for MpvNode {
-    #[inline]
+    #[inline(always)]
     fn eq(&self, other: &MpvNode) -> bool {
-        self.get_inner() == other.get_inner()
-    }
-
-    #[inline]
-    fn ne(&self, other: &MpvNode) -> bool {
         self.get_inner() == other.get_inner()
     }
 }
@@ -858,62 +855,62 @@ pub trait MpvMarker {
 }
 
 impl MpvMarker for Parent {
-    #[inline]
+    #[inline(always)]
     fn initialized(&self) -> bool {
         self.initialized.load(Ordering::Acquire)
     }
-    #[inline]
+    #[inline(always)]
     fn ctx(&self) -> *mut MpvHandle {
         self.ctx
     }
-    #[inline]
+    #[inline(always)]
     fn check_events(&self) -> bool {
         self.check_events
     }
-    #[inline]
+    #[inline(always)]
     fn ev_iter_notification(&self) -> &Option<*mut (Mutex<bool>, Condvar)> {
         &self.ev_iter_notification
     }
-    #[inline]
+    #[inline(always)]
     fn ev_to_observe(&self) -> &Option<Mutex<Vec<Event>>> {
         &self.ev_to_observe
     }
-    #[inline]
+    #[inline(always)]
     fn ev_to_observe_properties(&self) -> &Option<Mutex<HashMap<String, libc::uint64_t>>> {
         &self.ev_to_observe_properties
     }
-    #[inline]
+    #[inline(always)]
     fn ev_observed(&self) -> &Option<Mutex<Vec<InnerEvent>>> {
         &self.ev_observed
     }
 }
 
 impl<'parent> MpvMarker for Client<'parent> {
-    #[inline]
+    #[inline(always)]
     fn initialized(&self) -> bool {
         true
     }
-    #[inline]
+    #[inline(always)]
     fn ctx(&self) -> *mut MpvHandle {
         self.ctx
     }
-    #[inline]
+    #[inline(always)]
     fn check_events(&self) -> bool {
         self.check_events
     }
-    #[inline]
+    #[inline(always)]
     fn ev_iter_notification(&self) -> &Option<*mut (Mutex<bool>, Condvar)> {
         &self.ev_iter_notification
     }
-    #[inline]
+    #[inline(always)]
     fn ev_to_observe(&self) -> &Option<Mutex<Vec<Event>>> {
         &self.ev_to_observe
     }
-    #[inline]
+    #[inline(always)]
     fn ev_to_observe_properties(&self) -> &Option<Mutex<HashMap<String, libc::uint64_t>>> {
         &self.ev_to_observe_properties
     }
-    #[inline]
+    #[inline(always)]
     fn ev_observed(&self) -> &Option<Mutex<Vec<InnerEvent>>> {
         &self.ev_observed
     }
@@ -941,9 +938,7 @@ impl<'parent> Parent {
     #[allow(mutex_atomic)]
     /// Create a new `Mpv` instance.
     /// To call any method except for `set_option` on this, it has to be initialized first.
-    /// The default settings can be probed by running:
-    ///
-    ///```$ mpv --show-profile=libmpv```
+    /// The default settings can be probed by running: ```$ mpv --show-profile=libmpv```
     pub fn new(check_events: bool) -> Result<Parent, Error> {
         let api_version = unsafe { mpv_client_api_version() };
         if super::MPV_CLIENT_API_VERSION != api_version {
@@ -1090,6 +1085,7 @@ impl<'parent> Parent {
         }
     }
 
+    #[cold]
     /// Initialize the mpv core.
     pub fn init(&self) -> Result<(), Error> {
         if self.initialized() {
@@ -1138,6 +1134,7 @@ impl<'parent> Parent {
         ret
     }
 
+    #[cold]
     /// Load a configuration file into the `Mpv` instance.
     /// The path has to be absolute.
     /// This should not be done during runtime.
