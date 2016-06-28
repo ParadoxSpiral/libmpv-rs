@@ -536,6 +536,11 @@ impl Data {
             _ => unreachable!(),
         }
     }
+
+    #[inline(always)]
+    fn size(&self) -> usize {
+        mem::size_of_val(&self)
+    }
 }
 
 impl Into<Data> for String {
@@ -1119,7 +1124,7 @@ impl<'parent> Parent {
                 let data = CString::new(v.as_bytes()).unwrap().into_raw();
 
                 let ret = mpv_err((), unsafe {
-                    mpv_set_property(self.ctx(),
+                    mpv_set_option(self.ctx(),
                                      name,
                                      format,
                                      mem::transmute::<*mut libc::c_char, *mut libc::c_void>(data))
@@ -1435,7 +1440,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                 }
                 _ => {
                     let ptr = unsafe {
-                        libc::malloc(mem::size_of::<Data>() as libc::size_t) as *mut libc::c_void
+                        libc::malloc(data.size() as libc::size_t) as *mut libc::c_void
                     };
 
                     let err = mpv_err((), unsafe {
