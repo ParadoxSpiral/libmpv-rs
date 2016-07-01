@@ -17,6 +17,7 @@
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 use super::*;
+use test::Bencher;
 
 #[test]
 fn version() {
@@ -41,4 +42,15 @@ fn options_properties() {
     assert_eq!(Data::new(4),
                mpv.get_property("volume", &Format::Int64)
                   .unwrap());
+}
+
+#[bench]
+fn mpv_error(b: &mut Bencher) {
+  let n = super::test::black_box(0);
+
+  b.iter(|| {
+    for n in -19...n {
+      super::wrapper::mpv_err((), n);
+    }
+  });
 }
