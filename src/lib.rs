@@ -18,7 +18,8 @@
 
 #![deny(missing_docs)]
 #![allow(unknown_lints, inline_always)]
-#![feature(alloc_system, box_syntax, inclusive_range_syntax, pub_restricted, const_fn, stmt_expr_attributes, test, type_ascription)]
+#![feature(alloc_system, box_syntax, inclusive_range_syntax, pub_restricted, const_fn, stmt_expr_attributes, type_ascription)]
+#![cfg_attr(test, feature(test))]
 
 //! This crate provides abstractions for libmpv of the mpv media player. It is guaranteed
 //! that no `Client` or `EventIter` is used after their `Parent` exited, if no `command` that has
@@ -26,7 +27,7 @@
 //!
 //! # Examples
 //!
-//! [See
+//! See the 'examples' directory in the crate root.
 
 extern crate alloc_system;
 

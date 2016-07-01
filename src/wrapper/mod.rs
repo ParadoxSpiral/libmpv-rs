@@ -1351,7 +1351,8 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     /// # Safety
     /// This method is unsafe because the player may quit via the quit command.
     unsafe fn command(&self, cmd: &Command) -> Result<(), Error> {
-        let mut args = String::with_capacity(cmd.args.len());
+        // Will probably allocate a little too much, but that is fine to avoid reallocation
+        let mut args = String::with_capacity(mem::size_of_val(cmd.args));
         for elem in cmd.args {
             args.push_str(&format!(" {}", elem));
         }
