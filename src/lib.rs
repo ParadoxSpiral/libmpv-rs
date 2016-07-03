@@ -22,8 +22,7 @@
 #![cfg_attr(test, feature(test))]
 
 //! This crate provides abstractions for libmpv of the mpv media player. It is guaranteed
-//! that no `Client` or `EventIter` is used after their `Parent` exited, if no `command` that has
-//! similar behaviour to `quit` was used.
+//! that no `Client` or `EventIter` is used after their parent exited.
 //!
 //! # Examples
 //!

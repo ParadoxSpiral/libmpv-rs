@@ -17,7 +17,7 @@
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 use super::*;
-use test::Bencher;
+use test::*;
 
 #[test]
 fn version() {
@@ -31,7 +31,15 @@ fn options_properties() {
 
     let mpv = Parent::new(false).unwrap();
     mpv.set_option(Property::new("volume", Data::new(0))).unwrap();
+    mpv.set_option(Property::new("ytdl", Data::new(true))).unwrap();
     mpv.init().unwrap();
+
+    mpv.playlist(&PlaylistOp::Loadfiles(&[File::new(::std::path::Path::new("https://www.youtube.\
+                                                                   com/watch?v=DLzxrzFCyOs"),
+                                                        FileState::AppendPlay,
+                                                        None)]))
+           .unwrap();
+    ::std::thread::sleep(::std::time::Duration::from_secs(10));
 
     assert_eq!(Data::new(0),
                mpv.get_property("volume", &Format::Int64)
@@ -46,7 +54,7 @@ fn options_properties() {
 
 #[bench]
 fn mpv_error(b: &mut Bencher) {
-  let n = super::test::black_box(0);
+  let n = black_box(0);
 
   b.iter(|| {
     for n in -19...n {

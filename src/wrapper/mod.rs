@@ -1132,17 +1132,16 @@ impl<'parent> Parent {
 
     #[allow(match_ref_pats)]
     /// Set an option. This only works before core initialization.
-    pub fn set_option(&self, opt: Property) -> Result<(), Error> {
+    pub fn set_option(&self, opt: &mut Property) -> Result<(), Error> {
         if self.initialized() {
             return Err(Error::AlreadyInitialized);
         }
 
-        let data = &mut opt.data.clone();
-        let name = CString::new(opt.name).unwrap().into_raw();
-        let format = data.format().as_val();
-        let ret = match data {
-            &mut Data::OsdString(_) => Err(Error::OsdStringWrite),
-            &mut Data::String(ref v) => {
+        let name = CString::new(&opt.name[..]).unwrap().into_raw();
+        let format = opt.data.format().as_val();
+        let ret = match opt.data {
+            Data::OsdString(_) => Err(Error::OsdStringWrite),
+            Data::String(ref v) => {
                 let data = CString::new(v.as_bytes()).unwrap().into_raw();
 
                 let ret = mpv_err((), unsafe {
@@ -1157,6 +1156,7 @@ impl<'parent> Parent {
                 ret
             }
             _ => {
+                let data = &mut opt.data;
                 let data = data_ptr!(data);
 
                 mpv_err((),
@@ -1349,7 +1349,8 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     /// common errors and are generally type checked (enums to specify operations).
     ///
     /// # Safety
-    /// This method is unsafe because the player may quit via the quit command.
+    /// This method is unsafe because the player may quit via the quit command, compromising the
+    /// memory safety guarantees of this crate.
     unsafe fn command(&self, cmd: &Command) -> Result<(), Error> {
         // Will probably allocate a little too much, but that is fine to avoid reallocation
         let mut args = String::with_capacity(mem::size_of_val(cmd.args));
