@@ -36,12 +36,14 @@ fn options_properties() {
     mpv.set_option(&mut Property::new("ytdl", Data::new(true))).unwrap();
     mpv.init().unwrap();
 
+    // For some reason, the volume is only correctly set when a file is loaded...
     mpv.playlist(&PlaylistOp::Loadfiles(&[File::new(::std::path::Path::new("https://www.youtube.\
                                                                    com/watch?v=DLzxrzFCyOs"),
                                                         FileState::AppendPlay,
                                                         None)]))
            .unwrap();
-    ::std::thread::sleep(::std::time::Duration::from_secs(7)); // Guesstime of time required to load
+    // Guesstimate of time required to load
+    ::std::thread::sleep(::std::time::Duration::from_secs(7));
 
     assert_eq!(Data::new(0),
                mpv.get_property("volume", &Format::Int64)
