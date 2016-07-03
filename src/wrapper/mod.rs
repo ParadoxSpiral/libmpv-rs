@@ -37,7 +37,7 @@ use std::ops::Drop;
 use std::time::Duration;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-// Get the inner data of `Data`, and transmute it to a value that the API understands.
+// Cast `Data` so that libmpv can use it.
 macro_rules! data_ptr {
     ($data:ident) => (
         #[allow(match_ref_pats)]
@@ -65,8 +65,7 @@ pub(crate) fn mpv_err<T>(ret: T, err_val: libc::c_int) -> Result<T, Error> {
 }
 
 unsafe extern "C" fn event_callback(d: *mut libc::c_void) {
-    let data = mem::transmute::<*mut libc::c_void, *mut (Mutex<bool>, Condvar)>(d);
-    (*data).1.notify_one();
+    (*(d as *mut (Mutex<bool>, Condvar))).1.notify_one();
 }
 
 #[doc(hidden)]
@@ -999,9 +998,7 @@ impl<'parent> Parent {
                 unsafe {
                     mpv_set_wakeup_callback(ctx,
                                             event_callback,
-                                            mem::transmute::<*mut (Mutex<bool>, Condvar),
-                                                             *mut libc::c_void>
-                                                             (ev_iter_notification));
+                                            ev_iter_notification as *mut libc::c_void);
                 }
 
                 (Some(ev_iter_notification),
@@ -1069,9 +1066,7 @@ impl<'parent> Parent {
                     unsafe {
                         mpv_set_wakeup_callback(ctx,
                                             event_callback,
-                                            mem::transmute::<*mut (Mutex<bool>, Condvar),
-                                                             *mut libc::c_void>
-                                                             (ev_iter_notification));
+                                            ev_iter_notification as *mut libc::c_void);
                     }
 
                     (Some(ev_iter_notification),
@@ -1146,7 +1141,7 @@ impl<'parent> Parent {
                     mpv_set_option(self.ctx(),
                                    name,
                                    format,
-                                   mem::transmute::<*mut libc::c_char, *mut libc::c_void>(data))
+                                   data as *mut libc::c_void)
                 });
                 unsafe {
                     CString::from_raw(data);
@@ -1375,7 +1370,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                     mpv_set_property(self.ctx(),
                                      name,
                                      format,
-                                     mem::transmute::<*mut libc::c_char, *mut libc::c_void>(data))
+                                     data as *mut libc::c_void)
                 });
                 unsafe {
                     CString::from_raw(data);
@@ -1406,7 +1401,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                     mpv_get_property(self.ctx(),
                                      name.as_ptr(),
                                      format.as_mpv_format().as_val(),
-                                     mem::transmute::<*mut libc::c_char, *mut libc::c_void>(ptr))
+                                     ptr as *mut libc::c_void)
                 });
 
                 let ret = unsafe { CString::from_raw(ptr) };
