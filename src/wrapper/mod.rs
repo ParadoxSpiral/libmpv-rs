@@ -55,7 +55,6 @@ macro_rules! data_ptr {
     )
 }
 
-#[inline(always)]
 pub(crate) fn mpv_err<T>(ret: T, err_val: libc::c_int) -> Result<T, Error> {
     if err_val == 0 {
         Ok(ret)
@@ -77,7 +76,6 @@ pub struct InnerEvent {
 }
 
 impl InnerEvent {
-    #[inline(always)]
     fn as_result(&self) -> Result<Event, Error> {
         if self.err.is_some() {
             Err(self.err.clone().unwrap())
@@ -85,7 +83,6 @@ impl InnerEvent {
             Ok(self.event.clone())
         }
     }
-    #[inline(always)]
     fn as_event(&self) -> &Event {
         &self.event
     }
@@ -109,7 +106,6 @@ pub enum Event {
 }
 
 impl Event {
-    #[inline(always)]
     fn as_id(&self) -> MpvEventId {
         match *self {
             Event::LogMessage(_) => MpvEventId::LogMessage,
@@ -128,7 +124,6 @@ impl Event {
 }
 
 impl MpvEvent {
-    #[inline(always)]
     fn as_event(&self) -> Result<Event, Error> {
         try!(mpv_err((), self.error));
         Ok(match self.event_id {
@@ -148,7 +143,6 @@ impl MpvEvent {
             _ => unreachable!(),
         })
     }
-    #[inline(always)]
     fn as_inner_event(&self) -> InnerEvent {
         InnerEvent {
             event: match self.event_id {
@@ -345,7 +339,6 @@ pub struct LogMessage {
 }
 
 impl LogMessage {
-    #[inline(always)]
     fn from_raw(raw: *mut libc::c_void) -> LogMessage {
         let raw = unsafe { &mut *(raw as *mut MpvEventLogMessage) };
         LogMessage {
@@ -358,7 +351,6 @@ impl LogMessage {
 }
 
 impl MpvEventEndFile {
-    #[inline(always)]
     fn from_raw(raw: *mut libc::c_void) -> MpvEventEndFile {
         let raw = unsafe { &mut *(raw as *mut MpvEventEndFile) };
         MpvEventEndFile {
@@ -388,7 +380,6 @@ pub struct EndFile {
 }
 
 impl EndFile {
-    #[inline(always)]
     fn from_raw(raw: MpvEventEndFile) -> EndFile {
         EndFile {
             reason: match raw.reason {
@@ -424,7 +415,6 @@ pub struct Property {
 }
 
 impl Property {
-    #[inline(always)]
     fn from_raw(raw: *mut libc::c_void) -> Property {
         let raw = unsafe { &mut *(raw as *mut MpvEventProperty) };
         Property {
@@ -446,7 +436,6 @@ impl Property {
 }
 
 impl PartialEq<Property> for Property {
-    #[inline(always)]
     fn eq(&self, other: &Property) -> bool {
         self.name == other.name
     }
@@ -511,7 +500,6 @@ impl Data {
         val.into()
     }
 
-    #[inline(always)]
     fn format(&self) -> MpvFormat {
         match *self {
             Data::String(_) => MpvFormat::String,
@@ -523,7 +511,6 @@ impl Data {
         }
     }
 
-    #[inline(always)]
     fn from_raw(fmt: MpvFormat, ptr: *mut libc::c_void) -> Data {
         match fmt {
             MpvFormat::Flag => Data::Flag(unsafe { *(ptr as *mut i64) } != 0),
@@ -536,35 +523,30 @@ impl Data {
 }
 
 impl Into<Data> for String {
-    #[inline(always)]
     fn into(self) -> Data {
         Data::String(self)
     }
 }
 
 impl Into<Data> for bool {
-    #[inline(always)]
     fn into(self) -> Data {
         Data::Flag(self)
     }
 }
 
 impl Into<Data> for isize {
-    #[inline(always)]
     fn into(self) -> Data {
         Data::Int64(self as i64)
     }
 }
 
 impl Into<Data> for f64 {
-    #[inline(always)]
     fn into(self) -> Data {
         Data::Double(self)
     }
 }
 
 impl Into<Data> for MpvNode {
-    #[inline(always)]
     fn into(self) -> Data {
         Data::Node(self)
     }
@@ -620,7 +602,6 @@ pub enum FileState {
 }
 
 impl FileState {
-    #[inline(always)]
     fn val(&self) -> &str {
         match *self {
             FileState::Replace => "replace",
@@ -766,12 +747,10 @@ pub enum Format {
 }
 
 impl Format {
-    #[inline(always)]
     fn as_mpv_format(&self) -> &MpvFormat {
         unsafe { mem::transmute::<&Format, &MpvFormat>(self) }
     }
 
-    #[inline(always)]
     fn size(&self) -> usize {
         match *self {
             Format::Flag => mem::size_of::<bool>(),
@@ -784,7 +763,6 @@ impl Format {
 }
 
 impl MpvError {
-    #[inline(always)]
     fn as_val(&self) -> libc::c_int {
         *self as libc::c_int
     }
@@ -798,7 +776,6 @@ impl MpvError {
 }
 
 impl MpvFormat {
-    #[inline(always)]
     fn as_val(self) -> libc::c_int {
         self as libc::c_int
     }
@@ -813,7 +790,6 @@ impl MpvNode {
         val.into()
     }
 
-    #[inline(always)]
     fn get_inner(&self) -> Data {
         // TODO: this.
         unimplemented!();
@@ -823,7 +799,6 @@ impl MpvNode {
 // TODO: impl Into<MpvNode> for types
 
 impl PartialEq for MpvNode {
-    #[inline(always)]
     fn eq(&self, other: &MpvNode) -> bool {
         self.get_inner() == other.get_inner()
     }
@@ -885,62 +860,48 @@ pub trait MpvMarker {
 }
 
 impl MpvMarker for Parent {
-    #[inline(always)]
     fn initialized(&self) -> bool {
         self.initialized.load(Ordering::Acquire)
     }
-    #[inline(always)]
     fn ctx(&self) -> *mut MpvHandle {
         self.ctx
     }
-    #[inline(always)]
     fn check_events(&self) -> bool {
         self.check_events
     }
-    #[inline(always)]
     fn ev_iter_notification(&self) -> &Option<*mut (Mutex<bool>, Condvar)> {
         &self.ev_iter_notification
     }
-    #[inline(always)]
     fn ev_to_observe(&self) -> &Option<Mutex<Vec<Event>>> {
         &self.ev_to_observe
     }
-    #[inline(always)]
     fn ev_to_observe_properties(&self) -> &Option<Mutex<HashMap<String, libc::uint64_t>>> {
         &self.ev_to_observe_properties
     }
-    #[inline(always)]
     fn ev_observed(&self) -> &Option<Mutex<Vec<InnerEvent>>> {
         &self.ev_observed
     }
 }
 
 impl<'parent> MpvMarker for Client<'parent> {
-    #[inline(always)]
     fn initialized(&self) -> bool {
         true
     }
-    #[inline(always)]
     fn ctx(&self) -> *mut MpvHandle {
         self.ctx
     }
-    #[inline(always)]
     fn check_events(&self) -> bool {
         self.check_events
     }
-    #[inline(always)]
     fn ev_iter_notification(&self) -> &Option<*mut (Mutex<bool>, Condvar)> {
         &self.ev_iter_notification
     }
-    #[inline(always)]
     fn ev_to_observe(&self) -> &Option<Mutex<Vec<Event>>> {
         &self.ev_to_observe
     }
-    #[inline(always)]
     fn ev_to_observe_properties(&self) -> &Option<Mutex<HashMap<String, libc::uint64_t>>> {
         &self.ev_to_observe_properties
     }
-    #[inline(always)]
     fn ev_observed(&self) -> &Option<Mutex<Vec<InnerEvent>>> {
         &self.ev_observed
     }
