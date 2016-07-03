@@ -40,19 +40,17 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 // Get the inner data of `Data`, and transmute it to a value that the API understands.
 macro_rules! data_ptr {
     ($data:ident) => (
-        unsafe {
-            #[allow(match_ref_pats)]
-            match $data {
-                &mut Data::Flag(ref mut v) =>
-                    mem::transmute::<*mut bool, *mut libc::c_void>(v),
-                &mut Data::Int64(ref mut v) =>
-                    mem::transmute::<*mut libc::int64_t, *mut libc::c_void>(v),
-                &mut Data::Double(ref mut v) =>
-                    mem::transmute::<*mut libc::c_double, *mut libc::c_void>(v),
-                &mut Data::Node(ref mut v) =>
-                    mem::transmute::<*mut MpvNode, *mut libc::c_void>(v),
-                _ => unreachable!(),
-            }
+        #[allow(match_ref_pats)]
+        match $data {
+            &mut Data::Flag(ref mut v) =>
+                v as *mut bool as *mut libc::c_void,
+            &mut Data::Int64(ref mut v) =>
+                v as *mut libc::int64_t as *mut libc::c_void,
+            &mut Data::Double(ref mut v) =>
+                v as *mut libc::c_double as *mut libc::c_void,
+            &mut Data::Node(ref mut v) =>
+                v as *mut MpvNode as *mut libc::c_void,
+            _ => unreachable!(),
         }
     )
 }

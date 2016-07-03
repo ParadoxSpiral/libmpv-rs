@@ -36,22 +36,22 @@ pub fn exec() {
     crossbeam::scope(|scope| {
         scope.spawn(|| {
             let iter = mpv.observe_all(&[Event::FileLoaded,
-                                            Event::StartFile,
-                                            Event::Seek,
-                                            Event::PlaybackRestart,
-                                            Event::EndFile(None)])
+                                         Event::StartFile,
+                                         Event::Seek,
+                                         Event::PlaybackRestart,
+                                         Event::EndFile(None)])
                           .unwrap();
 
             for elem in iter {
                 match elem {
-                    Err(Error::NoAssociatedEvent) => {},
+                    Err(Error::NoAssociatedEvent) => {}
                     Err(v) => panic!("unexpected error: {:?}", v),
                     Ok(vec) => {
                         if let Some(&Ok(Event::EndFile(ref v))) = vec.iter().find(|e| {
                             if e.is_ok() {
-                            	if let &Event::EndFile(_) = e.as_ref().unwrap() {
-                                     return true;
-                                 }
+                                if let &Event::EndFile(_) = e.as_ref().unwrap() {
+                                    return true;
+                                }
                             }
                             false
                         }) {
@@ -60,20 +60,20 @@ pub fn exec() {
                         } else {
                             println!("1: {:?}", vec);
                         };
-                    },
+                    }
                 }
             }
         });
         scope.spawn(|| {
             let iter = mpv.observe_all(&[Event::PropertyChange(Property::new("volume",
-                                                                         Data::new(0))),
-                                     Event::PropertyChange(Property::new("pause",
-                                                                         Data::new(false)))])
+                                                                             Data::new(0))),
+                                         Event::PropertyChange(Property::new("pause",
+                                                                             Data::new(false)))])
                           .unwrap();
 
             for elem in iter {
                 match elem {
-                    Err(Error::NoAssociatedEvent) => {},
+                    Err(Error::NoAssociatedEvent) => {}
                     Err(v) => panic!("unexpected error: {:?}", v),
                     Ok(v) => println!("2: {:?}", v),
                 }
