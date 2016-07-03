@@ -30,8 +30,10 @@ fn options_properties() {
     // TODO: Cover all `Data` variants.
 
     let mpv = Parent::new(false).unwrap();
-    mpv.set_option(Property::new("volume", Data::new(0))).unwrap();
-    mpv.set_option(Property::new("ytdl", Data::new(true))).unwrap();
+    mpv.set_option(&mut Property::new("cache-initial", Data::new(1))).unwrap();
+    mpv.set_option(&mut Property::new("volume", Data::new(0))).unwrap();
+    mpv.set_option(&mut Property::new("no-video", Data::new(true))).unwrap();
+    mpv.set_option(&mut Property::new("ytdl", Data::new(true))).unwrap();
     mpv.init().unwrap();
 
     mpv.playlist(&PlaylistOp::Loadfiles(&[File::new(::std::path::Path::new("https://www.youtube.\
@@ -39,7 +41,7 @@ fn options_properties() {
                                                         FileState::AppendPlay,
                                                         None)]))
            .unwrap();
-    ::std::thread::sleep(::std::time::Duration::from_secs(10));
+    ::std::thread::sleep(::std::time::Duration::from_secs(7)); // Guesstime of time required to load
 
     assert_eq!(Data::new(0),
                mpv.get_property("volume", &Format::Int64)

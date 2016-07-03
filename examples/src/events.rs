@@ -27,10 +27,10 @@ use std::thread;
 
 pub fn exec() {
     let mpv = Parent::new(true).unwrap();
-    mpv.set_option(Property::new("cache-initial", Data::new(1))).unwrap();
-    mpv.set_option(Property::new("volume", Data::new(20))).unwrap();
-    mpv.set_option(Property::new("no-video", Data::new(true))).unwrap();
-    mpv.set_option(Property::new("ytdl", Data::new(true))).unwrap();
+    mpv.set_option(&mut Property::new("cache-initial", Data::new(1))).unwrap();
+    mpv.set_option(&mut Property::new("volume", Data::new(20))).unwrap();
+    mpv.set_option(&mut Property::new("no-video", Data::new(true))).unwrap();
+    mpv.set_option(&mut Property::new("ytdl", Data::new(true))).unwrap();
     mpv.init().unwrap();
 
     crossbeam::scope(|scope| {
