@@ -1370,16 +1370,16 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         let format = format;
         Ok(match *format {
             Format::String | Format::OsdString => {
-                let ptr = CString::new("").unwrap().into_raw();
+                let ptr = unsafe{ libc::malloc(0) } as *mut libc::c_void;
 
                 let err = mpv_err((), unsafe {
                     mpv_get_property(self.ctx(),
                                      name.as_ptr(),
                                      format.as_mpv_format().as_val(),
-                                     ptr as *mut libc::c_void)
+                                     ptr)
                 });
 
-                let ret = unsafe { CString::from_raw(ptr) };
+                let ret = unsafe { CString::from_raw(ptr as *mut libc::c_char) };
                 if err.is_err() {
                     return Err(err.unwrap_err());
                 } else {
