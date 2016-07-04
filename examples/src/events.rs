@@ -87,7 +87,7 @@ pub fn exec() {
            .unwrap();
 
         thread::sleep(Duration::from_secs(3));
-        mpv.set_property(Property::new("volume", Data::new(14))).unwrap();
+        mpv.set_property(&mut Property::new("volume", Data::new(14))).unwrap();
 
         thread::sleep(Duration::from_secs(30));
 

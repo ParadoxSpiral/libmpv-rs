@@ -926,7 +926,6 @@ impl<'parent> Drop for Client<'parent> {
 }
 
 impl<'parent> Parent {
-    #[allow(mutex_atomic)]
     /// Create a new `Mpv` instance.
     /// To call any method except for `set_option` on this, it has to be initialized first.
     /// The default settings can be probed by running: ```$ mpv --show-profile=libmpv```
@@ -1084,7 +1083,6 @@ impl<'parent> Parent {
         }
     }
 
-    #[allow(match_ref_pats)]
     /// Set an option. This only works before core initialization.
     pub fn set_option(&self, opt: &mut Property) -> Result<(), Error> {
         if self.initialized() {
@@ -1193,7 +1191,7 @@ pub trait MpvInstance<'parent, P>
     /// command or similar may break the invariant of drop order.
     unsafe fn command(&self, cmd: &Command) -> Result<(), Error>;
     /// Set a given `Property` with `prop`, using it's value.
-    fn set_property(&self, prop: Property) -> Result<(), Error>;
+    fn set_property(&self, prop: &mut Property) -> Result<(), Error>;
     /// Get the `Data` of a given named property.
     fn get_property(&self, name: &str, format: &Format) -> Result<Data, Error>;
     /// Seek in a way defined by `Seek`.
@@ -1318,13 +1316,12 @@ impl<'parent, P> MpvInstance<'parent, P> for P
 
     #[allow(match_ref_pats)]
     /// Set the value of a property.
-    fn set_property(&self, prop: Property) -> Result<(), Error> {
-        let data = &mut prop.data.clone();
-        let format = data.format().as_val();
-        let name = CString::new(prop.name).unwrap().into_raw();
-        let ret = match data {
-            &mut Data::OsdString(_) => Err(Error::OsdStringWrite),
-            &mut Data::String(ref v) => {
+    fn set_property(&self, prop: &mut Property) -> Result<(), Error> {
+        let format = prop.data.format().as_val();
+        let name = CString::new(&prop.name[..]).unwrap().into_raw();
+        let ret = match prop.data {
+            Data::OsdString(_) => Err(Error::OsdStringWrite),
+            Data::String(ref v) => {
                 let data = CString::new(v.as_bytes()).unwrap().into_raw();
 
                 let ret = mpv_err((), unsafe {
@@ -1339,6 +1336,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                 ret
             }
             _ => {
+                let data = &mut prop.data;
                 let data = data_ptr!(data);
 
                 mpv_err((),
@@ -1349,7 +1347,6 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         ret
     }
 
-    #[allow(match_ref_pats)]
     /// Get the value of a property.
     fn get_property(&self, name: &str, format: &Format) -> Result<Data, Error> {
         let name = CString::new(name).unwrap();
@@ -1684,11 +1681,11 @@ impl<'parent, P> MpvInstance<'parent, P> for P
 
     /// Pause playback at runtime.
     fn pause(&self) -> Result<(), Error> {
-        self.set_property(Property::new("pause", Data::Flag(true)))
+        self.set_property(&mut Property::new("pause", Data::Flag(true)))
     }
 
     /// Unpause playback at runtime.
     fn unpause(&self) -> Result<(), Error> {
-        self.set_property(Property::new("pause", Data::Flag(false)))
+        self.set_property(&mut Property::new("pause", Data::Flag(false)))
     }
 }
