@@ -49,7 +49,7 @@ pub fn exec() {
                     Ok(vec) => {
                         if let Some(&Ok(Event::EndFile(ref v))) = vec.iter().find(|e| {
                             if e.is_ok() {
-                                if let &Event::EndFile(_) = e.as_ref().unwrap() {
+                                if let Event::EndFile(_) = *e.as_ref().unwrap() {
                                     return true;
                                 }
                             }
