@@ -486,8 +486,8 @@ pub enum Data {
     String(String),
     OsdString(String),
     Flag(bool),
-    Int64(i64),
-    Double(f64),
+    Int64(libc::int64_t),
+    Double(libc::c_double),
     Node(MpvNode),
 }
 
@@ -513,10 +513,10 @@ impl Data {
 
     fn from_raw(fmt: MpvFormat, ptr: *mut libc::c_void) -> Data {
         match fmt {
-            MpvFormat::Flag => Data::Flag(unsafe { *(ptr as *mut i64) } != 0),
-            MpvFormat::Int64 => Data::Int64(unsafe { *(ptr as *mut i64) }),
-            MpvFormat::Double => Data::Double(unsafe { *(ptr as *mut f64) }),
-            // TODO: MpvFormat::Node => Data::Node(unsafe{ *(ptr as *mut MpvNode) }),
+            MpvFormat::Flag => Data::Flag(unsafe { *(ptr as *mut libc::int64_t) } != 0),
+            MpvFormat::Int64 => Data::Int64(unsafe { *(ptr as *mut libc::int64_t) }),
+            MpvFormat::Double => Data::Double(unsafe { *(ptr as *mut libc::c_double) }),
+            MpvFormat::Node => Data::Node(unsafe{ *(ptr as *mut MpvNode) }),
             _ => unreachable!(),
         }
     }
@@ -534,15 +534,33 @@ impl Into<Data> for bool {
     }
 }
 
-impl Into<Data> for isize {
+impl Into<Data> for i32 {
     fn into(self) -> Data {
-        Data::Int64(self as i64)
+        Data::Int64(self as libc::int64_t)
+    }
+}
+
+impl Into<Data> for i64 {
+    fn into(self) -> Data {
+        Data::Int64(self as libc::int64_t)
+    }
+}
+
+impl Into<Data> for u32 {
+    fn into(self) -> Data {
+        Data::Int64(self as libc::int64_t)
+    }
+}
+
+impl Into<Data> for f32 {
+    fn into(self) -> Data {
+        Data::Double(self as libc::c_double)
     }
 }
 
 impl Into<Data> for f64 {
     fn into(self) -> Data {
-        Data::Double(self)
+        Data::Double(self as libc::c_double)
     }
 }
 
@@ -1314,7 +1332,6 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         mpv_err((), mpv_command_string(self.ctx(), args.as_ptr()))
     }
 
-    #[allow(match_ref_pats)]
     /// Set the value of a property.
     fn set_property(&self, prop: &mut Property) -> Result<(), Error> {
         let format = prop.data.format().as_val();

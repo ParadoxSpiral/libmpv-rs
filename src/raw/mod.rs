@@ -68,7 +68,7 @@ pub enum MpvFormat {
 }
 
 #[repr(C)]
-#[derive(Clone, Debug, Eq)]
+#[derive(Clone, Copy, Debug, Eq)]
 pub struct MpvNode {
     // FIXME:
     // union {
