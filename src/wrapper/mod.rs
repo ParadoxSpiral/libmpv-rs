@@ -980,9 +980,9 @@ impl<'parent> Parent {
                 }
 
                 (Some(ev_iter_notification),
-                 Some(Mutex::new(Vec::with_capacity(10))),
-                 Some(Mutex::new(HashMap::new())),
-                 Some(Mutex::new(Vec::with_capacity(10))))
+                 Some(Mutex::new(Vec::with_capacity(15))),
+                 Some(Mutex::new(HashMap::with_capacity(10))),
+                 Some(Mutex::new(Vec::with_capacity(22))))
             } else {
                 unsafe {
                     // Disable remaining events
@@ -1048,9 +1048,9 @@ impl<'parent> Parent {
                     }
 
                     (Some(ev_iter_notification),
-                     Some(Mutex::new(Vec::with_capacity(10))),
-                     Some(Mutex::new(HashMap::new())),
-                     Some(Mutex::new(Vec::with_capacity(10))))
+                     Some(Mutex::new(Vec::with_capacity(15))),
+                     Some(Mutex::new(HashMap::with_capacity(10))),
+                     Some(Mutex::new(Vec::with_capacity(22))))
                 } else {
                     unsafe {
                         // Disable remaining events
