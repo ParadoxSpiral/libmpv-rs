@@ -55,14 +55,3 @@ fn options_properties() {
                mpv.get_property("volume", &Format::Int64)
                   .unwrap());
 }
-
-#[bench]
-fn mpv_error(b: &mut Bencher) {
-  let n = black_box(0);
-
-  b.iter(|| {
-    for n in -19...n {
-      super::wrapper::mpv_err((), n);
-    }
-  });
-}

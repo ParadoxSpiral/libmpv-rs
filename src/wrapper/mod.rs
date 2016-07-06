@@ -1314,13 +1314,10 @@ impl<'parent, P> MpvInstance<'parent, P> for P
 
     /// Send a command to the `Mpv` instance. This uses `mpv_command_string` internally,
     /// so that the syntax is the same as described in the [manual for the input.conf]
-    /// (https://mpv.io/manual/master/#list-of-input-commands). It is advised to use the specific
-    /// method for each command, because the specific functions may check for
-    /// common errors and are generally type checked (enums to specify operations).
+    /// (https://mpv.io/manual/master/#list-of-input-commands).
     ///
     /// # Safety
-    /// This method is unsafe because the player may quit via the quit command, compromising the
-    /// memory safety guarantees of this crate.
+    /// This method is unsafe because the player may quit via the quit command, resulting in UB.
     unsafe fn command(&self, cmd: &Command) -> Result<(), Error> {
         // Will probably allocate a little too much, but that is fine to avoid reallocation
         let mut args = String::with_capacity(mem::size_of_val(cmd.args));
