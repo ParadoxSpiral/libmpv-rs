@@ -42,6 +42,7 @@ extern crate test;
 
 /// Contains bindings to libmpv functions.
 pub mod raw;
+pub use raw::MpvLogLevel as LogLevel;
 mod wrapper;
 pub use wrapper::*;
 #[cfg(test)]

@@ -58,7 +58,7 @@ pub fn exec() {
                             println!("File ended! Reason: {:?}", v);
                             process::exit(0);
                         } else {
-                            println!("1: {:?}", vec);
+                            println!("playback_events: {:#?}", vec);
                         };
                     }
                 }
@@ -75,7 +75,19 @@ pub fn exec() {
                 match elem {
                     Err(Error::NoAssociatedEvent) => {}
                     Err(v) => panic!("unexpected error: {:?}", v),
-                    Ok(v) => println!("2: {:?}", v),
+                    Ok(vec) => println!("prop_events: {:#?}", vec),
+                }
+            }
+        });
+        scope.spawn(|| {
+            let iter = mpv.observe_all(&[Event::LogMessage(LogMessage::new(LogLevel::V))])
+                          .unwrap();
+
+            for elem in iter {
+                match elem {
+                    Err(Error::NoAssociatedEvent) => {}
+                    Err(v) => panic!("unexpected error: {:?}", v),
+                    Ok(vec) => println!("log_events: {:#?}", vec),
                 }
             }
         });

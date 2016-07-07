@@ -92,7 +92,7 @@ impl InnerEvent {
 #[derive(Clone, Debug, PartialEq)]
 #[allow(missing_docs)]
 pub enum Event {
-    LogMessage(Option<LogMessage>),
+    LogMessage(LogMessage),
     StartFile,
     EndFile(Option<EndFile>),
     FileLoaded,
@@ -127,7 +127,7 @@ impl MpvEvent {
     fn as_event(&self) -> Result<Event, Error> {
         try!(mpv_err((), self.error));
         Ok(match self.event_id {
-            MpvEventId::LogMessage => Event::LogMessage(Some(LogMessage::from_raw(self.data))),
+            MpvEventId::LogMessage => Event::LogMessage(LogMessage::from_raw(self.data)),
             MpvEventId::StartFile => Event::StartFile,
             MpvEventId::EndFile => {
                 Event::EndFile(Some(EndFile::from_raw(MpvEventEndFile::from_raw(self.data))))
@@ -146,7 +146,7 @@ impl MpvEvent {
     fn as_inner_event(&self) -> InnerEvent {
         InnerEvent {
             event: match self.event_id {
-                MpvEventId::LogMessage => Event::LogMessage(Some(LogMessage::from_raw(self.data))),
+                MpvEventId::LogMessage => Event::LogMessage(LogMessage::from_raw(self.data)),
                 MpvEventId::StartFile => Event::StartFile,
                 MpvEventId::EndFile => {
                     Event::EndFile(Some(EndFile::from_raw(MpvEventEndFile::from_raw(self.data))))
@@ -212,6 +212,15 @@ impl<'parent, P> Drop for EventIter<'parent, P>
                         return true;
                     }
                 }
+            else if MpvEventId::LogMessage == outer_ev.as_id() 
+                    && outer_ev.as_id() == inner_ev.as_id()
+                {
+                let min_level = CString::new(MpvLogLevel::None.as_string()).unwrap();
+                    mpv_err((), unsafe { mpv_request_log_messages(self.ctx,
+                                        min_level.as_ptr()) })
+                            .unwrap();
+                }
+                return true;
             } else if outer_ev.as_id() == inner_ev.as_id() {
                 return true;
             }
@@ -261,7 +270,10 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
                 let event = unsafe { &*mpv_wait_event(self.ctx, 0f64 as libc::c_double) };
                 let ev_id = event.event_id;
 
-                if ev_id == MpvEventId::None || ev_id == MpvEventId::QueueOverflow {
+                if ev_id == MpvEventId::QueueOverflow {
+                    // The queue needs to be emptied asap to prevent loss of events
+                    break;
+                } else if ev_id == MpvEventId::None {
                     if last {
                         break;
                     } else {
@@ -283,8 +295,6 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
                 }
             }
             if !observed.is_empty() {
-                // Dropping early means less spinning in the notified iter, and parking_lot is
-                // biased towards uncontended locks
                 mem::drop(observed);
                 unsafe { (*self.notification).1.notify_all() };
             }
@@ -339,6 +349,16 @@ pub struct LogMessage {
 }
 
 impl LogMessage {
+    /// Create an empty `LogMessage` with specified verbosity
+    pub fn new(lvl: MpvLogLevel) -> LogMessage {
+        LogMessage {
+            prefix: "".into(),
+            level: lvl.as_string().into(),
+            text: "".into(),
+            log_level: lvl,
+        }
+    }
+
     fn from_raw(raw: *mut libc::c_void) -> LogMessage {
         let raw = unsafe { &mut *(raw as *mut MpvEventLogMessage) };
         LogMessage {
@@ -346,6 +366,21 @@ impl LogMessage {
             level: unsafe { CStr::from_ptr(raw.level).to_str().unwrap().into() },
             text: unsafe { CStr::from_ptr(raw.text).to_str().unwrap().into() },
             log_level: raw.log_level,
+        }
+    }
+}
+
+impl MpvLogLevel {
+    fn as_string(&self) -> &str {
+        match *self {
+            MpvLogLevel::None => "no",
+            MpvLogLevel::Fatal => "fatal",
+            MpvLogLevel::Error => "error",
+            MpvLogLevel::Warn => "warn",
+            MpvLogLevel::Info => "info",
+            MpvLogLevel::V => "v",
+            MpvLogLevel::Debug => "debug",
+            MpvLogLevel::Trace => "trace",
         }
     }
 }
@@ -1196,17 +1231,13 @@ impl<'parent> Client<'parent> {
 pub trait MpvInstance<'parent, P>
     where P: MpvMarker + 'parent
 {
-    /// Enable a given `Event`
+    /// Enable a given `Event`.
     fn enable_event(&self, e: &Event) -> Result<(), Error>;
-    /// Disable a given `Event`
+    /// Disable a given `Event`.
     fn disable_event(&self, e: &Event) -> Result<(), Error>;
-    /// Observe all `Event`s by means of an `EventIter`
+    /// Observe all `Event`s by means of an `EventIter`.
     fn observe_all(&self, events: &[Event]) -> Result<EventIter<P>, Error>;
-    /// Execute any mpv command.
-    ///
-    /// # Unsafety
-    /// This is marked as unsafe because any arbitrary binary can be executed, and the `quit`
-    /// command or similar may break the invariant of drop order.
+    /// Execute any mpv command. See implementation for information about safety.
     unsafe fn command(&self, cmd: &Command) -> Result<(), Error>;
     /// Set a given `Property` with `prop`, using it's value.
     fn set_property(&self, prop: &mut Property) -> Result<(), Error>;
@@ -1271,16 +1302,23 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                         props.push(v);
                         ids.push(elem.as_id());
                         evs.push(elem.clone());
-                        continue;
                     }
-                }
-                for id in &(*observe) {
-                    if elem.as_id() == id.as_id() {
-                        return Err(Error::AlreadyObserved(box elem.clone()));
+                } else {
+                    for id in &*observe {
+                        if elem.as_id() == id.as_id() {
+                            return Err(Error::AlreadyObserved(box elem.clone()));
+                        }
                     }
+
+                    if let Event::LogMessage(ref v) = *elem {
+                        let min_level = CString::new(v.log_level.as_string()).unwrap();
+                        try!(mpv_err((), unsafe{mpv_request_log_messages(self.ctx(),
+                        min_level.as_ptr())}));
+                    }
+
+                    ids.push(elem.as_id());
+                    evs.push(elem.clone());
                 }
-                ids.push(elem.as_id());
-                evs.push(elem.clone());
             }
             observe.extend(evs.clone());
 
