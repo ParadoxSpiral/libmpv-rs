@@ -211,14 +211,12 @@ impl<'parent, P> Drop for EventIter<'parent, P>
                         all_to_observe_properties.remove(&outer_prop.name);
                         return true;
                     }
-                }
-            else if MpvEventId::LogMessage == outer_ev.as_id() 
-                    && outer_ev.as_id() == inner_ev.as_id()
-                {
-                let min_level = CString::new(MpvLogLevel::None.as_string()).unwrap();
-                    mpv_err((), unsafe { mpv_request_log_messages(self.ctx,
-                                        min_level.as_ptr()) })
-                            .unwrap();
+                } else if MpvEventId::LogMessage == outer_ev.as_id() &&
+                   outer_ev.as_id() == inner_ev.as_id() {
+                    let min_level = CString::new(MpvLogLevel::None.as_string()).unwrap();
+                    mpv_err((),
+                            unsafe { mpv_request_log_messages(self.ctx, min_level.as_ptr()) })
+                        .unwrap();
                 }
                 return true;
             } else if outer_ev.as_id() == inner_ev.as_id() {
@@ -343,17 +341,17 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
 /// The data of an `Event::LogMessage`.
 pub struct LogMessage {
     pub prefix: String,
-    pub level: String,
+    pub level: super::LogLevel,
     pub text: String,
-    pub log_level: MpvLogLevel,
+    pub log_level: super::LogLevel,
 }
 
 impl LogMessage {
     /// Create an empty `LogMessage` with specified verbosity
-    pub fn new(lvl: MpvLogLevel) -> LogMessage {
+    pub fn new(lvl: super::LogLevel) -> LogMessage {
         LogMessage {
             prefix: "".into(),
-            level: lvl.as_string().into(),
+            level: lvl,
             text: "".into(),
             log_level: lvl,
         }
@@ -363,7 +361,7 @@ impl LogMessage {
         let raw = unsafe { &mut *(raw as *mut MpvEventLogMessage) };
         LogMessage {
             prefix: unsafe { CStr::from_ptr(raw.prefix).to_str().unwrap().into() },
-            level: unsafe { CStr::from_ptr(raw.level).to_str().unwrap().into() },
+            level: unsafe { MpvLogLevel::from_str(CStr::from_ptr(raw.level).to_str().unwrap()) },
             text: unsafe { CStr::from_ptr(raw.text).to_str().unwrap().into() },
             log_level: raw.log_level,
         }
@@ -381,6 +379,20 @@ impl MpvLogLevel {
             MpvLogLevel::V => "v",
             MpvLogLevel::Debug => "debug",
             MpvLogLevel::Trace => "trace",
+        }
+    }
+
+    fn from_str(name: &str) -> MpvLogLevel {
+        match name {
+            "no" => MpvLogLevel::None,
+            "fatal" => MpvLogLevel::Fatal,
+            "error" => MpvLogLevel::Error,
+            "warn" => MpvLogLevel::Warn,
+            "info" => MpvLogLevel::Info,
+            "v" => MpvLogLevel::V,
+            "debug" => MpvLogLevel::Debug,
+            "trace" => MpvLogLevel::Trace,
+            _ => unreachable!(),
         }
     }
 }
@@ -551,7 +563,7 @@ impl Data {
             MpvFormat::Flag => Data::Flag(unsafe { *(ptr as *mut libc::int64_t) } != 0),
             MpvFormat::Int64 => Data::Int64(unsafe { *(ptr as *mut libc::int64_t) }),
             MpvFormat::Double => Data::Double(unsafe { *(ptr as *mut libc::c_double) }),
-            MpvFormat::Node => Data::Node(unsafe{ *(ptr as *mut MpvNode) }),
+            MpvFormat::Node => Data::Node(unsafe { *(ptr as *mut MpvNode) }),
             _ => unreachable!(),
         }
     }
@@ -1078,8 +1090,8 @@ impl<'parent> Parent {
                                                                   Condvar::new()));
                     unsafe {
                         mpv_set_wakeup_callback(ctx,
-                                            event_callback,
-                                            ev_iter_notification as *mut libc::c_void);
+                                                event_callback,
+                                                ev_iter_notification as *mut libc::c_void);
                     }
 
                     (Some(ev_iter_notification),
@@ -1150,10 +1162,7 @@ impl<'parent> Parent {
                 let data = CString::new(v.as_bytes()).unwrap().into_raw();
 
                 let ret = mpv_err((), unsafe {
-                    mpv_set_option(self.ctx(),
-                                   name,
-                                   format,
-                                   data as *mut libc::c_void)
+                    mpv_set_option(self.ctx(), name, format, data as *mut libc::c_void)
                 });
                 unsafe {
                     CString::from_raw(data);
@@ -1312,8 +1321,9 @@ impl<'parent, P> MpvInstance<'parent, P> for P
 
                     if let Event::LogMessage(ref v) = *elem {
                         let min_level = CString::new(v.log_level.as_string()).unwrap();
-                        try!(mpv_err((), unsafe{mpv_request_log_messages(self.ctx(),
-                        min_level.as_ptr())}));
+                        try!(mpv_err((), unsafe {
+                            mpv_request_log_messages(self.ctx(), min_level.as_ptr())
+                        }));
                     }
 
                     ids.push(elem.as_id());
@@ -1377,10 +1387,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                 let data = CString::new(v.as_bytes()).unwrap().into_raw();
 
                 let ret = mpv_err((), unsafe {
-                    mpv_set_property(self.ctx(),
-                                     name,
-                                     format,
-                                     data as *mut libc::c_void)
+                    mpv_set_property(self.ctx(), name, format, data as *mut libc::c_void)
                 });
                 unsafe {
                     CString::from_raw(data);
@@ -1405,7 +1412,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         let format = format;
         Ok(match *format {
             Format::String | Format::OsdString => {
-                let ptr = unsafe{ libc::malloc(0) } as *mut libc::c_void;
+                let ptr = unsafe { libc::malloc(0) } as *mut libc::c_void;
 
                 let err = mpv_err((), unsafe {
                     mpv_get_property(self.ctx(),

@@ -80,7 +80,7 @@ pub fn exec() {
             }
         });
         scope.spawn(|| {
-            let iter = mpv.observe_all(&[Event::LogMessage(LogMessage::new(LogLevel::V))])
+            let iter = mpv.observe_all(&[Event::LogMessage(LogMessage::new(LogLevel::Info))])
                           .unwrap();
 
             for elem in iter {

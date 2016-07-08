@@ -17,9 +17,9 @@
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 #![deny(missing_docs)]
-#![allow(unknown_lints, inline_always)]
-#![feature(alloc_system, box_syntax, inclusive_range_syntax, pub_restricted, const_fn, stmt_expr_attributes, type_ascription)]
-#![cfg_attr(test, feature(test))]
+#![allow(unknown_lints)]
+#![feature(alloc_system, box_syntax, inclusive_range_syntax,pub_restricted, const_fn,
+		   stmt_expr_attributes, type_ascription)]
 
 //! This crate provides abstractions for libmpv of the mpv media player. It is guaranteed
 //! that no `Client` or `EventIter` is used after their parent exited.
@@ -37,8 +37,6 @@ extern crate parking_lot;
 extern crate lazy_static;
 #[macro_use]
 extern crate enum_primitive;
-#[cfg(test)]
-extern crate test;
 
 /// Contains bindings to libmpv functions.
 pub mod raw;
