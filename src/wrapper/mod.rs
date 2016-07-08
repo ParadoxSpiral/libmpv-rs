@@ -1011,8 +1011,7 @@ impl<'parent> Parent {
             try!(mpv_err((), mpv_request_event(ctx, MpvEventId::TrackSwitched, 0)));
             try!(mpv_err((), mpv_request_event(ctx, MpvEventId::Pause, 0)));
             try!(mpv_err((), mpv_request_event(ctx, MpvEventId::Unpause, 0)));
-            try!(mpv_err((),
-                         mpv_request_event(ctx, MpvEventId::ScriptInputDispatch, 0)));
+            try!(mpv_err((), mpv_request_event(ctx, MpvEventId::ScriptInputDispatch, 0)));
             try!(mpv_err((), mpv_request_event(ctx, MpvEventId::MetadataUpdate, 0)));
             try!(mpv_err((), mpv_request_event(ctx, MpvEventId::ChapterChange, 0)));
         }
@@ -1079,8 +1078,7 @@ impl<'parent> Parent {
                 try!(mpv_err((), mpv_request_event(ctx, MpvEventId::TrackSwitched, 0)));
                 try!(mpv_err((), mpv_request_event(ctx, MpvEventId::Pause, 0)));
                 try!(mpv_err((), mpv_request_event(ctx, MpvEventId::Unpause, 0)));
-                try!(mpv_err((),
-                             mpv_request_event(ctx, MpvEventId::ScriptInputDispatch, 0)));
+                try!(mpv_err((), mpv_request_event(ctx, MpvEventId::ScriptInputDispatch, 0)));
                 try!(mpv_err((), mpv_request_event(ctx, MpvEventId::MetadataUpdate, 0)));
                 try!(mpv_err((), mpv_request_event(ctx, MpvEventId::ChapterChange, 0)));
             }
