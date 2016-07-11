@@ -1436,10 +1436,12 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                         println!("got: {:?}", bytes);
                         // Which is this in utf-8
                         println!("ldc: {}", String::from_utf8_lossy(bytes).into_owned());
-                        // This is what the OsString is capable of (protip: nothing)
-                        use std::ffi::OsStr;
-                        use std::os::unix::ffi::OsStrExt;
-                        println!("OsS: {:?}", OsStr::from_bytes(bytes));
+                        #[cfg(unix)]
+                        {
+                            use std::ffi::OsStr;
+                            use std::os::unix::ffi::OsStrExt;
+                            println!("OsS: {:?}", OsStr::from_bytes(bytes));
+                        }
 
                         let tmp = encoding::decode(bytes,
                                                    encoding::DecoderTrap::Strict,
