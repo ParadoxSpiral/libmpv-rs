@@ -16,8 +16,6 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-#![allow(unknown_lints)]
-
 use libc;
 use parking_lot::{Condvar, Mutex};
 use enum_primitive::FromPrimitive;
@@ -1025,7 +1023,8 @@ impl<'parent> Parent {
 
         let (ev_iter_notification, ev_to_observe, ev_to_observe_properties, ev_observed) =
             if check_events {
-                let ev_iter_notification = Box::into_raw(box (Mutex::new(false), Condvar::new()));
+                let ev_iter_notification = Box::into_raw(Box::new((Mutex::new(false),
+                                                                   Condvar::new())));
                 unsafe {
                     mpv_set_wakeup_callback(ctx,
                                             event_callback,
@@ -1092,8 +1091,8 @@ impl<'parent> Parent {
             }
             let (ev_iter_notification, ev_to_observe, ev_to_observe_properties, ev_observed) =
                 if check_events {
-                    let ev_iter_notification = Box::into_raw(box (Mutex::new(false),
-                                                                  Condvar::new()));
+                    let ev_iter_notification = Box::into_raw(Box::new((Mutex::new(false),
+                                                                       Condvar::new())));
                     unsafe {
                         mpv_set_wakeup_callback(ctx,
                                                 event_callback,
@@ -1312,7 +1311,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
             for elem in events {
                 if let Event::PropertyChange(ref v) = *elem {
                     if properties.contains_key(&v.name) {
-                        return Err(Error::AlreadyObserved(box elem.clone()));
+                        return Err(Error::AlreadyObserved(Box::new(elem.clone())));
                     } else {
                         props.push(v);
                         ids.push(elem.as_id());
@@ -1321,7 +1320,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                 } else {
                     for id in &*observe {
                         if elem.as_id() == id.as_id() {
-                            return Err(Error::AlreadyObserved(box elem.clone()));
+                            return Err(Error::AlreadyObserved(Box::new(elem.clone())));
                         }
                     }
 
@@ -1441,7 +1440,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                             use std::os::unix::ffi::OsStrExt;
                             OsStr::from_bytes(ret.as_bytes()).to_string_lossy().into_owned()
                         }
-                        #[cfg(not(unix))] unreachable!()
+                        #[cfg(not(unix))]                        unreachable!()
                     } else {
                         String::from_utf8_lossy(ret.as_bytes()).into_owned()
                     };
@@ -1454,9 +1453,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                 }
             }
             _ => {
-                let ptr: *mut libc::c_void = unsafe {
-                    libc::malloc(format.size() as libc::size_t)
-                };
+                let ptr: *mut libc::c_void = unsafe { libc::malloc(format.size() as libc::size_t) };
 
                 let err = mpv_err((), unsafe {
                     mpv_get_property(self.ctx(),
@@ -1620,7 +1617,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                         })
                     };
                     if ret.is_err() {
-                        return Err(Error::Loadfiles((i, box ret.unwrap_err())));
+                        return Err(Error::Loadfiles((i, Box::new(ret.unwrap_err()))));
                     }
                 }
                 Ok(())
