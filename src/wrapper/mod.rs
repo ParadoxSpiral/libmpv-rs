@@ -19,7 +19,6 @@
 #![allow(unknown_lints)]
 
 use libc;
-use encoding;
 use parking_lot::{Condvar, Mutex};
 use enum_primitive::FromPrimitive;
 
@@ -803,17 +802,24 @@ pub enum SubOp<'a> {
 #[allow(missing_docs)]
 /// Equivalent to subset of `MpvFormat` used by the public API.
 pub enum Format {
-    String = 1,
-    OsdString = 2,
-    Flag = 3,
-    Int64 = 4,
-    Double = 5,
-    Node = 6,
+    String,
+    OsdString,
+    Flag,
+    Int64,
+    Double,
+    Node,
 }
 
 impl Format {
-    fn as_mpv_format(&self) -> &MpvFormat {
-        unsafe { mem::transmute::<&Format, &MpvFormat>(self) }
+    fn as_mpv_format(&self) -> MpvFormat {
+        match *self {
+            Format::String => MpvFormat::String,
+            Format::OsdString => MpvFormat::OsdString,
+            Format::Flag => MpvFormat::Flag,
+            Format::Int64 => MpvFormat::Int64,
+            Format::Double => MpvFormat::Double,
+            Format::Node => MpvFormat::Node,
+        }
     }
 
     fn size(&self) -> usize {
@@ -1011,7 +1017,8 @@ impl<'parent> Parent {
             try!(mpv_err((), mpv_request_event(ctx, MpvEventId::TrackSwitched, 0)));
             try!(mpv_err((), mpv_request_event(ctx, MpvEventId::Pause, 0)));
             try!(mpv_err((), mpv_request_event(ctx, MpvEventId::Unpause, 0)));
-            try!(mpv_err((), mpv_request_event(ctx, MpvEventId::ScriptInputDispatch, 0)));
+            try!(mpv_err((),
+                         mpv_request_event(ctx, MpvEventId::ScriptInputDispatch, 0)));
             try!(mpv_err((), mpv_request_event(ctx, MpvEventId::MetadataUpdate, 0)));
             try!(mpv_err((), mpv_request_event(ctx, MpvEventId::ChapterChange, 0)));
         }
@@ -1078,7 +1085,8 @@ impl<'parent> Parent {
                 try!(mpv_err((), mpv_request_event(ctx, MpvEventId::TrackSwitched, 0)));
                 try!(mpv_err((), mpv_request_event(ctx, MpvEventId::Pause, 0)));
                 try!(mpv_err((), mpv_request_event(ctx, MpvEventId::Unpause, 0)));
-                try!(mpv_err((), mpv_request_event(ctx, MpvEventId::ScriptInputDispatch, 0)));
+                try!(mpv_err((),
+                             mpv_request_event(ctx, MpvEventId::ScriptInputDispatch, 0)));
                 try!(mpv_err((), mpv_request_event(ctx, MpvEventId::MetadataUpdate, 0)));
                 try!(mpv_err((), mpv_request_event(ctx, MpvEventId::ChapterChange, 0)));
             }
@@ -1363,7 +1371,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     /// (https://mpv.io/manual/master/#list-of-input-commands).
     ///
     /// # Safety
-    /// This method is unsafe because the player may quit via the quit command, resulting in UB.
+    /// This method is unsafe because arbitrary code may be executed resulting in UB and more.
     unsafe fn command(&self, cmd: &Command) -> Result<(), Error> {
         // Will probably allocate a little too much, but that is fine to avoid reallocation
         let mut args = String::with_capacity(mem::size_of_val(cmd.args));
@@ -1407,65 +1415,47 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     /// Get the value of a property.
     fn get_property(&self, name: &str, format: &Format) -> Result<Data, Error> {
         let name = CString::new(name).unwrap();
-        let format = format;
-        Ok(match *format {
+        match *format {
             Format::String | Format::OsdString => {
-                let ptr = unsafe { libc::malloc(0) } as *mut libc::c_void;
+                let ptr = ptr::null_mut::<libc::c_char>();
 
                 let err = mpv_err((), unsafe {
                     mpv_get_property(self.ctx(),
                                      name.as_ptr(),
                                      format.as_mpv_format().as_val(),
-                                     ptr)
+                                     ptr as *mut libc::c_void)
                 });
 
-                let ret = unsafe { CString::from_raw(ptr as *mut libc::c_char) };
                 if err.is_err() {
-                    return Err(err.unwrap_err());
+                    Err(err.unwrap_err())
                 } else {
-                    let data = if cfg!(windows) {
-                        // Mpv claims that all strings returned on windows are UTF-8.
-                        ret.to_str().unwrap().to_owned()
-                    } else {
-                        let bytes = ret.as_bytes();
+                    let ret = unsafe { CString::from_raw(ptr) };
 
-                        println!("!!!!_DANGER_ZONE_!!!!");
-                        // It should be this
-                        println!("ref: {:?}", "トゥッティ！".as_bytes());
-                        // But we got this
-                        println!("got: {:?}", bytes);
-                        // Which is this in utf-8
-                        println!("ldc: {}", String::from_utf8_lossy(bytes).into_owned());
+                    let data = if cfg!(windows) {
+                        // Mpv returns all strings on windows in UTF-8.
+                        ret.to_str().unwrap().to_owned()
+                    } else if cfg!(unix) {
                         #[cfg(unix)]
                         {
                             use std::ffi::OsStr;
                             use std::os::unix::ffi::OsStrExt;
-                            println!("OsS: {:?}", OsStr::from_bytes(bytes));
+                            OsStr::from_bytes(ret.as_bytes()).to_string_lossy().into_owned()
                         }
-
-                        let tmp = encoding::decode(bytes,
-                                                   encoding::DecoderTrap::Strict,
-                                                   encoding::all::ASCII)
-                                      .0
-                                      .or_else(|_| {
-                                          Err(Error::UnsupportedEncoding(Vec::from(bytes)))
-                                      });
-
-                        // And this in the guessed encoding
-                        println!("gue: {:?}", tmp);
-                        tmp.unwrap()
+                        #[cfg(not(unix))] unreachable!()
+                    } else {
+                        String::from_utf8_lossy(ret.as_bytes()).into_owned()
                     };
 
-                    match *format {
+                    Ok(match *format {
                         Format::String => Data::String(data),
                         Format::OsdString => Data::OsdString(data),
                         _ => unreachable!(),
-                    }
+                    })
                 }
             }
             _ => {
-                let ptr = unsafe {
-                    libc::malloc(format.size() as libc::size_t) as *mut libc::c_void
+                let ptr: *mut libc::c_void = unsafe {
+                    libc::malloc(format.size() as libc::size_t)
                 };
 
                 let err = mpv_err((), unsafe {
@@ -1476,19 +1466,19 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                 });
 
                 if err.is_err() {
-                    return Err(err.unwrap_err());
+                    Err(err.unwrap_err())
                 } else {
-                    Data::from_raw(*format.as_mpv_format(), ptr)
+                    Ok(Data::from_raw(format.as_mpv_format(), ptr))
                 }
             }
-        })
+        }
     }
 
     // --- Convenience command functions ---
     //
 
 
-    /// Seek to a position as defined by `Seek`.
+    /// Seek as defined by `Seek`.
     fn seek(&self, seek: &Seek) -> Result<(), Error> {
         match *seek {
             Seek::RelativeForward(d) => unsafe {

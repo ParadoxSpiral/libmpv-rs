@@ -35,6 +35,13 @@ fn options_properties() {
     mpv.set_option(&mut Property::new("ytdl", Data::new(true))).unwrap();
     mpv.init().unwrap();
 
+    mpv.playlist(&PlaylistOp::Loadfiles(&[File::new(::std::path::Path::new("https://www.youtube.\
+                                                                   com/watch?v=DLzxrzFCyOs"),
+                                                        FileState::AppendPlay,
+                                                        None)]))
+           .unwrap();
+    ::std::thread::sleep(::std::time::Duration::from_secs(7));
+
     assert_eq!(Data::new(0),
                mpv.get_property("volume", &Format::Int64)
                   .unwrap());
@@ -44,4 +51,7 @@ fn options_properties() {
     assert_eq!(Data::new(4),
                mpv.get_property("volume", &Format::Int64)
                   .unwrap());
+
+    assert_eq!(Data::new("test".to_owned()),
+               mpv.get_property("media-title", &Format::String).unwrap());
 }

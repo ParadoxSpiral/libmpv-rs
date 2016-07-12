@@ -28,8 +28,5 @@ lazy_static = "0.2"
 parking_lot = "0.2"
 enum_primitive = "0.1"
 
-[dependencies.encoding]
-git = "https://github.com/lifthrasiir/rust-encoding.git"
-
 [features]
 static = [] # link mpv statically (does this even work?...)

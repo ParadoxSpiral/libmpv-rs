@@ -18,7 +18,7 @@
 
 #![deny(missing_docs)]
 #![allow(unknown_lints)]
-#![feature(box_syntax, inclusive_range_syntax, pub_restricted, const_fn, stmt_expr_attributes,
+#![feature(alloc_system, box_syntax, inclusive_range_syntax, pub_restricted, const_fn, stmt_expr_attributes,
 		   type_ascription)]
 
 //! This crate provides abstractions for libmpv of the mpv media player. It is guaranteed
@@ -28,7 +28,8 @@
 //!
 //! See the 'examples' directory in the crate root.
 
-extern crate encoding;
+extern crate alloc_system;
+
 extern crate libc;
 extern crate parking_lot;
 #[macro_use]
