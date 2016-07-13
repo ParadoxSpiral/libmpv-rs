@@ -488,7 +488,7 @@ impl PartialEq<Property> for Property {
 #[derive(Clone, Debug, PartialEq)]
 /// All possible error values returned by this crate.
 pub enum Error {
-    /// An internal mpv error.
+    /// An API call did not successfully execute.
     Mpv(MpvError),
     /// The core has already been initialized.
     /// This error is also handled by mpv, but results in a failed assertion.
@@ -501,8 +501,6 @@ pub enum Error {
     ExpectedAbsolute,
     /// If a file was expected, but a directory was given.
     ExpectedFile,
-    /// The parent was dropped before the clients
-    ParentDropped,
     /// If an argument (like a percentage > 100) was out of bounds.
     OutOfBounds,
     /// If a command failed during a `loadfiles` call, contains index of failed command and `Error`.
@@ -519,7 +517,7 @@ pub enum Error {
     UnsupportedEncoding(Vec<u8>),
     /// The library was compiled against a different mpv version than what is present on the system.
     VersionMismatch(u32),
-    /// Mpv returned null while creating the core.
+    /// Mpv returned null while creating the core, or if `get_property with` `Format::String` fails.
     Null,
 }
 
@@ -1416,6 +1414,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         let name = CString::new(name).unwrap();
         match *format {
             Format::String | Format::OsdString => {
+                /* FIXME: prefer this version because of error handling
                 let ptr = ptr::null_mut::<libc::c_char>();
 
                 let err = mpv_err((), unsafe {
@@ -1423,10 +1422,14 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                                      name.as_ptr(),
                                      format.as_mpv_format().as_val(),
                                      ptr as *mut libc::c_void)
-                });
+                });*/
 
-                if err.is_err() {
-                    Err(err.unwrap_err())
+                let ptr = unsafe{ mpv_get_property_string(self.ctx(), name.as_ptr())};
+
+                if ptr.is_null() {
+                    Err(Error::Null)
+                // if err.is_err() {
+                //    Err(err.unwrap_err())
                 } else {
                     let ret = unsafe { CString::from_raw(ptr) };
 
@@ -1440,10 +1443,13 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                             use std::os::unix::ffi::OsStrExt;
                             OsStr::from_bytes(ret.as_bytes()).to_string_lossy().into_owned()
                         }
-                        #[cfg(not(unix))]                        unreachable!()
+                        #[cfg(not(unix))]
+                        unreachable!()
                     } else {
                         String::from_utf8_lossy(ret.as_bytes()).into_owned()
                     };
+
+                    unsafe{mpv_free(ret.into_raw() as *mut _)}
 
                     Ok(match *format {
                         Format::String => Data::String(data),
@@ -1453,7 +1459,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                 }
             }
             _ => {
-                let ptr: *mut libc::c_void = unsafe { libc::malloc(format.size() as libc::size_t) };
+                let ptr: *mut libc::c_void = unsafe { libc::malloc(format.size()) };
 
                 let err = mpv_err((), unsafe {
                     mpv_get_property(self.ctx(),
