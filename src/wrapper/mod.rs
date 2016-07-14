@@ -83,6 +83,9 @@ impl InnerEvent {
     fn as_event(&self) -> &Event {
         &self.event
     }
+    fn as_id(&self) -> MpvEventId {
+        self.event.as_id()
+    }
 }
 
 /// An event returned by `EventIter`.
@@ -223,24 +226,10 @@ impl<'parent, P> Drop for EventIter<'parent, P>
         };
 
         // This removes all events for which compare_ev_unobserve returns true.
-        let mut new_to = Vec::with_capacity(all_to_observe.len());
-        let mut new_obd = Vec::with_capacity(all_observed.len());
         for outer_ev in &self.local_to_observe {
-            for elem in all_to_observe.iter()
-                                      .skip_while(|inner_ev| {
-                                          compare_ev_unobserve(outer_ev, *inner_ev)
-                                      }) {
-                new_to.push(elem.clone());
-            }
-            for elem in all_observed.iter()
-                                    .skip_while(|inner_ev| {
-                                        compare_ev_unobserve(outer_ev, (**inner_ev).as_event())
-                                    }) {
-                new_obd.push(elem.clone());
-            }
+            all_to_observe.retain(|inner_ev| !compare_ev_unobserve(outer_ev, inner_ev));
+            all_observed.retain(|inner_ev| !compare_ev_unobserve(outer_ev, (*inner_ev).as_event()));
         }
-        *all_to_observe = new_to;
-        *all_observed = new_obd;
     }
 }
 
@@ -294,30 +283,28 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
                 unsafe { (*self.notification).1.notify_all() };
             }
         } else {
-            // TODO: Simplify this
-            let mut index = Vec::with_capacity(observed.len());
-            for (i, event) in observed.iter().enumerate() {
-                for o_e_id in &self.local_to_observe {
-                    if event.event.as_id() == o_e_id.as_id() {
-                        if o_e_id.as_id() == MpvEventId::PropertyChange {
-                            if let Event::PropertyChange(ref v_ev) = event.event {
-                                if let Event::PropertyChange(ref v_ob) = *o_e_id {
-                                    if v_ev.name == v_ob.name {
-                                        index.push(i);
-                                        ret_events.push(event.as_result());
-                                    }
-                                }
-                            }
-                        } else {
-                            index.push(i);
-                            ret_events.push(event.as_result());
+            // Return true where outer_ev == inner_ev, and push inner_ev to ret_events
+            let mut compare_ev = |outer_ev: &Event, inner_ev: &InnerEvent| -> bool {
+                if let Event::PropertyChange(ref outer_prop) = *outer_ev {
+                    if let Event::PropertyChange(ref inner_prop) = *inner_ev.as_event() {
+                        if outer_prop.name == inner_prop.name {
+                            ret_events.push(inner_ev.as_result());
+                            return true;
                         }
                     }
+                    ret_events.push(inner_ev.as_result());
+                    return true;
+                } else if outer_ev.as_id() == inner_ev.as_id() {
+                    ret_events.push(inner_ev.as_result());
+                    return true;
                 }
+                false
+            };
+            // Remove events belonging to this EventIter from observed
+            for outer_ev in &self.local_to_observe {
+                observed.retain(|inner_ev| !compare_ev(outer_ev, inner_ev));
             }
-            for (n, i) in index.iter().enumerate() {
-                observed.remove(i - n);
-            }
+
             if !observed.is_empty() {
                 mem::drop(observed);
                 unsafe { (*self.notification).1.notify_all() };
