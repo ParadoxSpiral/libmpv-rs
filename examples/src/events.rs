@@ -28,6 +28,8 @@ use std::thread;
 pub fn exec() {
     let mpv = Parent::new(true).unwrap();
     mpv.set_option(&mut Property::new("cache-initial", Data::new(1))).unwrap();
+    mpv.set_option(&mut Property::new("ao-volume", Data::new(100))).unwrap();
+    mpv.set_option(&mut Property::new("ao-mute", Data::new(false))).unwrap();
     mpv.set_option(&mut Property::new("volume", Data::new(10))).unwrap();
     mpv.set_option(&mut Property::new("no-video", Data::new(true))).unwrap();
     mpv.set_option(&mut Property::new("ytdl", Data::new(true))).unwrap();
@@ -58,7 +60,7 @@ pub fn exec() {
                             println!("File ended! Reason: {:?}", v);
                             process::exit(0);
                         } else {
-                            println!("playback_events: {:#?}", vec);
+                            println!("playback_events: {:?}", vec);
                         };
                     }
                 }
@@ -75,7 +77,7 @@ pub fn exec() {
                 match elem {
                     Err(Error::NoAssociatedEvent) => {}
                     Err(v) => panic!("unexpected error: {:?}", v),
-                    Ok(vec) => println!("prop_events: {:#?}", vec),
+                    Ok(vec) => println!("prop_events: {:?}", vec),
                 }
             }
         });

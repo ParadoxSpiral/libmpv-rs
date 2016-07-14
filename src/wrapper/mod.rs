@@ -125,7 +125,7 @@ impl Event {
 
 impl MpvEvent {
     fn as_event(&self) -> Result<Event, Error> {
-        try!(mpv_err((), self.error));
+        mpv_err((), self.error)?;
         Ok(match self.event_id {
             MpvEventId::LogMessage => Event::LogMessage(LogMessage::from_raw(self.data)),
             MpvEventId::StartFile => Event::StartFile,
@@ -456,8 +456,7 @@ impl Property {
 
     #[inline]
     /// Create a `Property` that is suitable for observing.
-    /// Data is used to infer the format of the property, and the value is never used if supplied to
-    /// a function of this crate.
+    /// Data is used to infer the format of the property, the value is never used in this case.
     pub fn new(name: &str, data: Data) -> Property {
         Property {
             name: name.into(),
@@ -996,14 +995,13 @@ impl<'parent> Parent {
 
         unsafe {
             // Disable deprecated events.
-            try!(mpv_err((), mpv_request_event(ctx, MpvEventId::TracksChanged, 0)));
-            try!(mpv_err((), mpv_request_event(ctx, MpvEventId::TrackSwitched, 0)));
-            try!(mpv_err((), mpv_request_event(ctx, MpvEventId::Pause, 0)));
-            try!(mpv_err((), mpv_request_event(ctx, MpvEventId::Unpause, 0)));
-            try!(mpv_err((),
-                         mpv_request_event(ctx, MpvEventId::ScriptInputDispatch, 0)));
-            try!(mpv_err((), mpv_request_event(ctx, MpvEventId::MetadataUpdate, 0)));
-            try!(mpv_err((), mpv_request_event(ctx, MpvEventId::ChapterChange, 0)));
+            mpv_err((), mpv_request_event(ctx, MpvEventId::TracksChanged, 0))?;
+            mpv_err((), mpv_request_event(ctx, MpvEventId::TrackSwitched, 0))?;
+            mpv_err((), mpv_request_event(ctx, MpvEventId::Pause, 0))?;
+            mpv_err((), mpv_request_event(ctx, MpvEventId::Unpause, 0))?;
+            mpv_err((), mpv_request_event(ctx, MpvEventId::ScriptInputDispatch, 0))?;
+            mpv_err((), mpv_request_event(ctx, MpvEventId::MetadataUpdate, 0))?;
+            mpv_err((), mpv_request_event(ctx, MpvEventId::ChapterChange, 0))?;
         }
 
         let (ev_iter_notification, ev_to_observe, ev_to_observe_properties, ev_observed) =
@@ -1023,21 +1021,21 @@ impl<'parent> Parent {
             } else {
                 unsafe {
                     // Disable remaining events
-                    try!(mpv_err((), mpv_request_event(ctx, MpvEventId::LogMessage, 0)));
-                    try!(mpv_err((), mpv_request_event(ctx, MpvEventId::GetPropertyReply, 0)));
-                    try!(mpv_err((), mpv_request_event(ctx, MpvEventId::SetPropertyReply, 0)));
-                    try!(mpv_err((), mpv_request_event(ctx, MpvEventId::CommandReply, 0)));
-                    try!(mpv_err((), mpv_request_event(ctx, MpvEventId::StartFile, 0)));
-                    try!(mpv_err((), mpv_request_event(ctx, MpvEventId::EndFile, 0)));
-                    try!(mpv_err((), mpv_request_event(ctx, MpvEventId::FileLoaded, 0)));
-                    try!(mpv_err((), mpv_request_event(ctx, MpvEventId::Idle, 0)));
-                    try!(mpv_err((), mpv_request_event(ctx, MpvEventId::ClientMessage, 0)));
-                    try!(mpv_err((), mpv_request_event(ctx, MpvEventId::VideoReconfig, 0)));
-                    try!(mpv_err((), mpv_request_event(ctx, MpvEventId::AudioReconfig, 0)));
-                    try!(mpv_err((), mpv_request_event(ctx, MpvEventId::Seek, 0)));
-                    try!(mpv_err((), mpv_request_event(ctx, MpvEventId::PlaybackRestart, 0)));
-                    try!(mpv_err((), mpv_request_event(ctx, MpvEventId::PropertyChange, 0)));
-                    try!(mpv_err((), mpv_request_event(ctx, MpvEventId::QueueOverflow, 0)));
+                    mpv_err((), mpv_request_event(ctx, MpvEventId::LogMessage, 0))?;
+                    mpv_err((), mpv_request_event(ctx, MpvEventId::GetPropertyReply, 0))?;
+                    mpv_err((), mpv_request_event(ctx, MpvEventId::SetPropertyReply, 0))?;
+                    mpv_err((), mpv_request_event(ctx, MpvEventId::CommandReply, 0))?;
+                    mpv_err((), mpv_request_event(ctx, MpvEventId::StartFile, 0))?;
+                    mpv_err((), mpv_request_event(ctx, MpvEventId::EndFile, 0))?;
+                    mpv_err((), mpv_request_event(ctx, MpvEventId::FileLoaded, 0))?;
+                    mpv_err((), mpv_request_event(ctx, MpvEventId::Idle, 0))?;
+                    mpv_err((), mpv_request_event(ctx, MpvEventId::ClientMessage, 0))?;
+                    mpv_err((), mpv_request_event(ctx, MpvEventId::VideoReconfig, 0))?;
+                    mpv_err((), mpv_request_event(ctx, MpvEventId::AudioReconfig, 0))?;
+                    mpv_err((), mpv_request_event(ctx, MpvEventId::Seek, 0))?;
+                    mpv_err((), mpv_request_event(ctx, MpvEventId::PlaybackRestart, 0))?;
+                    mpv_err((), mpv_request_event(ctx, MpvEventId::PropertyChange, 0))?;
+                    mpv_err((), mpv_request_event(ctx, MpvEventId::QueueOverflow, 0))?;
                 }
 
                 (None, None, None, None)
@@ -1065,14 +1063,13 @@ impl<'parent> Parent {
             };
             unsafe {
                 // Disable deprecated events.
-                try!(mpv_err((), mpv_request_event(ctx, MpvEventId::TracksChanged, 0)));
-                try!(mpv_err((), mpv_request_event(ctx, MpvEventId::TrackSwitched, 0)));
-                try!(mpv_err((), mpv_request_event(ctx, MpvEventId::Pause, 0)));
-                try!(mpv_err((), mpv_request_event(ctx, MpvEventId::Unpause, 0)));
-                try!(mpv_err((),
-                             mpv_request_event(ctx, MpvEventId::ScriptInputDispatch, 0)));
-                try!(mpv_err((), mpv_request_event(ctx, MpvEventId::MetadataUpdate, 0)));
-                try!(mpv_err((), mpv_request_event(ctx, MpvEventId::ChapterChange, 0)));
+                mpv_err((), mpv_request_event(ctx, MpvEventId::TracksChanged, 0))?;
+                mpv_err((), mpv_request_event(ctx, MpvEventId::TrackSwitched, 0))?;
+                mpv_err((), mpv_request_event(ctx, MpvEventId::Pause, 0))?;
+                mpv_err((), mpv_request_event(ctx, MpvEventId::Unpause, 0))?;
+                mpv_err((), mpv_request_event(ctx, MpvEventId::ScriptInputDispatch, 0))?;
+                mpv_err((), mpv_request_event(ctx, MpvEventId::MetadataUpdate, 0))?;
+                mpv_err((), mpv_request_event(ctx, MpvEventId::ChapterChange, 0))?;
             }
             let (ev_iter_notification, ev_to_observe, ev_to_observe_properties, ev_observed) =
                 if check_events {
@@ -1091,21 +1088,21 @@ impl<'parent> Parent {
                 } else {
                     unsafe {
                         // Disable remaining events
-                        try!(mpv_err((), mpv_request_event(ctx, MpvEventId::LogMessage, 0)));
-                        try!(mpv_err((), mpv_request_event(ctx, MpvEventId::GetPropertyReply, 0)));
-                        try!(mpv_err((), mpv_request_event(ctx, MpvEventId::SetPropertyReply, 0)));
-                        try!(mpv_err((), mpv_request_event(ctx, MpvEventId::CommandReply, 0)));
-                        try!(mpv_err((), mpv_request_event(ctx, MpvEventId::StartFile, 0)));
-                        try!(mpv_err((), mpv_request_event(ctx, MpvEventId::EndFile, 0)));
-                        try!(mpv_err((), mpv_request_event(ctx, MpvEventId::FileLoaded, 0)));
-                        try!(mpv_err((), mpv_request_event(ctx, MpvEventId::Idle, 0)));
-                        try!(mpv_err((), mpv_request_event(ctx, MpvEventId::ClientMessage, 0)));
-                        try!(mpv_err((), mpv_request_event(ctx, MpvEventId::VideoReconfig, 0)));
-                        try!(mpv_err((), mpv_request_event(ctx, MpvEventId::AudioReconfig, 0)));
-                        try!(mpv_err((), mpv_request_event(ctx, MpvEventId::Seek, 0)));
-                        try!(mpv_err((), mpv_request_event(ctx, MpvEventId::PlaybackRestart, 0)));
-                        try!(mpv_err((), mpv_request_event(ctx, MpvEventId::PropertyChange, 0)));
-                        try!(mpv_err((), mpv_request_event(ctx, MpvEventId::QueueOverflow, 0)));
+                        mpv_err((), mpv_request_event(ctx, MpvEventId::LogMessage, 0))?;
+                        mpv_err((), mpv_request_event(ctx, MpvEventId::GetPropertyReply, 0))?;
+                        mpv_err((), mpv_request_event(ctx, MpvEventId::SetPropertyReply, 0))?;
+                        mpv_err((), mpv_request_event(ctx, MpvEventId::CommandReply, 0))?;
+                        mpv_err((), mpv_request_event(ctx, MpvEventId::StartFile, 0))?;
+                        mpv_err((), mpv_request_event(ctx, MpvEventId::EndFile, 0))?;
+                        mpv_err((), mpv_request_event(ctx, MpvEventId::FileLoaded, 0))?;
+                        mpv_err((), mpv_request_event(ctx, MpvEventId::Idle, 0))?;
+                        mpv_err((), mpv_request_event(ctx, MpvEventId::ClientMessage, 0))?;
+                        mpv_err((), mpv_request_event(ctx, MpvEventId::VideoReconfig, 0))?;
+                        mpv_err((), mpv_request_event(ctx, MpvEventId::AudioReconfig, 0))?;
+                        mpv_err((), mpv_request_event(ctx, MpvEventId::Seek, 0))?;
+                        mpv_err((), mpv_request_event(ctx, MpvEventId::PlaybackRestart, 0))?;
+                        mpv_err((), mpv_request_event(ctx, MpvEventId::PropertyChange, 0))?;
+                        mpv_err((), mpv_request_event(ctx, MpvEventId::QueueOverflow, 0))?;
                     }
 
                     (None, None, None, None)
@@ -1311,9 +1308,9 @@ impl<'parent, P> MpvInstance<'parent, P> for P
 
                     if let Event::LogMessage(ref v) = *elem {
                         let min_level = CString::new(v.log_level.as_string()).unwrap();
-                        try!(mpv_err((), unsafe {
+                        mpv_err((), unsafe {
                             mpv_request_log_messages(self.ctx(), min_level.as_ptr())
-                        }));
+                        })?;
                     }
 
                     ids.push(elem.as_id());
@@ -1326,11 +1323,10 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                 let id = properties.len();
                 unsafe {
                     let name = CString::new(elem.name.clone()).unwrap();
-                    try!(mpv_err((),
-                                 mpv_observe_property(self.ctx(),
+                    mpv_err((), mpv_observe_property(self.ctx(),
                                                       id as libc::uint64_t,
                                                       name.as_ptr(),
-                                                      elem.data.format() as libc::c_int)))
+                                                      elem.data.format() as libc::c_int))?
                 }
                 properties.insert(elem.name.clone(), id as libc::uint64_t);
             }

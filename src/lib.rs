@@ -18,7 +18,7 @@
 
 #![deny(missing_docs)]
 #![allow(unknown_lints)]
-#![feature(pub_restricted, const_fn, stmt_expr_attributes)]
+#![feature(pub_restricted, const_fn, stmt_expr_attributes, question_mark)]
 
 //! This crate provides abstractions for libmpv of the mpv media player. It is guaranteed
 //! that no `Client` or `EventIter` is used after their parent exited.

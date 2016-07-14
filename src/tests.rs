@@ -40,7 +40,7 @@ fn options_properties() {
                                                         FileState::AppendPlay,
                                                         None)]))
            .unwrap();
-    ::std::thread::sleep(::std::time::Duration::from_secs(7));
+    ::std::thread::sleep(::std::time::Duration::from_secs(5));
 
     assert_eq!(Data::new(0),
                mpv.get_property("volume", &Format::Int64)
