@@ -1497,9 +1497,6 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                     Err(Error::OutOfBounds)
                 } else {
                     unsafe {
-                        println!("{:?}",
-                                 Command::new("seek",
-                                              &[format!("{}", p), "relative-percent".into()]));
                         self.command(&Command::new("seek",
                                                    &[format!("{}", p), "relative-percent".into()]))
                     }
