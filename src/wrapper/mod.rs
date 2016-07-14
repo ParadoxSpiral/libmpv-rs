@@ -61,6 +61,7 @@ pub(crate) fn mpv_err<T>(ret: T, err_val: libc::c_int) -> Result<T, Error> {
 }
 
 unsafe extern "C" fn event_callback(d: *mut libc::c_void) {
+    debug_assert!(!d.is_null());
     (*(d as *mut (Mutex<bool>, Condvar))).1.notify_one();
 }
 
@@ -173,7 +174,7 @@ impl MpvEvent {
     }
 }
 
-/// A blocking iter over some observed events of an mpv instance.
+/// A blocking `Iterator` over some observed events of an mpv instance.
 /// `next` will never return `None`, instead it will return `Error::NoAssociatedEvent`. This is done
 /// so that the iterator is endless. Once the `EventIter` is dropped, it's `Event`s are removed from
 /// the "to be observed" queue, therefore new `Event` invocations won't be observed.
@@ -342,6 +343,7 @@ impl LogMessage {
     }
 
     fn from_raw(raw: *mut libc::c_void) -> LogMessage {
+        debug_assert!(!raw.is_null());
         let raw = unsafe { &mut *(raw as *mut MpvEventLogMessage) };
         LogMessage {
             prefix: unsafe { CStr::from_ptr(raw.prefix).to_str().unwrap().into() },
@@ -383,6 +385,7 @@ impl MpvLogLevel {
 
 impl MpvEventEndFile {
     fn from_raw(raw: *mut libc::c_void) -> MpvEventEndFile {
+        debug_assert!(!raw.is_null());
         let raw = unsafe { &mut *(raw as *mut MpvEventEndFile) };
         MpvEventEndFile {
             reason: raw.reason,
@@ -447,6 +450,7 @@ pub struct Property {
 
 impl Property {
     fn from_raw(raw: *mut libc::c_void) -> Property {
+        debug_assert!(!raw.is_null());
         let raw = unsafe { &mut *(raw as *mut MpvEventProperty) };
         Property {
             name: unsafe { CStr::from_ptr(raw.name).to_str().unwrap().into() },
@@ -540,6 +544,7 @@ impl Data {
     }
 
     fn from_raw(fmt: MpvFormat, ptr: *mut libc::c_void) -> Data {
+        debug_assert!(!ptr.is_null());
         match fmt {
             MpvFormat::Flag => Data::Flag(unsafe { *(ptr as *mut libc::int64_t) } != 0),
             MpvFormat::Int64 => Data::Int64(unsafe { *(ptr as *mut libc::int64_t) }),
@@ -1377,6 +1382,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                 let ret = mpv_err((), unsafe {
                     mpv_set_property(self.ctx(), name, format, data as *mut libc::c_void)
                 });
+                debug_assert!(!ret.is_null());
                 unsafe {
                     CString::from_raw(data);
                 };
@@ -1407,7 +1413,9 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                                      name.as_ptr(),
                                      format.as_mpv_format().as_val(),
                                      ptr as *mut libc::c_void)
-                });*/
+                });
+                debug_assert!(!ptr.is_null());
+                */
 
                 let ptr = unsafe{ mpv_get_property_string(self.ctx(), name.as_ptr())};
 

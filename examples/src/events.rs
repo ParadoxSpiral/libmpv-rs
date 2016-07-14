@@ -28,8 +28,8 @@ use std::thread;
 pub fn exec() {
     let mpv = Parent::new(true).unwrap();
     mpv.set_option(&mut Property::new("cache-initial", Data::new(1))).unwrap();
-    mpv.set_option(&mut Property::new("ao-volume", Data::new(100))).unwrap();
-    mpv.set_option(&mut Property::new("ao-mute", Data::new(false))).unwrap();
+    //mpv.set_option(&mut Property::new("ao-volume", Data::new(100))).unwrap();
+    //mpv.set_option(&mut Property::new("ao-mute", Data::new(false))).unwrap();
     mpv.set_option(&mut Property::new("volume", Data::new(10))).unwrap();
     mpv.set_option(&mut Property::new("no-video", Data::new(true))).unwrap();
     mpv.set_option(&mut Property::new("ytdl", Data::new(true))).unwrap();
