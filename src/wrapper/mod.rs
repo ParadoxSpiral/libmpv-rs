@@ -1247,10 +1247,12 @@ pub trait MpvInstance<'parent, P>
     fn playlist(&self, op: &PlaylistOp) -> Result<(), Error>;
     /// Operate on the subtitles in a way defined by `SubOp`.
     fn subtitle(&self, op: &SubOp) -> Result<(), Error>;
+    /// Add -or subtract- any value from a property. Over/underflow clamps to max/min.
+    fn add_property(&self, property: &str, value: isize) -> Result<(), Error>;
     /// Cycle a given named property, either up or down.
-    fn cycle(&self, property: &str, up: &bool) -> Result<(), Error>;
+    fn cycle_property(&self, property: &str, up: &bool) -> Result<(), Error>;
     /// Multiply a given named property by an unsigned factor.
-    fn multiply(&self, property: &str, factor: &usize) -> Result<(), Error>;
+    fn multiply_property(&self, property: &str, factor: &usize) -> Result<(), Error>;
     /// Pause playblack.
     fn pause(&self) -> Result<(), Error>;
     /// Unpause playblack.
