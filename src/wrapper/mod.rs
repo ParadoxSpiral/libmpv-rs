@@ -199,7 +199,7 @@ impl<'parent, P> Drop for EventIter<'parent, P>
         let mut all_to_observe_properties = self.all_to_observe_properties.lock();
 
         // Returns true if outer and inner event match, in the case of the event
-        // being a property, unobserve it.
+        // being a property unobserve it.
         let mut compare_ev_unobserve = |outer_ev: &Event, inner_ev: &Event| -> bool {
             if let Event::PropertyChange(ref outer_prop) = *outer_ev {
                 if let Event::PropertyChange(ref inner_prop) = *inner_ev {
@@ -1688,9 +1688,16 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         }
     }
 
+    /// Add -or subtract- any value from a property. Over/underflow clamps to max/min.
+    fn add_property(&self, property: &str, value: isize) -> Result<(), Error> {
+        unsafe {
+            self.command(&Command::new("add", &[property.into(), format!("{}", value)]))
+        }
+    }
+
     /// Cycle through a given property. `up` specifies direction. On
     /// overflow, set the property back to the minimum, on underflow set it to the maximum.
-    fn cycle(&self, property: &str, up: &bool) -> Result<(), Error> {
+    fn cycle_property(&self, property: &str, up: &bool) -> Result<(), Error> {
         unsafe {
             self.command(&Command::new("cycle",
                                        &[property.into(),
@@ -1704,7 +1711,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     }
 
     /// Multiply any property with any positive factor.
-    fn multiply(&self, property: &str, factor: &usize) -> Result<(), Error> {
+    fn multiply_property(&self, property: &str, factor: &usize) -> Result<(), Error> {
         unsafe {
             self.command(&Command::new("multiply", &[property.into(), format!("{}", factor)]))
         }
