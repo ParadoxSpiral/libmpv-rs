@@ -1382,7 +1382,6 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                 let ret = mpv_err((), unsafe {
                     mpv_set_property(self.ctx(), name, format, data as *mut libc::c_void)
                 });
-                debug_assert!(!ret.is_null());
                 unsafe {
                     CString::from_raw(data);
                 };
@@ -1405,7 +1404,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         let name = CString::new(name).unwrap();
         match *format {
             Format::String | Format::OsdString => {
-                /* FIXME: prefer this version because of error handling
+                /*FIXME: prefer this version because of error handling
                 let ptr = ptr::null_mut::<libc::c_char>();
 
                 let err = mpv_err((), unsafe {
@@ -1414,8 +1413,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                                      format.as_mpv_format().as_val(),
                                      ptr as *mut libc::c_void)
                 });
-                debug_assert!(!ptr.is_null());
-                */
+                debug_assert!(!ptr.is_null());*/
 
                 let ptr = unsafe{ mpv_get_property_string(self.ctx(), name.as_ptr())};
 
