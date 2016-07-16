@@ -52,20 +52,12 @@ macro_rules! data_ptr {
     )
 }
 
-pub(crate) fn mpv_err<T>(ret: T, err_val: libc::c_int) -> Result<T, Error> {
-    if err_val == 0 {
-        Ok(ret)
-    } else {
-        Err(Error::Mpv(MpvError::from_i32(err_val).unwrap()))
-    }
-}
-
 macro_rules! destroy_on_err {
-    ($ctx:stmt, $exec:expr) => (
+    ($ctx:expr, $exec:expr) => (
         {
             let err = mpv_err((), $exec);
             if err.is_err() {
-                mpv_terminate_destroy({$ctx});
+                mpv_terminate_destroy($ctx);
                 return Err(err.unwrap_err());
             }
         }
@@ -73,15 +65,23 @@ macro_rules! destroy_on_err {
 }
 
 macro_rules! detach_on_err {
-    ($ctx:stmt, $exec:expr) => (
+    ($ctx:expr, $exec:expr) => (
         {
             let err = mpv_err((), $exec);
             if err.is_err() {
-                mpv_detach_destroy({$ctx});
+                mpv_detach_destroy($ctx);
                 return Err(err.unwrap_err());
             }
         }
     )
+}
+
+pub(crate) fn mpv_err<T>(ret: T, err_val: libc::c_int) -> Result<T, Error> {
+    if err_val == 0 {
+        Ok(ret)
+    } else {
+        Err(Error::Mpv(MpvError::from_i32(err_val).unwrap()))
+    }
 }
 
 unsafe extern "C" fn event_callback(d: *mut libc::c_void) {
@@ -241,9 +241,12 @@ impl<'parent, P> Drop for EventIter<'parent, P>
                     mpv_err((),
                             unsafe { mpv_request_log_messages(self.ctx, min_level.as_ptr()) })
                         .unwrap();
+                        return true;
                 }
+                unsafe{mpv_request_event(self.ctx, inner_ev.as_id(), 0)};
                 return true;
             } else if outer_ev.as_id() == inner_ev.as_id() {
+                unsafe{mpv_request_event(self.ctx, inner_ev.as_id(), 0)};
                 return true;
             }
             false
@@ -1319,10 +1322,6 @@ impl<'parent> Client<'parent> {
 pub trait MpvInstance<'parent, P>
     where P: MpvMarker + 'parent
 {
-    /// Enable a given `Event`.
-    fn enable_event(&self, e: &Event) -> Result<(), Error>;
-    /// Disable a given `Event`.
-    fn disable_event(&self, e: &Event) -> Result<(), Error>;
     /// Observe all `Event`s by means of an `EventIter`.
     fn observe_all(&self, events: &[Event]) -> Result<EventIter<P>, Error>;
     /// Execute any mpv command. See implementation for information about safety.
@@ -1354,25 +1353,6 @@ pub trait MpvInstance<'parent, P>
 impl<'parent, P> MpvInstance<'parent, P> for P
     where P: MpvMarker + 'parent
 {
-    /// Enable a given `Event`. Note that any event of `Event` is enabled by default,
-    /// except for `Event::Tick`.
-    fn enable_event(&self, e: &Event) -> Result<(), Error> {
-        if self.check_events() {
-            mpv_err((), unsafe { mpv_request_event(self.ctx(), e.as_id(), 1) })
-        } else {
-            Err(Error::EventsDisabled)
-        }
-    }
-
-    /// Disable a given `Event`.
-    fn disable_event(&self, e: &Event) -> Result<(), Error> {
-        if self.check_events() {
-            mpv_err((), unsafe { mpv_request_event(self.ctx(), e.as_id(), 0) })
-        } else {
-            Err(Error::EventsDisabled)
-        }
-    }
-
     /// Observe given `Event`s.
     /// Returns an `EventIter`, on which `next` can be called that blocks while waiting for new
     /// `Event`s.
@@ -1389,6 +1369,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                     if properties.contains_key(&v.name) {
                         return Err(Error::AlreadyObserved(Box::new(elem.clone())));
                     } else {
+                        try!(mpv_err((), unsafe { mpv_request_event(self.ctx(), elem.as_id(), 1) }));
                         props.push(v);
                         ids.push(elem.as_id());
                         evs.push(elem.clone());
@@ -1407,24 +1388,29 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                         }));
                     }
 
+                    try!(mpv_err((), unsafe { mpv_request_event(self.ctx(), elem.as_id(), 1) }));
                     ids.push(elem.as_id());
                     evs.push(elem.clone());
                 }
             }
-            observe.extend(evs.clone());
 
+            let mut props_ins = Vec::with_capacity(events.len());
+            let start_id = properties.len();
+            let mut count = 0;
             for elem in props {
-                let id = properties.len();
                 unsafe {
                     let name = CString::new(elem.name.clone()).unwrap();
                     try!(mpv_err((),
                                  mpv_observe_property(self.ctx(),
-                                                      id as libc::uint64_t,
+                                                      (start_id + count) as libc::uint64_t,
                                                       name.as_ptr(),
                                                       elem.data.format() as libc::c_int)))
                 }
-                properties.insert(elem.name.clone(), id as libc::uint64_t);
+                props_ins.push((elem.name.clone(), (start_id + count) as libc::uint64_t));
+                count += 1;
             }
+            observe.extend(evs.clone());
+            properties.extend(props_ins);
 
             Ok(EventIter {
                 ctx: self.ctx(),
