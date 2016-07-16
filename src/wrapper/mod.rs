@@ -1400,15 +1400,17 @@ impl<'parent, P> MpvInstance<'parent, P> for P
             for elem in props {
                 unsafe {
                     let name = CString::new(elem.name.clone()).unwrap();
-                    try!(mpv_err((),
+                    // FIXME: don't fail unrecoverably, requires to unobserve pre-failure observed
+                    mpv_err((),
                                  mpv_observe_property(self.ctx(),
                                                       (start_id + count) as libc::uint64_t,
                                                       name.as_ptr(),
-                                                      elem.data.format() as libc::c_int)))
+                                                      elem.data.format() as libc::c_int)).unwrap()
                 }
                 props_ins.push((elem.name.clone(), (start_id + count) as libc::uint64_t));
                 count += 1;
             }
+            // Only push w/ side effects if no errors occurred
             observe.extend(evs.clone());
             properties.extend(props_ins);
 
