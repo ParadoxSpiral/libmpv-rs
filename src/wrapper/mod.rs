@@ -1408,7 +1408,6 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                 }
                 props_ins.push((elem.name.clone(), (start_id + i) as libc::uint64_t));
             }
-            // Only push w/ side effects if no errors occurred
             observe.extend(evs.clone());
             properties.extend(props_ins);
 

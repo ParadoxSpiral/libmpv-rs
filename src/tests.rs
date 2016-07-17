@@ -28,12 +28,12 @@ fn version() {
 fn options_properties() {
     // TODO: Cover all `Data` variants.
 
-    let mpv = Parent::new(false).unwrap();
+    let mpv = UninitializedParent::new(false).unwrap();
     mpv.set_option(&mut Property::new("cache-initial", Data::new(1))).unwrap();
     mpv.set_option(&mut Property::new("volume", Data::new(0))).unwrap();
     mpv.set_option(&mut Property::new("no-video", Data::new(true))).unwrap();
     mpv.set_option(&mut Property::new("ytdl", Data::new(true))).unwrap();
-    mpv.init().unwrap();
+    let mpv = mpv.init().unwrap();
 
     mpv.playlist(&PlaylistOp::Loadfiles(&[File::new(::std::path::Path::new("https://www.youtube.\
                                                                    com/watch?v=DLzxrzFCyOs"),
