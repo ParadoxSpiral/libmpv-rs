@@ -1396,19 +1396,17 @@ impl<'parent, P> MpvInstance<'parent, P> for P
 
             let mut props_ins = Vec::with_capacity(events.len());
             let start_id = properties.len();
-            let mut count = 0;
-            for elem in props {
+            for (i, elem) in props.iter().enumerate() {
                 unsafe {
                     let name = CString::new(elem.name.clone()).unwrap();
                     // FIXME: don't fail unrecoverably, requires to unobserve pre-failure observed
                     mpv_err((),
                                  mpv_observe_property(self.ctx(),
-                                                      (start_id + count) as libc::uint64_t,
+                                                      (start_id + i) as libc::uint64_t,
                                                       name.as_ptr(),
                                                       elem.data.format() as libc::c_int)).unwrap()
                 }
-                props_ins.push((elem.name.clone(), (start_id + count) as libc::uint64_t));
-                count += 1;
+                props_ins.push((elem.name.clone(), (start_id + i) as libc::uint64_t));
             }
             // Only push w/ side effects if no errors occurred
             observe.extend(evs.clone());
