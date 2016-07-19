@@ -16,6 +16,8 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
+// FIXME: Clean this up, possibly split up into main(this), events, utils
+
 use libc;
 use parking_lot::{Condvar, Mutex};
 use enum_primitive::FromPrimitive;
@@ -23,7 +25,6 @@ use enum_primitive::FromPrimitive;
 use super::raw::*;
 use super::raw::prototype::*;
 
-use std::boxed::Box;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::mem;
@@ -741,7 +742,7 @@ pub enum Screenshot<'a> {
     WindowFile(&'a Path),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 /// Operations on the playlist supported by `playlist`.
 pub enum PlaylistOp<'a> {
     /// Play the next item of the current playlist.
@@ -1434,7 +1435,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     /// This method is unsafe because arbitrary code may be executed resulting in UB and more.
     unsafe fn command(&self, cmd: &Command) -> Result<(), Error> {
         // Will probably allocate a little too much, but that is fine to avoid reallocation
-        let mut args = String::with_capacity(mem::size_of_val(cmd.args));
+        let mut args = String::with_capacity(cmd.args.iter().fold(0, |acc, ref e| acc + e.len() ));
         for elem in cmd.args {
             args.push_str(&format!(" {}", elem));
         }
