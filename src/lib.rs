@@ -39,6 +39,8 @@ pub mod raw;
 pub use raw::MpvLogLevel as LogLevel;
 mod wrapper;
 pub use wrapper::*;
+pub use wrapper::events::*;
+pub use wrapper::utils::*;
 #[cfg(test)]
 mod tests;
 

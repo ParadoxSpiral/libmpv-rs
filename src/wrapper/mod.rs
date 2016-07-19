@@ -16,42 +16,32 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-// FIXME: Clean this up, possibly split up into main(this), events, utils
+// FIXME: Clean the abstraction up: mod.rs, events.rs, utils.rs
+
+/// Contains event related things
+pub mod events;
+/// Contains miscellaneous things
+#[macro_use]
+pub mod utils;
 
 use libc;
 use parking_lot::{Condvar, Mutex};
-use enum_primitive::FromPrimitive;
 
 use super::raw::*;
 use super::raw::prototype::*;
+use events::*;
+use events::event_callback;
+use utils::*;
+use utils::mpv_err;
 
 use std::collections::HashMap;
 use std::marker::PhantomData;
-use std::mem;
 use std::path::Path;
 use std::ptr;
 use std::ffi::{CStr, CString};
 use std::ops::Drop;
 use std::time::Duration;
 use std::sync::atomic::{AtomicUsize, Ordering};
-
-// Cast `Data` so that libmpv can use it.
-macro_rules! data_ptr {
-    ($data:ident) => (
-        #[allow(match_ref_pats)]
-        match $data {
-            &mut Data::Flag(ref mut v) =>
-                v as *mut bool as *mut libc::c_void,
-            &mut Data::Int64(ref mut v) =>
-                v as *mut libc::int64_t as *mut libc::c_void,
-            &mut Data::Double(ref mut v) =>
-                v as *mut libc::c_double as *mut libc::c_void,
-            &mut Data::Node(ref mut v) =>
-                v as *mut MpvNode as *mut libc::c_void,
-            _ => unreachable!(),
-        }
-    )
-}
 
 macro_rules! destroy_on_err {
     ($ctx:expr, $exec:expr) => (
@@ -75,431 +65,6 @@ macro_rules! detach_on_err {
             }
         }
     )
-}
-
-pub(crate) fn mpv_err<T>(ret: T, err_val: libc::c_int) -> Result<T, Error> {
-    if err_val == 0 {
-        Ok(ret)
-    } else {
-        Err(Error::Mpv(MpvError::from_i32(err_val).unwrap()))
-    }
-}
-
-unsafe extern "C" fn event_callback(d: *mut libc::c_void) {
-    (*(d as *mut (Mutex<bool>, Condvar))).1.notify_one();
-}
-
-#[doc(hidden)]
-#[derive(Clone, Debug, PartialEq)]
-/// Designed for internal use.
-pub struct InnerEvent {
-    event: Event,
-    err: Option<Error>,
-}
-
-impl InnerEvent {
-    fn as_result(&self) -> Result<Event, Error> {
-        if self.err.is_some() {
-            Err(self.err.clone().unwrap())
-        } else {
-            Ok(self.event.clone())
-        }
-    }
-    fn as_event(&self) -> &Event {
-        &self.event
-    }
-    fn as_id(&self) -> MpvEventId {
-        self.event.as_id()
-    }
-}
-
-/// An event returned by `EventIter`.
-#[derive(Clone, Debug, PartialEq)]
-#[allow(missing_docs)]
-pub enum Event {
-    LogMessage(LogMessage),
-    StartFile,
-    EndFile(Option<EndFile>),
-    FileLoaded,
-    Idle,
-    Tick,
-    VideoReconfig,
-    AudioReconfig,
-    Seek,
-    PlaybackRestart,
-    PropertyChange(Property),
-}
-
-impl Event {
-    fn as_id(&self) -> MpvEventId {
-        match *self {
-            Event::LogMessage(_) => MpvEventId::LogMessage,
-            Event::StartFile => MpvEventId::StartFile,
-            Event::EndFile(_) => MpvEventId::EndFile,
-            Event::FileLoaded => MpvEventId::FileLoaded,
-            Event::Idle => MpvEventId::Idle,
-            Event::Tick => MpvEventId::Tick,
-            Event::VideoReconfig => MpvEventId::VideoReconfig,
-            Event::AudioReconfig => MpvEventId::AudioReconfig,
-            Event::Seek => MpvEventId::Seek,
-            Event::PlaybackRestart => MpvEventId::PlaybackRestart,
-            Event::PropertyChange(_) => MpvEventId::PropertyChange,
-        }
-    }
-}
-
-impl MpvEvent {
-    fn as_event(&self) -> Result<Event, Error> {
-        try!(mpv_err((), self.error));
-        Ok(match self.event_id {
-            MpvEventId::LogMessage => Event::LogMessage(LogMessage::from_raw(self.data)),
-            MpvEventId::StartFile => Event::StartFile,
-            MpvEventId::EndFile => {
-                Event::EndFile(Some(EndFile::from_raw(MpvEventEndFile::from_raw(self.data))))
-            }
-            MpvEventId::FileLoaded => Event::FileLoaded,
-            MpvEventId::Idle => Event::Idle,
-            MpvEventId::Tick => Event::Tick,
-            MpvEventId::VideoReconfig => Event::VideoReconfig,
-            MpvEventId::AudioReconfig => Event::AudioReconfig,
-            MpvEventId::Seek => Event::Seek,
-            MpvEventId::PlaybackRestart => Event::PlaybackRestart,
-            MpvEventId::PropertyChange => Event::PropertyChange(Property::from_raw(self.data)),
-            _ => unreachable!(),
-        })
-    }
-    fn as_inner_event(&self) -> InnerEvent {
-        InnerEvent {
-            event: match self.event_id {
-                MpvEventId::LogMessage => Event::LogMessage(LogMessage::from_raw(self.data)),
-                MpvEventId::StartFile => Event::StartFile,
-                MpvEventId::EndFile => {
-                    Event::EndFile(Some(EndFile::from_raw(MpvEventEndFile::from_raw(self.data))))
-                }
-                MpvEventId::FileLoaded => Event::FileLoaded,
-                MpvEventId::Idle => Event::Idle,
-                MpvEventId::Tick => Event::Tick,
-                MpvEventId::VideoReconfig => Event::VideoReconfig,
-                MpvEventId::AudioReconfig => Event::AudioReconfig,
-                MpvEventId::Seek => Event::Seek,
-                MpvEventId::PlaybackRestart => Event::PlaybackRestart,
-                MpvEventId::PropertyChange => Event::PropertyChange(Property::from_raw(self.data)),
-                _ => unreachable!(),
-            },
-            err: {
-                let err = mpv_err((), self.error);
-                if err.is_err() {
-                    Some(err.unwrap_err())
-                } else {
-                    None
-                }
-            },
-        }
-    }
-}
-
-/// A blocking `Iterator` over some observed events of an mpv instance.
-/// `next` will never return `None`, instead it will return `Error::NoAssociatedEvent`. This is done
-/// so that the iterator is endless. Once the `EventIter` is dropped, it's `Event`s are removed from
-/// the "to be observed" queue, therefore new `Event` invocations won't be observed.
-pub struct EventIter<'parent, P>
-    where P: MpvMarker + 'parent
-{
-    ctx: *mut MpvHandle,
-    notification: *mut (Mutex<bool>, Condvar),
-    all_to_observe: &'parent Mutex<Vec<Event>>,
-    all_to_observe_properties: &'parent Mutex<HashMap<String, libc::uint64_t>>,
-    local_to_observe: Vec<Event>,
-    all_observed: &'parent Mutex<Vec<InnerEvent>>,
-    last_no_associated_ev: bool,
-    _does_not_outlive: PhantomData<&'parent P>,
-}
-
-impl<'parent, P> Drop for EventIter<'parent, P>
-    where P: MpvMarker + 'parent
-{
-    fn drop(&mut self) {
-        let mut all_to_observe = self.all_to_observe.lock();
-        let mut all_observed = self.all_observed.lock();
-        let mut all_to_observe_properties = self.all_to_observe_properties.lock();
-
-        // Returns true if outer and inner event match, in the case of the event
-        // being a property unobserve it.
-        let mut compare_ev_unobserve = |outer_ev: &Event, inner_ev: &Event| -> bool {
-            if let Event::PropertyChange(ref outer_prop) = *outer_ev {
-                if let Event::PropertyChange(ref inner_prop) = *inner_ev {
-                    if outer_prop.name == inner_prop.name {
-                        unsafe {
-                            mpv_unobserve_property(self.ctx, *all_to_observe_properties.get(
-                                                                        &outer_prop.name).unwrap());
-                        }
-                        all_to_observe_properties.remove(&outer_prop.name);
-                        return true;
-                    }
-                } else if MpvEventId::LogMessage == outer_ev.as_id() &&
-                   outer_ev.as_id() == inner_ev.as_id() {
-                    let min_level = CString::new(MpvLogLevel::None.as_string()).unwrap();
-                    mpv_err((),
-                            unsafe { mpv_request_log_messages(self.ctx, min_level.as_ptr()) })
-                        .unwrap();
-                        return true;
-                }
-                unsafe{mpv_request_event(self.ctx, inner_ev.as_id(), 0)};
-                return true;
-            } else if outer_ev.as_id() == inner_ev.as_id() {
-                unsafe{mpv_request_event(self.ctx, inner_ev.as_id(), 0)};
-                return true;
-            }
-            false
-        };
-
-        // This removes all events for which compare_ev_unobserve returns true.
-        for outer_ev in &self.local_to_observe {
-            all_to_observe.retain(|inner_ev| !compare_ev_unobserve(outer_ev, inner_ev));
-            all_observed.retain(|inner_ev| !compare_ev_unobserve(outer_ev, (*inner_ev).as_event()));
-        }
-    }
-}
-
-impl<'parent, P> Iterator for EventIter<'parent, P>
-    where P: MpvMarker + 'parent
-{
-    type Item = Result<Vec<Result<Event, Error>>, Error>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let mut observed = self.all_observed.lock();
-        if observed.is_empty() || self.last_no_associated_ev {
-            mem::drop(observed);
-            unsafe { (*self.notification).1.wait(&mut (*self.notification).0.lock()) };
-            observed = self.all_observed.lock();
-        }
-
-        let mut ret_events = Vec::with_capacity(observed.len());
-        if observed.is_empty() {
-            let all_to_observe = self.all_to_observe.lock();
-            let mut last = false;
-            'events: loop {
-                let event = unsafe { &*mpv_wait_event(self.ctx, 0f64 as libc::c_double) };
-                let ev_id = event.event_id;
-
-                if ev_id == MpvEventId::QueueOverflow {
-                    // The queue needs to be emptied asap to prevent loss of events
-                    break;
-                } else if ev_id == MpvEventId::None {
-                    if last {
-                        break;
-                    } else {
-                        last = true;
-                        continue;
-                    }
-                }
-                for local_ob_ev in &self.local_to_observe {
-                    if ev_id == local_ob_ev.as_id() {
-                        ret_events.push(event.as_event());
-                        continue 'events;
-                    }
-                }
-                for all_ob_ev in &*all_to_observe {
-                    if ev_id == all_ob_ev.as_id() {
-                        observed.push(event.as_inner_event());
-                        continue 'events;
-                    }
-                }
-            }
-            if !observed.is_empty() {
-                mem::drop(observed);
-                unsafe { (*self.notification).1.notify_all() };
-            }
-        } else {
-            // Return true where outer_ev == inner_ev, and push inner_ev to ret_events
-            let mut compare_ev = |outer_ev: &Event, inner_ev: &InnerEvent| -> bool {
-                if let Event::PropertyChange(ref outer_prop) = *outer_ev {
-                    if let Event::PropertyChange(ref inner_prop) = *inner_ev.as_event() {
-                        if outer_prop.name == inner_prop.name {
-                            ret_events.push(inner_ev.as_result());
-                            return true;
-                        }
-                    }
-                    ret_events.push(inner_ev.as_result());
-                    return true;
-                } else if outer_ev.as_id() == inner_ev.as_id() {
-                    ret_events.push(inner_ev.as_result());
-                    return true;
-                }
-                false
-            };
-            // Remove events belonging to this EventIter from observed
-            for outer_ev in &self.local_to_observe {
-                observed.retain(|inner_ev| !compare_ev(outer_ev, inner_ev));
-            }
-
-            if !observed.is_empty() {
-                mem::drop(observed);
-                unsafe { (*self.notification).1.notify_all() };
-            }
-        }
-        if !ret_events.is_empty() {
-            self.last_no_associated_ev = false;
-            Some(Ok(ret_events))
-        } else {
-            self.last_no_associated_ev = true;
-            Some(Err(Error::NoAssociatedEvent))
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(missing_docs)]
-/// The data of an `Event::LogMessage`.
-pub struct LogMessage {
-    pub prefix: String,
-    pub level: super::LogLevel,
-    pub text: String,
-    pub log_level: super::LogLevel,
-}
-
-impl LogMessage {
-    /// Create an empty `LogMessage` with specified verbosity
-    pub fn new(lvl: super::LogLevel) -> LogMessage {
-        LogMessage {
-            prefix: "".into(),
-            level: lvl,
-            text: "".into(),
-            log_level: lvl,
-        }
-    }
-
-    fn from_raw(raw: *mut libc::c_void) -> LogMessage {
-        debug_assert!(!raw.is_null());
-        let raw = unsafe { &mut *(raw as *mut MpvEventLogMessage) };
-        LogMessage {
-            prefix: unsafe { CStr::from_ptr(raw.prefix).to_str().unwrap().into() },
-            level: unsafe { MpvLogLevel::from_str(CStr::from_ptr(raw.level).to_str().unwrap()) },
-            text: unsafe { CStr::from_ptr(raw.text).to_str().unwrap().into() },
-            log_level: raw.log_level,
-        }
-    }
-}
-
-impl MpvLogLevel {
-    fn as_string(&self) -> &str {
-        match *self {
-            MpvLogLevel::None => "no",
-            MpvLogLevel::Fatal => "fatal",
-            MpvLogLevel::Error => "error",
-            MpvLogLevel::Warn => "warn",
-            MpvLogLevel::Info => "info",
-            MpvLogLevel::V => "v",
-            MpvLogLevel::Debug => "debug",
-            MpvLogLevel::Trace => "trace",
-        }
-    }
-
-    fn from_str(name: &str) -> MpvLogLevel {
-        match name {
-            "no" => MpvLogLevel::None,
-            "fatal" => MpvLogLevel::Fatal,
-            "error" => MpvLogLevel::Error,
-            "warn" => MpvLogLevel::Warn,
-            "info" => MpvLogLevel::Info,
-            "v" => MpvLogLevel::V,
-            "debug" => MpvLogLevel::Debug,
-            "trace" => MpvLogLevel::Trace,
-            _ => unreachable!(),
-        }
-    }
-}
-
-impl MpvEventEndFile {
-    fn from_raw(raw: *mut libc::c_void) -> MpvEventEndFile {
-        debug_assert!(!raw.is_null());
-        let raw = unsafe { &mut *(raw as *mut MpvEventEndFile) };
-        MpvEventEndFile {
-            reason: raw.reason,
-            error: raw.error,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[allow(missing_docs)]
-/// The reason an `Event::EndFile` was fired.
-pub enum EndFileReason {
-    Eof = 0,
-    Stop = 2,
-    Quit = 3,
-    Error = 4,
-    Redirect = 5,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-#[allow(missing_docs)]
-/// The data of an `Event::EndFile`. `error` is `Some` if `EndFileReason` is `Error`.
-pub struct EndFile {
-    pub reason: EndFileReason,
-    pub error: Option<Error>,
-}
-
-impl EndFile {
-    fn from_raw(raw: MpvEventEndFile) -> EndFile {
-        EndFile {
-            reason: match raw.reason {
-                0 => EndFileReason::Eof,
-                2 => EndFileReason::Stop,
-                3 => EndFileReason::Quit,
-                4 => EndFileReason::Error,
-                5 => EndFileReason::Redirect,
-                _ => unreachable!(),
-
-            },
-            error: {
-                let err = mpv_err((), raw.error);
-                if err.is_ok() {
-                    None
-                } else {
-                    Some(err.unwrap_err())
-                }
-            },
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-#[allow(missing_docs)]
-/// The data of an `Event::PropertyChange`. The `data` field is equal to the value of
-/// the property.
-///
-/// Partial equality only imples that only the names are equal.
-pub struct Property {
-    pub name: String,
-    pub data: Data,
-}
-
-impl Property {
-    fn from_raw(raw: *mut libc::c_void) -> Property {
-        debug_assert!(!raw.is_null());
-        let raw = unsafe { &mut *(raw as *mut MpvEventProperty) };
-        Property {
-            name: unsafe { CStr::from_ptr(raw.name).to_str().unwrap().into() },
-            data: Data::from_raw(raw.format, raw.data),
-        }
-    }
-
-    #[inline]
-    /// Create a `Property` that is suitable for observing.
-    /// Data is used to infer the format of the property, the value is never used in this case.
-    pub fn new(name: &str, data: Data) -> Property {
-        Property {
-            name: name.into(),
-            data: data,
-        }
-    }
-}
-
-impl PartialEq<Property> for Property {
-    fn eq(&self, other: &Property) -> bool {
-        self.name == other.name
-    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -626,61 +191,39 @@ impl Into<Data> for MpvNode {
 }
 
 #[derive(Clone, Debug)]
-/// A command that can be executed by `Mpv`.
-pub struct Command<'a> {
-    name: &'a str,
-    args: &'a [String],
+#[allow(missing_docs)]
+/// Contains name and data of a property.
+///
+/// Partial equality only implies that the names are equal.
+pub struct Property {
+    pub name: String,
+    pub data: Data,
 }
 
-impl<'a> Command<'a> {
+impl Property {
+    fn from_raw(raw: *mut libc::c_void) -> Property {
+        debug_assert!(!raw.is_null());
+        let raw = unsafe { &mut *(raw as *mut MpvEventProperty) };
+        Property {
+            name: unsafe { CStr::from_ptr(raw.name).to_str().unwrap().into() },
+            data: Data::from_raw(raw.format, raw.data),
+        }
+    }
+
     #[inline]
-    /// Create a new `MpvCommand`.
-    pub fn new(name: &'a str, args: &'a [String]) -> Command<'a> {
-        Command {
-            name: name,
-            args: args,
+    /// Create a `Property` that is suitable for observing.
+    /// Data is used to infer the format of the property, the value is never used in this case.
+    pub fn new(name: &str, data: Data) -> Property {
+        Property {
+            name: name.into(),
+            data: data,
         }
     }
 }
 
-#[derive(Clone, Debug)]
-/// Data needed for `PlaylistOp::Loadfiles`.
-pub struct File<'a> {
-    path: &'a Path,
-    state: FileState,
-    options: Option<&'a str>,
-}
-
-impl<'a> File<'a> {
-    #[inline]
-    /// Create a new `File`.
-    pub fn new(path: &'a Path, state: FileState, opts: Option<&'a str>) -> File<'a> {
-        File {
-            path: path,
-            state: state,
-            options: opts,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-/// How a `File` is inserted into the playlist.
-pub enum FileState {
-    /// Replace the current track.
-    Replace,
-    /// Append to the current playlist.
-    Append,
-    /// If current playlist is empty: play, otherwise append to playlist.
-    AppendPlay,
-}
-
-impl FileState {
-    fn val(&self) -> &str {
-        match *self {
-            FileState::Replace => "replace",
-            FileState::Append => "append",
-            FileState::AppendPlay => "append-play",
-        }
+impl PartialEq<Property> for Property {
+    fn eq(&self, other: &Property) -> bool {
+        self.name == other.name
     }
 }
 
@@ -806,82 +349,6 @@ pub enum SubOp<'a> {
     SeekForward,
     /// See `SeekForward`.
     SeekBackward,
-}
-
-#[allow(missing_docs)]
-/// Equivalent to subset of `MpvFormat` used by the public API.
-pub enum Format {
-    String,
-    OsdString,
-    Flag,
-    Int64,
-    Double,
-    Node,
-}
-
-impl Format {
-    fn as_mpv_format(&self) -> MpvFormat {
-        match *self {
-            Format::String => MpvFormat::String,
-            Format::OsdString => MpvFormat::OsdString,
-            Format::Flag => MpvFormat::Flag,
-            Format::Int64 => MpvFormat::Int64,
-            Format::Double => MpvFormat::Double,
-            Format::Node => MpvFormat::Node,
-        }
-    }
-
-    fn size(&self) -> usize {
-        match *self {
-            Format::Flag => mem::size_of::<bool>(),
-            Format::Int64 => mem::size_of::<libc::int64_t>(),
-            Format::Double => mem::size_of::<libc::c_double>(),
-            Format::Node => mem::size_of::<MpvNode>(),
-            _ => unreachable!(),
-        }
-    }
-}
-
-impl MpvError {
-    fn as_val(&self) -> libc::c_int {
-        *self as libc::c_int
-    }
-
-    #[inline]
-    /// Returns a string slice associated with the `MpvError`.
-    pub fn error_string(&self) -> &str {
-        let raw = unsafe { mpv_error_string(self.as_val()) };
-        unsafe { CStr::from_ptr(raw) }.to_str().unwrap()
-    }
-}
-
-impl MpvFormat {
-    fn as_val(self) -> libc::c_int {
-        self as libc::c_int
-    }
-}
-
-impl MpvNode {
-    #[inline]
-    /// Create a `MpvNode` from a supported value.
-    pub fn new<T>(val: T) -> MpvNode
-        where T: Into<MpvNode>
-    {
-        val.into()
-    }
-
-    fn get_inner(&self) -> Data {
-        // TODO: this.
-        unimplemented!();
-    }
-}
-
-// TODO: impl Into<MpvNode> for types
-
-impl PartialEq for MpvNode {
-    fn eq(&self, other: &MpvNode) -> bool {
-        self.get_inner() == other.get_inner()
-    }
 }
 
 /// This type allows for operations that should only be done on an uninitialized mpv core.
@@ -1435,7 +902,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     /// This method is unsafe because arbitrary code may be executed resulting in UB and more.
     unsafe fn command(&self, cmd: &Command) -> Result<(), Error> {
         // Will probably allocate a little too much, but that is fine to avoid reallocation
-        let mut args = String::with_capacity(cmd.args.iter().fold(0, |acc, ref e| acc + e.len() ));
+        let mut args = String::with_capacity(cmd.args.iter().fold(0, |acc, ref e| acc + e.len()));
         for elem in cmd.args {
             args.push_str(&format!(" {}", elem));
         }
