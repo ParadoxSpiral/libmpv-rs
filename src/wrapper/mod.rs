@@ -957,25 +957,20 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         let name = CString::new(name).unwrap();
         match *format {
             Format::String | Format::OsdString => {
-                /*FIXME: prefer this version because of error handling
-                let ptr = ptr::null_mut::<libc::c_char>();
+                let mut ptr = &mut ptr::null::<libc::c_char>();
 
                 let err = mpv_err((), unsafe {
                     mpv_get_property(self.ctx(),
                                      name.as_ptr(),
                                      format.as_mpv_format().as_val(),
-                                     ptr as *mut libc::c_void)
+                                     ptr as *mut *const libc::c_char as *mut libc::c_void)
                 });
-                debug_assert!(!ptr.is_null());*/
+                debug_assert!(!ptr.is_null());
 
-                let ptr = unsafe{ mpv_get_property_string(self.ctx(), name.as_ptr())};
-
-                if ptr.is_null() {
-                    Err(Error::Null)
-                // if err.is_err() {
-                //    Err(err.unwrap_err())
+                if err.is_err() {
+                    Err(err.unwrap_err())
                 } else {
-                    let ret = unsafe { CString::from_raw(ptr) };
+                    let ret = unsafe { CStr::from_ptr(*ptr) };
 
                     let data = if cfg!(windows) {
                         // Mpv returns all strings on windows in UTF-8.
@@ -985,15 +980,15 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                         {
                             use std::ffi::OsStr;
                             use std::os::unix::ffi::OsStrExt;
-                            OsStr::from_bytes(ret.as_bytes()).to_string_lossy().into_owned()
+                            OsStr::from_bytes(ret.to_bytes()).to_string_lossy().into_owned()
                         }
                         #[cfg(not(unix))]
                         unreachable!()
                     } else {
-                        String::from_utf8_lossy(ret.as_bytes()).into_owned()
+                        String::from_utf8_lossy(ret.to_bytes()).into_owned()
                     };
 
-                    unsafe{mpv_free(ret.into_raw() as *mut _)}
+                    unsafe{mpv_free(*ptr as *mut libc::c_void)}
 
                     Ok(match *format {
                         Format::String => Data::String(data),
