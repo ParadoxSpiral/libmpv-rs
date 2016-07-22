@@ -23,6 +23,9 @@
 //! This crate provides abstractions for libmpv of the mpv media player. It is guaranteed
 //! that no `Client` or `EventIter` is used after their parent exited.
 //!
+//! Libmpv requires LC_NUMERIC to be C. This is set once the first `Parent` is created.
+//! Do not change this during the usage of this crate.
+//!
 //! # Examples
 //!
 //! See the 'examples' directory in the crate root.

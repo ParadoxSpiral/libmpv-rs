@@ -25,7 +25,7 @@ pub mod events;
 pub mod utils;
 
 use libc;
-use parking_lot::{Condvar, Mutex};
+use parking_lot::{Condvar, Mutex, Once, ONCE_INIT};
 
 use super::raw::*;
 use super::raw::prototype::*;
@@ -66,6 +66,8 @@ macro_rules! detach_on_err {
         }
     )
 }
+
+static SET_LC_NUMERIC: Once = ONCE_INIT;
 
 #[derive(Clone, Debug, PartialEq)]
 /// All possible error values returned by this crate.
@@ -368,6 +370,11 @@ impl UninitializedParent {
 
     /// Create a new `UninitializedParent` instance.
     pub fn new(check_events: bool) -> Result<UninitializedParent, Error> {
+        SET_LC_NUMERIC.call_once(|| {
+            let c = CString::new("C").unwrap();
+            unsafe { libc::setlocale(libc::LC_NUMERIC, c.as_ptr()) };
+        });
+
         let api_version = unsafe { mpv_client_api_version() };
         if super::MPV_CLIENT_API_VERSION != api_version {
             return Err(Error::VersionMismatch(api_version));
@@ -588,6 +595,11 @@ impl<'parent> Parent {
     /// To call any method except for `set_option` on this, it has to be initialized first.
     /// The default settings can be probed by running: ```$ mpv --show-profile=libmpv```
     pub fn new(check_events: bool) -> Result<Parent, Error> {
+        SET_LC_NUMERIC.call_once(|| {
+            let c = CString::new("C").unwrap();
+            unsafe { libc::setlocale(libc::LC_NUMERIC, c.as_ptr()) };
+        });
+
         let api_version = unsafe { mpv_client_api_version() };
         if super::MPV_CLIENT_API_VERSION != api_version {
             return Err(Error::VersionMismatch(api_version));

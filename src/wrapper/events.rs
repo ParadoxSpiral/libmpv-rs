@@ -175,10 +175,9 @@ impl<'parent, P> Drop for EventIter<'parent, P>
                 if let Event::PropertyChange(ref inner_prop) = *inner_ev {
                     if outer_prop.name == inner_prop.name {
                         unsafe {
-                            mpv_unobserve_property(self.ctx, *all_to_observe_properties.get(
+                            mpv_unobserve_property(self.ctx, all_to_observe_properties.remove(
                                                                         &outer_prop.name).unwrap());
                         }
-                        all_to_observe_properties.remove(&outer_prop.name);
                         return true;
                     }
                 } else if MpvEventId::LogMessage == outer_ev.as_id() &&
@@ -304,7 +303,7 @@ pub struct LogMessage {
 }
 
 impl LogMessage {
-    /// Create an empty `LogMessage` with specified verbosity
+    /// Create an empty `LogMessage` with specified verbosity, useful for observing.
     pub fn new(lvl: LogLevel) -> LogMessage {
         LogMessage {
             prefix: "".into(),
