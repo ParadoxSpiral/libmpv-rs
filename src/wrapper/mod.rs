@@ -423,7 +423,7 @@ impl UninitializedParent {
         })
     }
 
-    /// Set an option. This only works before core initialization.
+    /// Set an option.
     pub fn set_option(&self, opt: &mut Property) -> Result<(), Error> {
         let name = CString::new(&opt.name[..]).unwrap().into_raw();
         let format = opt.data.format().as_val();

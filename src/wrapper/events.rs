@@ -170,7 +170,7 @@ impl<'parent, P> Drop for EventIter<'parent, P>
 
         // Returns true if outer and inner event match, in the case of the event
         // being a property unobserve it.
-        let mut compare_ev_unobserve = |outer_ev: &Event, inner_ev: &Event| -> bool {
+        let mut compare_ev_unobserve = |outer_ev: &Event, inner_ev: &Event| {
             if let Event::PropertyChange(ref outer_prop) = *outer_ev {
                 if let Event::PropertyChange(ref inner_prop) = *inner_ev {
                     if outer_prop.name == inner_prop.name {
@@ -188,10 +188,10 @@ impl<'parent, P> Drop for EventIter<'parent, P>
                         .unwrap();
                         return true;
                 }
-                unsafe{mpv_request_event(self.ctx, inner_ev.as_id(), 0)};
+                unsafe { mpv_request_event(self.ctx, inner_ev.as_id(), 0) };
                 return true;
             } else if outer_ev.as_id() == inner_ev.as_id() {
-                unsafe{mpv_request_event(self.ctx, inner_ev.as_id(), 0)};
+                unsafe { mpv_request_event(self.ctx, inner_ev.as_id(), 0) };
                 return true;
             }
             false
@@ -256,7 +256,7 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
             }
         } else {
             // Return true where outer_ev == inner_ev, and push inner_ev to ret_events
-            let mut compare_ev = |outer_ev: &Event, inner_ev: &InnerEvent| -> bool {
+            let mut compare_ev = |outer_ev: &Event, inner_ev: &InnerEvent| {
                 if let Event::PropertyChange(ref outer_prop) = *outer_ev {
                     if let Event::PropertyChange(ref inner_prop) = *inner_ev.as_event() {
                         if outer_prop.name == inner_prop.name {
