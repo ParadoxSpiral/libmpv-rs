@@ -223,7 +223,7 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
             let all_to_observe = self.all_to_observe.lock();
             let mut last = false;
             'events: loop {
-                let event = unsafe { &*mpv_wait_event(self.ctx, 0f64 as libc::c_double) };
+                let event = unsafe { &*mpv_wait_event(self.ctx, 0 as libc::c_double) };
                 let ev_id = event.event_id;
 
                 if ev_id == MpvEventId::QueueOverflow {

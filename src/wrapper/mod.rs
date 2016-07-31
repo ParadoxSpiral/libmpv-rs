@@ -967,51 +967,42 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                 });
                 debug_assert!(!ptr.is_null());
 
-                if err.is_err() {
-                    Err(err.unwrap_err())
-                } else {
-                    let ret = unsafe { CStr::from_ptr(*ptr) };
+                err.or_else(|err| Err(err))
+                    .and_then(|_| {
+                        let ret = unsafe { CStr::from_ptr(*ptr) };
 
-                    let data = if cfg!(windows) {
-                        // Mpv returns all strings on windows in UTF-8.
-                        ret.to_str().unwrap().to_owned()
-                    } else if cfg!(unix) {
-                        #[cfg(unix)]
-                        {
+                        let data;
+                        if cfg!(windows) {
+                            // Mpv returns all strings on windows in UTF-8.
+                            data = ret.to_str().unwrap().to_owned();
+                        } else if cfg!(unix) {
                             use std::ffi::OsStr;
                             use std::os::unix::ffi::OsStrExt;
-                            OsStr::from_bytes(ret.to_bytes()).to_string_lossy().into_owned()
+                            data = OsStr::from_bytes(ret.to_bytes()).to_string_lossy().into_owned();
+                        } else {
+                            // Hope that all is well
+                            data = String::from_utf8_lossy(ret.to_bytes()).into_owned();
                         }
-                        #[cfg(not(unix))]
-                        unreachable!()
-                    } else {
-                        String::from_utf8_lossy(ret.to_bytes()).into_owned()
-                    };
 
-                    unsafe{mpv_free(*ptr as *mut libc::c_void)}
+                        unsafe{mpv_free(*ptr as *mut libc::c_void)}
 
-                    Ok(match *format {
-                        Format::String => Data::String(data),
-                        Format::OsdString => Data::OsdString(data),
-                        _ => unreachable!(),
+                        Ok(match *format {
+                            Format::String => Data::String(data),
+                            Format::OsdString => Data::OsdString(data),
+                            _ => unreachable!(),
+                        })
                     })
-                }
             }
             _ => {
                 let ptr: *mut libc::c_void = unsafe { libc::malloc(format.size()) };
 
-                let err = mpv_err((), unsafe {
+                mpv_err((), unsafe {
                     mpv_get_property(self.ctx(),
                                      name.as_ptr(),
                                      format.as_mpv_format().as_val(),
                                      ptr)
-                });
-
-                if err.is_err() {
-                    Err(err.unwrap_err())
-                } else {
-                    Ok(Data::from_raw(format.as_mpv_format(), ptr))
-                }
+                }).or_else(|err| Err(err))
+                  .and_then(|_| Ok(Data::from_raw(format.as_mpv_format(), ptr)))
             }
         }
     }
