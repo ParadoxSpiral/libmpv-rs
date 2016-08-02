@@ -28,8 +28,8 @@ use std::thread;
 pub fn exec() {
     let mpv = UninitializedParent::new(true).unwrap();
     mpv.set_option(&mut Property::new("cache-initial", Data::new(1))).unwrap();
-    //mpv.set_option(&mut Property::new("ao-volume", Data::new(100))).unwrap();
-    //mpv.set_option(&mut Property::new("ao-mute", Data::new(false)));
+    // mpv.set_option(&mut Property::new("ao-volume", Data::new(100))).unwrap();
+    // mpv.set_option(&mut Property::new("ao-mute", Data::new(false)));
     mpv.set_option(&mut Property::new("volume", Data::new(10))).unwrap();
     mpv.set_option(&mut Property::new("no-video", Data::new(true))).unwrap();
     mpv.set_option(&mut Property::new("ytdl", Data::new(true))).unwrap();
@@ -44,26 +44,20 @@ pub fn exec() {
                                          Event::EndFile(None)])
                           .unwrap();
 
-            for elem in iter {
-                match elem {
-                    Err(Error::NoAssociatedEvent) => {}
-                    Err(v) => panic!("unexpected error: {:?}", v),
-                    Ok(vec) => {
-                        if let Some(&Ok(Event::EndFile(ref v))) = vec.iter().find(|e| {
-                            if e.is_ok() {
-                                if let Event::EndFile(_) = *e.as_ref().unwrap() {
-                                    return true;
-                                }
-                            }
-                            false
-                        }) {
-                            println!("File ended! Reason: {:?}", v);
-                            process::exit(0);
-                        } else {
-                            println!("playback_events: {:?}", vec);
-                        };
+            for vec in iter {
+                if let Some(&Ok(Event::EndFile(ref v))) = vec.iter().find(|e| {
+                    if e.is_ok() {
+                        if let Event::EndFile(_) = *e.as_ref().unwrap() {
+                            return true;
+                        }
                     }
-                }
+                    false
+                }) {
+                    println!("File ended! Reason: {:?}", v);
+                    process::exit(0);
+                } else {
+                    println!("playback_events: {:?}", vec);
+                };
             }
         });
         scope.spawn(|| {
@@ -73,24 +67,16 @@ pub fn exec() {
                                                                              Data::new(false)))])
                           .unwrap();
 
-            for elem in iter {
-                match elem {
-                    Err(Error::NoAssociatedEvent) => {}
-                    Err(v) => panic!("unexpected error: {:?}", v),
-                    Ok(vec) => println!("prop_events: {:?}", vec),
-                }
+            for vec in iter {
+                println!("prop_events: {:?}", vec);
             }
         });
         scope.spawn(|| {
             let iter = mpv.observe_all(&[Event::LogMessage(LogMessage::new(LogLevel::Info))])
                           .unwrap();
 
-            for elem in iter {
-                match elem {
-                    Err(Error::NoAssociatedEvent) => {}
-                    Err(v) => panic!("unexpected error: {:?}", v),
-                    Ok(vec) => println!("log_events: {:#?}", vec),
-                }
+            for vec in iter {
+                println!("log_events: {:#?}", vec);
             }
         });
 

@@ -88,8 +88,6 @@ pub enum Error {
     EventsDisabled,
     /// This event is already being observed by another `EventIter`.
     AlreadyObserved(Box<Event>),
-    /// No `Event` associated with this `EventIter` was found, this means a spurious wakeup.
-    NoAssociatedEvent,
     /// Used a `Data::OsdString` while writing.
     OsdStringWrite,
     /// Mpv returned a string that uses an unsupported codec. Inside are the raw bytes cast to u8.
@@ -898,7 +896,6 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                 all_to_observe_properties: self.ev_to_observe_properties().as_ref().unwrap(),
                 local_to_observe: evs,
                 all_observed: self.ev_observed().as_ref().unwrap(),
-                last_no_associated_ev: false,
                 _does_not_outlive: PhantomData::<&Self>,
             })
         } else {

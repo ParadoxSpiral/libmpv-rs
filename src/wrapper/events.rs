@@ -144,8 +144,7 @@ impl MpvEvent {
 }
 
 /// A blocking `Iterator` over some observed events of an mpv instance.
-/// `next` will never return `None`, instead it will return `Error::NoAssociatedEvent`. This is done
-/// so that the iterator is endless. Once the `EventIter` is dropped, it's `Event`s are removed from
+/// Once the `EventIter` is dropped, it's `Event`s are removed from
 /// the "to be observed" queue, therefore new `Event` invocations won't be observed.
 pub struct EventIter<'parent, P>
     where P: MpvMarker + 'parent
@@ -156,9 +155,10 @@ pub struct EventIter<'parent, P>
     pub(crate) all_to_observe_properties: &'parent Mutex<HashMap<String, libc::uint64_t>>,
     pub(crate) local_to_observe: Vec<Event>,
     pub(crate) all_observed: &'parent Mutex<Vec<InnerEvent>>,
-    pub(crate) last_no_associated_ev: bool,
     pub(crate) _does_not_outlive: PhantomData<&'parent P>,
 }
+
+unsafe impl<'parent, P> Send for EventIter<'parent, P> where P: MpvMarker + 'parent {}
 
 impl<'parent, P> Drop for EventIter<'parent, P>
     where P: MpvMarker + 'parent
@@ -208,86 +208,86 @@ impl<'parent, P> Drop for EventIter<'parent, P>
 impl<'parent, P> Iterator for EventIter<'parent, P>
     where P: MpvMarker + 'parent
 {
-    type Item = Result<Vec<Result<Event, Error>>, Error>;
+    type Item = Vec<Result<Event, Error>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut observed = self.all_observed.lock();
-        if observed.is_empty() || self.last_no_associated_ev {
-            mem::drop(observed);
-            unsafe { (*self.notification).1.wait(&mut (*self.notification).0.lock()) };
-            observed = self.all_observed.lock();
-        }
-
-        let mut ret_events = Vec::with_capacity(observed.len());
-        if observed.is_empty() {
-            let all_to_observe = self.all_to_observe.lock();
-            let mut last = false;
-            'events: loop {
-                let event = unsafe { &*mpv_wait_event(self.ctx, 0 as libc::c_double) };
-                let ev_id = event.event_id;
-
-                if ev_id == MpvEventId::QueueOverflow {
-                    // The queue needs to be emptied asap to prevent loss of events
-                    break;
-                } else if ev_id == MpvEventId::None {
-                    if last {
-                        break;
-                    } else {
-                        last = true;
-                        continue;
-                    }
-                }
-                for local_ob_ev in &self.local_to_observe {
-                    if ev_id == local_ob_ev.as_id() {
-                        ret_events.push(event.as_event());
-                        continue 'events;
-                    }
-                }
-                for all_ob_ev in &*all_to_observe {
-                    if ev_id == all_ob_ev.as_id() {
-                        observed.push(event.as_inner_event());
-                        continue 'events;
-                    }
-                }
-            }
-            if !observed.is_empty() {
+        'no_events_anchor: loop {
+            let mut observed = self.all_observed.lock();
+            if observed.is_empty() {
                 mem::drop(observed);
-                unsafe { (*self.notification).1.notify_all() };
+                unsafe { (*self.notification).1.wait(&mut (*self.notification).0.lock()) };
+                observed = self.all_observed.lock();
             }
-        } else {
-            // Return true where outer_ev == inner_ev, and push inner_ev to ret_events
-            let mut compare_ev = |outer_ev: &Event, inner_ev: &InnerEvent| {
-                if let Event::PropertyChange(ref outer_prop) = *outer_ev {
-                    if let Event::PropertyChange(ref inner_prop) = *inner_ev.as_event() {
-                        if outer_prop.name == inner_prop.name {
-                            ret_events.push(inner_ev.as_result());
-                            return true;
+
+            let mut ret_events = Vec::with_capacity(observed.len());
+            if observed.is_empty() {
+                let all_to_observe = self.all_to_observe.lock();
+                let mut last = false;
+                'events: loop {
+                    let event = unsafe { &*mpv_wait_event(self.ctx, 0f32 as libc::c_double) };
+                    let ev_id = event.event_id;
+
+                    if ev_id == MpvEventId::QueueOverflow {
+                        // The queue needs to be emptied asap to prevent loss of events
+                        break;
+                    } else if ev_id == MpvEventId::None {
+                        if last {
+                            break;
+                        } else {
+                            last = true;
+                            continue;
                         }
                     }
-                    ret_events.push(inner_ev.as_result());
-                    return true;
-                } else if outer_ev.as_id() == inner_ev.as_id() {
-                    ret_events.push(inner_ev.as_result());
-                    return true;
+                    for local_ob_ev in &self.local_to_observe {
+                        if ev_id == local_ob_ev.as_id() {
+                            ret_events.push(event.as_event());
+                            continue 'events;
+                        }
+                    }
+                    for all_ob_ev in &*all_to_observe {
+                        if ev_id == all_ob_ev.as_id() {
+                            observed.push(event.as_inner_event());
+                            continue 'events;
+                        }
+                    }
                 }
-                false
-            };
-            // Remove events belonging to this EventIter from observed
-            for outer_ev in &self.local_to_observe {
-                observed.retain(|inner_ev| !compare_ev(outer_ev, inner_ev));
-            }
+                if !observed.is_empty() {
+                    mem::drop(observed);
+                    unsafe { (*self.notification).1.notify_all() };
+                }
+            } else {
+                // Return true where outer_ev == inner_ev, and push inner_ev to ret_events
+                let mut compare_ev = |outer_ev: &Event, inner_ev: &InnerEvent| {
+                    if let Event::PropertyChange(ref outer_prop) = *outer_ev {
+                        if let Event::PropertyChange(ref inner_prop) = *inner_ev.as_event() {
+                            if outer_prop.name == inner_prop.name {
+                                ret_events.push(inner_ev.as_result());
+                                return true;
+                            }
+                        }
+                        ret_events.push(inner_ev.as_result());
+                        return true;
+                    } else if outer_ev.as_id() == inner_ev.as_id() {
+                        ret_events.push(inner_ev.as_result());
+                        return true;
+                    }
+                    false
+                };
+                // Remove events belonging to this EventIter from observed
+                for outer_ev in &self.local_to_observe {
+                    observed.retain(|inner_ev| !compare_ev(outer_ev, inner_ev));
+                }
 
-            if !observed.is_empty() {
-                mem::drop(observed);
-                unsafe { (*self.notification).1.notify_all() };
+                if !observed.is_empty() {
+                    mem::drop(observed);
+                    unsafe { (*self.notification).1.notify_all() };
+                }
             }
-        }
-        if !ret_events.is_empty() {
-            self.last_no_associated_ev = false;
-            Some(Ok(ret_events))
-        } else {
-            self.last_no_associated_ev = true;
-            Some(Err(Error::NoAssociatedEvent))
+            if !ret_events.is_empty() {
+                return Some(ret_events);
+            } else {
+                continue 'no_events_anchor;
+            }
         }
     }
 }
