@@ -964,7 +964,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                 });
                 debug_assert!(!ptr.is_null());
 
-                err.or_else(|err| Err(err))
+                err.or_else(Err)
                     .and_then(|_| {
                         let ret = unsafe { CStr::from_ptr(*ptr) };
 
@@ -998,7 +998,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                                      name.as_ptr(),
                                      format.as_mpv_format().as_val(),
                                      ptr)
-                }).or_else(|err| Err(err))
+                }).or_else(Err)
                   .and_then(|_| Ok(Data::from_raw(format.as_mpv_format(), ptr)))
             }
         }

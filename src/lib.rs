@@ -24,7 +24,7 @@
 //! [https://github.com/mpv-player/mpv/tree/master/libmpv] of the (mpv media player)
 //! [https://github.com/mpv-player/mpv].
 //!
-//! Libmpv requires LC_NUMERIC to be C. This is set once the first `Parent` is created.
+//! Libmpv requires `LC_NUMERIC` to be `C`. This is set once the first `Parent` is created.
 //! Do not change this during the usage of this crate.
 //!
 //! # Examples
