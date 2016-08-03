@@ -877,12 +877,18 @@ impl<'parent, P> MpvInstance<'parent, P> for P
             for (i, elem) in props.iter().enumerate() {
                 unsafe {
                     let name = CString::new(elem.name.clone()).unwrap();
-                    // FIXME: don't fail unrecoverably, requires to unobserve pre-failure observed
-                    mpv_err((),
-                                 mpv_observe_property(self.ctx(),
-                                                      (start_id + i) as libc::uint64_t,
-                                                      name.as_ptr(),
-                                                      elem.data.format() as libc::c_int)).unwrap()
+                    let err = mpv_err((),
+                                      mpv_observe_property(self.ctx(),
+                                                           (start_id + i) as libc::uint64_t,
+                                                           name.as_ptr(),
+                                                           elem.data.format() as libc::c_int));
+                    if err.is_err() {
+                        for (_, id) in props_ins {
+                            // Ignore errors.
+                            mpv_unobserve_property(self.ctx(), id);
+                        }
+                        return Err(err.unwrap_err());
+                    }
                 }
                 props_ins.push((elem.name.clone(), (start_id + i) as libc::uint64_t));
             }
@@ -910,8 +916,8 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     /// # Safety
     /// This method is unsafe because arbitrary code may be executed resulting in UB and more.
     unsafe fn command(&self, cmd: &Command) -> Result<(), Error> {
-        // Will probably allocate a little too much, but that is fine to avoid reallocation
-        let mut args = String::with_capacity(cmd.args.iter().fold(0, |acc, ref e| acc + e.len()));
+        let mut args = String::with_capacity(cmd.args.iter()
+                                                     .fold(0, |acc, ref e| acc + e.len() + 1));
         for elem in cmd.args {
             args.push_str(&format!(" {}", elem));
         }
@@ -1229,6 +1235,10 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         }
     }
 
+    // --- Convenience property functions ---
+    //
+    
+
     /// Add -or subtract- any value from a property. Over/underflow clamps to max/min.
     fn add_property(&self, property: &str, value: isize) -> Result<(), Error> {
         unsafe { self.command(&Command::new("add", &[property.into(), format!("{}", value)])) }
@@ -1255,10 +1265,6 @@ impl<'parent, P> MpvInstance<'parent, P> for P
             self.command(&Command::new("multiply", &[property.into(), format!("{}", factor)]))
         }
     }
-
-    // --- Convenience property functions ---
-    //
-
 
     /// Pause playback at runtime.
     fn pause(&self) -> Result<(), Error> {

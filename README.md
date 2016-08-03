@@ -5,5 +5,5 @@ A libmpv abstraction written in rust.
 All pull requests welcome.
 
 # Known issues
-	* Events sometines work, and sometimes don't. Running w/ valgrind seems to increase the chance of it working.
-	* In the events example, log messages sometimes end up in prop_events.
+	Events sometines work, and sometimes don't. Running w/ valgrind seems to increase the chance of it working.
+	In the events example, log messages sometimes end up in prop_events.
