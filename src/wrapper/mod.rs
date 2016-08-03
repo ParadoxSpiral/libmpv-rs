@@ -919,7 +919,8 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         let mut args = String::with_capacity(cmd.args.iter()
                                                      .fold(0, |acc, ref e| acc + e.len() + 1));
         for elem in cmd.args {
-            args.push_str(&format!(" {}", elem));
+            args.push_str(" ");
+            args.push_str(elem);
         }
         let args = CString::new(format!("{}{}", cmd.name, args)).unwrap();
 
