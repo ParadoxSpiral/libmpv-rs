@@ -43,6 +43,11 @@ use std::ops::Drop;
 use std::time::Duration;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+#[cfg(unix)]
+use std::ffi::OsStr;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
+
 macro_rules! destroy_on_err {
     ($ctx:expr, $exec:expr) => (
         {
@@ -72,7 +77,7 @@ static SET_LC_NUMERIC: Once = ONCE_INIT;
 #[derive(Clone, Debug, PartialEq)]
 /// All possible error values returned by this crate.
 pub enum Error {
-    /// An API call did not successfully execute.
+    /// An API call did not execute successfully.
     Mpv(MpvError),
     /// All `suspend` calls have already been undone.
     AlreadyResumed,
@@ -976,14 +981,14 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                         let ret = unsafe { CStr::from_ptr(*ptr) };
 
                         let data;
-                        if cfg!(windows) {
+                        #[cfg(windows)] {
                             // Mpv returns all strings on windows in UTF-8.
                             data = ret.to_str().unwrap().to_owned();
-                        } else if cfg!(unix) {
-                            use std::ffi::OsStr;
-                            use std::os::unix::ffi::OsStrExt;
+                        }
+                        #[cfg(unix)] {
                             data = OsStr::from_bytes(ret.to_bytes()).to_string_lossy().into_owned();
-                        } else {
+                        }
+                        #[cfg(all(not(unix), not(windows)))] {
                             // Hope that all is well
                             data = String::from_utf8_lossy(ret.to_bytes()).into_owned();
                         }

@@ -26,7 +26,7 @@ use std::mem;
 use std::path::Path;
 use std::ffi::CStr;
 
-// Cast `Data` so that libmpv can use it.
+// Cast `&mut Data` so that libmpv can use it.
 macro_rules! data_ptr {
     ($data:ident) => (
         #[allow(match_ref_pats)]
