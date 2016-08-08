@@ -153,13 +153,13 @@ impl FileState {
 /// A command that can be executed by `Mpv`.
 pub struct Command<'a> {
     pub(crate) name: &'a str,
-    pub(crate) args: &'a [String],
+    pub(crate) args: &'a [&'a str],
 }
 
 impl<'a> Command<'a> {
     #[inline]
     /// Create a new `MpvCommand`.
-    pub fn new(name: &'a str, args: &'a [String]) -> Command<'a> {
+    pub fn new(name: &'a str, args: &'a [&'a str]) -> Command<'a> {
         Command {
             name: name,
             args: args,

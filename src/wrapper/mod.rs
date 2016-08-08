@@ -1025,16 +1025,16 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         match *seek {
             Seek::RelativeForward(d) => unsafe {
                 self.command(&Command::new("seek",
-                                           &[format!("{}", d.as_secs()), "relative".into()]))
+                                           &[&format!("{}", d.as_secs()), "relative"]))
 
             },
             Seek::RelativeBackward(d) => unsafe {
                 self.command(&Command::new("seek",
-                                           &[format!("-{}", d.as_secs()), "relative".into()]))
+                                           &[&format!("-{}", d.as_secs()), "relative"]))
             },
             Seek::Absolute(d) => unsafe {
                 self.command(&Command::new("seek",
-                                           &[format!("{}", d.as_secs()), "absolute".into()]))
+                                           &[&format!("{}", d.as_secs()), "absolute"]))
             },
             Seek::RelativePercent(p) => {
                 if p > 100 {
@@ -1044,7 +1044,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                 } else {
                     unsafe {
                         self.command(&Command::new("seek",
-                                                   &[format!("{}", p), "relative-percent".into()]))
+                                                   &[&format!("{}", p), "relative-percent"]))
                     }
                 }
 
@@ -1056,13 +1056,13 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                 } else {
                     unsafe {
                         self.command(&Command::new("seek",
-                                                   &[format!("{}", p), "absolute-percent".into()]))
+                                                   &[&format!("{}", p), "absolute-percent"]))
                     }
                 }
             }
             Seek::Revert => unsafe { self.command(&Command::new("revert-seek", &[])) },
             Seek::RevertMark => unsafe {
-                self.command(&Command::new("revert-seek", &["mark".into()]))
+                self.command(&Command::new("revert-seek", &["mark"]))
             },
             Seek::Frame => unsafe { self.command(&Command::new("frame-step", &[])) },
             Seek::FrameBack => unsafe { self.command(&Command::new("frame-back-step", &[])) },
@@ -1073,25 +1073,25 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     fn screenshot(&self, st: &Screenshot) -> Result<(), Error> {
         match *st {
             Screenshot::Subtitles => unsafe {
-                self.command(&Command::new("screenshot", &["subtitles".into()]))
+                self.command(&Command::new("screenshot", &["subtitles"]))
             },
             Screenshot::SubtitlesFile(ref p) => unsafe {
                 self.command(&Command::new("screenshot",
-                                           &[p.to_str().unwrap().into(), "subtitles".into()]))
+                                           &[p.to_str().unwrap(), "subtitles"]))
             },
             Screenshot::Video => unsafe {
-                self.command(&Command::new("screenshot", &["video".into()]))
+                self.command(&Command::new("screenshot", &["video"]))
             },
             Screenshot::VideoFile(ref p) => unsafe {
                 self.command(&Command::new("screenshot",
-                                           &[p.to_str().unwrap().into(), "video".into()]))
+                                           &[p.to_str().unwrap().into(), "video"]))
             },
             Screenshot::Window => unsafe {
-                self.command(&Command::new("screenshot", &["window".into()]))
+                self.command(&Command::new("screenshot", &["window"]))
             },
             Screenshot::WindowFile(ref p) => unsafe {
                 self.command(&Command::new("screenshot",
-                                           &[p.to_str().unwrap().into(), "window".into()]))
+                                           &[p.to_str().unwrap(), "window"]))
             },
         }
     }
@@ -1100,62 +1100,63 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     fn playlist(&self, op: &PlaylistOp) -> Result<(), Error> {
         match *op {
             PlaylistOp::NextWeak => unsafe {
-                self.command(&Command::new("playlist-next", &["weak".into()]))
+                self.command(&Command::new("playlist-next", &["weak"]))
             },
             PlaylistOp::NextForce => unsafe {
-                self.command(&Command::new("playlist-next", &["force".into()]))
+                self.command(&Command::new("playlist-next", &["force"]))
             },
             PlaylistOp::PreviousWeak => unsafe {
-                self.command(&Command::new("playlist-previous", &["weak".into()]))
+                self.command(&Command::new("playlist-previous", &["weak"]))
             },
             PlaylistOp::PreviousForce => unsafe {
-                self.command(&Command::new("playlist-previous", &["force".into()]))
+                self.command(&Command::new("playlist-previous", &["force"]))
             },
             PlaylistOp::LoadlistReplace(p) => unsafe {
                 self.command(&Command::new("loadlist",
-                                           &[format!("\"{}\"", p.to_str().unwrap()),
-                                             "replace".into()]))
+                                           &[&format!("\"{}\"", p.to_str().unwrap()),
+                                             "replace"]))
             },
             PlaylistOp::LoadlistAppend(p) => unsafe {
                 self.command(&Command::new("loadlist",
-                                           &[format!("\"{}\"", p.to_str().unwrap()),
-                                             "append".into()]))
+                                           &[&format!("\"{}\"", p.to_str().unwrap()),
+                                             "append"]))
             },
             PlaylistOp::Clear => unsafe { self.command(&Command::new("playlist-clear", &[])) },
             PlaylistOp::RemoveCurrent => unsafe {
-                self.command(&Command::new("playlist-remove", &["current".into()]))
+                self.command(&Command::new("playlist-remove", &["current"]))
             },
             PlaylistOp::RemoveIndex(i) => unsafe {
-                self.command(&Command::new("playlist-remove", &[format!("{}", i)]))
+                self.command(&Command::new("playlist-remove", &[&format!("{}", i)]))
             },
             PlaylistOp::Move((old, new)) => unsafe {
                 self.command(&Command::new("playlist-move",
-                                           &[format!("{}", new), format!("{}", old)]))
+                                           &[&format!("{}", new), &format!("{}", old)]))
             },
             PlaylistOp::Shuffle => unsafe { self.command(&Command::new("playlist-shuffle", &[])) },
             PlaylistOp::Loadfiles(lfiles) => {
                 for (i, elem) in lfiles.iter().enumerate() {
                     let ret = unsafe {
+                        let args = match elem.options {
+                                        Some(v) => {
+                                            [format!("\"{}\"",
+                                                     elem.path
+                                                         .to_str()
+                                                         .unwrap()),
+                                             elem.state.val().into(),
+                                             v.into()]
+                                        }
+                                        None => {
+                                            [format!("\"{}\"",
+                                                     elem.path
+                                                         .to_str()
+                                                         .unwrap()),
+                                             elem.state.val().into(),
+                                             "".into()]
+                                        }
+                                    };
                         self.command(&Command {
                             name: "loadfile",
-                            args: &match elem.options {
-                                Some(v) => {
-                                    [format!("\"{}\"",
-                                             elem.path
-                                                 .to_str()
-                                                 .unwrap()),
-                                     elem.state.val().into(),
-                                     v.into()]
-                                }
-                                None => {
-                                    [format!("\"{}\"",
-                                             elem.path
-                                                 .to_str()
-                                                 .unwrap()),
-                                     elem.state.val().into(),
-                                     "".into()]
-                                }
-                            },
+                            args: &[&args[0], &args[1], &args[2]],
                         })
                     };
                     if ret.is_err() {
@@ -1172,8 +1173,8 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         match *op {
             SubOp::AddSelect(p, t, l) => unsafe {
                 self.command(&Command::new("sub-add",
-                                           &[format!("\"{}\"", p.to_str().unwrap()),
-                                             format!("select{}{}",
+                                           &[&format!("\"{}\"", p.to_str().unwrap()),
+                                             &format!("select{}{}",
                                                      if t.is_some() {
                                                          format!(" {}", t.unwrap())
                                                      } else {
@@ -1187,8 +1188,8 @@ impl<'parent, P> MpvInstance<'parent, P> for P
             },
             SubOp::AddAuto(p, t, l) => unsafe {
                 self.command(&Command::new("sub-add",
-                                           &[format!("\"{}\"", p.to_str().unwrap()),
-                                             format!("auto{}{}",
+                                           &[&format!("\"{}\"", p.to_str().unwrap()),
+                                             &format!("auto{}{}",
                                                      if t.is_some() {
                                                          format!(" {}", t.unwrap())
                                                      } else {
@@ -1201,42 +1202,42 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                                                      })]))
             },
             SubOp::AddCached(p, t, l) => unsafe {
+                let t = if t.is_some() {
+                            format!(" {}", t.unwrap())
+                        } else {
+                            "".into()
+                        };
+                let l = if l.is_some() {
+                            format!(" {}", l.unwrap())
+                        } else {
+                            "".into()
+                        };
                 self.command(&Command::new("sub-add",
-                                           &[format!("\"{}\"", p.to_str().unwrap()),
-                                             format!("cached{}{}",
-                                                     if t.is_some() {
-                                                         format!(" {}", t.unwrap())
-                                                     } else {
-                                                         "".into()
-                                                     },
-                                                     if l.is_some() {
-                                                         format!(" {}", l.unwrap())
-                                                     } else {
-                                                         "".into()
-                                                     })]))
+                                           &[&format!("\"{}\"", p.to_str().unwrap()),
+                                             &format!("cached{}{}", t, l)]))
             },
             SubOp::Remove(i) => unsafe {
-                self.command(&Command::new("sub-remove",
-                                           &if i.is_some() {
-                                               vec![format!("{}", i.unwrap())]
-                                           } else {
-                                               vec![]
-                                           }))
+                let i = if i.is_some() {
+                            format!("{}", i.unwrap())
+                        } else {
+                            "".into()
+                        };
+                self.command(&Command::new("sub-remove", &[&i]))
             },
             SubOp::Reload(i) => unsafe {
-                self.command(&Command::new("sub-reload",
-                                           &if i.is_some() {
-                                               vec![format!("{}", i.unwrap())]
-                                           } else {
-                                               vec![]
-                                           }))
+                let i = if i.is_some() {
+                            format!("{}", i.unwrap())
+                        } else {
+                            "".into()
+                        };
+                self.command(&Command::new("sub-reload", &[&i]))
             },
             SubOp::Step(i) => unsafe {
-                self.command(&Command::new("sub-step", &[format!("{}", i)]))
+                self.command(&Command::new("sub-step", &[&format!("{}", i)]))
             },
-            SubOp::SeekForward => unsafe { self.command(&Command::new("sub-seek", &["1".into()])) },
+            SubOp::SeekForward => unsafe { self.command(&Command::new("sub-seek", &["1"])) },
             SubOp::SeekBackward => unsafe {
-                self.command(&Command::new("sub-seek", &["-1".into()]))
+                self.command(&Command::new("sub-seek", &["-1"]))
             },
         }
     }
@@ -1247,7 +1248,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
 
     /// Add -or subtract- any value from a property. Over/underflow clamps to max/min.
     fn add_property(&self, property: &str, value: isize) -> Result<(), Error> {
-        unsafe { self.command(&Command::new("add", &[property.into(), format!("{}", value)])) }
+        unsafe { self.command(&Command::new("add", &[property, &format!("{}", value)])) }
     }
 
     /// Cycle through a given property. `up` specifies direction. On
@@ -1255,20 +1256,19 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     fn cycle_property(&self, property: &str, up: &bool) -> Result<(), Error> {
         unsafe {
             self.command(&Command::new("cycle",
-                                       &[property.into(),
+                                       &[&property,
                                          if *up {
                                              "up"
                                          } else {
                                              "down"
-                                         }
-                                         .into()]))
+                                         }]))
         }
     }
 
     /// Multiply any property with any positive factor.
     fn multiply_property(&self, property: &str, factor: &usize) -> Result<(), Error> {
         unsafe {
-            self.command(&Command::new("multiply", &[property.into(), format!("{}", factor)]))
+            self.command(&Command::new("multiply", &[property, &format!("{}", factor)]))
         }
     }
 
