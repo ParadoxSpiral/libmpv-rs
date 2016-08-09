@@ -29,4 +29,4 @@ parking_lot = {version = "0.2", features = ['nightly']}
 enum_primitive = "0.1"
 
 [features]
-static = [] # link mpv statically (does this even work?...)
+static = [] # link mpv statically (testing needed)

@@ -18,6 +18,8 @@
 
 use super::*;
 
+use std::path::Path;
+
 #[test]
 fn version() {
     assert_eq!(super::MPV_CLIENT_API_VERSION,
@@ -35,7 +37,7 @@ fn options_properties() {
     mpv.set_option(&mut Property::new("ytdl", Data::new(true))).unwrap();
     let mpv = mpv.init().unwrap();
 
-    mpv.playlist(&PlaylistOp::Loadfiles(&[File::new(::std::path::Path::new("https://www.youtube.\
+    mpv.playlist(&PlaylistOp::Loadfiles(&[File::new(Path::new("https://www.youtube.\
                                                                    com/watch?v=DLzxrzFCyOs"),
                                                         FileState::AppendPlay,
                                                         None)]))

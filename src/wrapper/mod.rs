@@ -148,48 +148,56 @@ impl Data {
 }
 
 impl Into<Data> for String {
+    #[inline]
     fn into(self) -> Data {
         Data::String(self)
     }
 }
 
 impl Into<Data> for bool {
+    #[inline]
     fn into(self) -> Data {
         Data::Flag(self)
     }
 }
 
 impl Into<Data> for i32 {
+    #[inline]
     fn into(self) -> Data {
         Data::Int64(self as libc::int64_t)
     }
 }
 
 impl Into<Data> for i64 {
+    #[inline]
     fn into(self) -> Data {
         Data::Int64(self as libc::int64_t)
     }
 }
 
 impl Into<Data> for u32 {
+    #[inline]
     fn into(self) -> Data {
         Data::Int64(self as libc::int64_t)
     }
 }
 
 impl Into<Data> for f32 {
+    #[inline]
     fn into(self) -> Data {
         Data::Double(self as libc::c_double)
     }
 }
 
 impl Into<Data> for f64 {
+    #[inline]
     fn into(self) -> Data {
         Data::Double(self as libc::c_double)
     }
 }
 
 impl Into<Data> for MpvNode {
+    #[inline]
     fn into(self) -> Data {
         Data::Node(self)
     }
@@ -227,6 +235,7 @@ impl Property {
 }
 
 impl PartialEq<Property> for Property {
+    #[inline]
     fn eq(&self, other: &Property) -> bool {
         self.name == other.name
     }
@@ -364,6 +373,7 @@ pub struct UninitializedParent {
 }
 
 impl UninitializedParent {
+    #[inline]
     /// Initialize the mpv core, return an initialized `Parent`.
     pub fn init(mut self) -> Result<Parent, Error> {
         self.drop_do_destroy = false;
@@ -371,6 +381,7 @@ impl UninitializedParent {
         Parent::from_uninitialized(self)
     }
 
+    #[inline]
     /// Create a new `UninitializedParent` instance.
     pub fn new(check_events: bool) -> Result<UninitializedParent, Error> {
         SET_LC_NUMERIC.call_once(|| {
@@ -426,6 +437,7 @@ impl UninitializedParent {
         })
     }
 
+    #[inline]
     /// Set an option.
     pub fn set_option(&self, opt: &mut Property) -> Result<(), Error> {
         let name = CString::new(&opt.name[..]).unwrap().into_raw();
@@ -454,6 +466,7 @@ impl UninitializedParent {
         ret
     }
 
+    #[inline]
     /// Load a configuration file into the `Mpv` instance.
     /// The path has to be absolute, and a file.
     pub fn load_config(&self, path: &Path) -> Result<(), Error> {
@@ -471,6 +484,7 @@ impl UninitializedParent {
 }
 
 impl Drop for UninitializedParent {
+    #[inline]
     fn drop(&mut self) {
         if self.drop_do_destroy {
             unsafe {
@@ -576,6 +590,7 @@ unsafe impl<'parent> MpvMarker for Client<'parent> {
 }
 
 impl Drop for Parent {
+    #[inline]
     fn drop(&mut self) {
         self.drop_ev_iter_step();
         unsafe {
@@ -585,6 +600,7 @@ impl Drop for Parent {
 }
 
 impl<'parent> Drop for Client<'parent> {
+    #[inline]
     fn drop(&mut self) {
         self.drop_ev_iter_step();
         unsafe {
@@ -594,6 +610,7 @@ impl<'parent> Drop for Client<'parent> {
 }
 
 impl<'parent> Parent {
+    #[inline]
     /// Create a new `Mpv` instance.
     /// To call any method except for `set_option` on this, it has to be initialized first.
     /// The default settings can be probed by running: ```$ mpv --show-profile=libmpv```
@@ -705,6 +722,7 @@ impl<'parent> Parent {
         })
     }
 
+    #[inline]
     /// Create a client with `name`, that is connected to the core of `self`, but has an own queue
     /// for API events and such.
     pub fn new_client(&self, name: &str, check_events: bool) -> Result<Client, Error> {
@@ -772,26 +790,29 @@ impl<'parent> Parent {
         Ok(instance)
     }
 
+    #[inline]
     /// Suspend the playback thread, or freeze the core. If the core is suspended, only
     /// client API calls will be accepted, ie. input, redrawing etc. will be suspended.
     /// For the thread to resume there has to be one `resume` call for each `suspend` call.
     pub fn suspend(&self) -> Result<(), Error> {
-        self.suspension_count.fetch_add(1, Ordering::AcqRel);
+        self.suspension_count.fetch_add(1, Ordering::Release);
         Ok(unsafe { mpv_suspend(self.ctx()) })
     }
 
+    #[inline]
     /// See `suspend`.
     pub fn resume(&self) -> Result<(), Error> {
         if self.suspension_count.load(Ordering::Acquire) == 0 {
             Err(Error::AlreadyResumed)
         } else {
-            self.suspension_count.fetch_sub(1, Ordering::AcqRel);
+            self.suspension_count.fetch_sub(1, Ordering::Release);
             Ok(unsafe { mpv_resume(self.ctx()) })
         }
     }
 }
 
 impl<'parent> Client<'parent> {
+    #[inline]
     /// Returns the name associated with the instance.
     pub fn name(&self) -> &str {
         unsafe { CStr::from_ptr(mpv_client_name(self.ctx())).to_str().unwrap() }
@@ -836,6 +857,7 @@ pub trait MpvInstance<'parent, P>
 impl<'parent, P> MpvInstance<'parent, P> for P
     where P: MpvMarker + 'parent
 {
+    #[inline]
     /// Observe given `Event`s.
     /// Returns an `EventIter`, on which `next` can be called that blocks while waiting for new
     /// `Event`s.
@@ -914,6 +936,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         }
     }
 
+    #[inline]
     /// Send a command to the `Mpv` instance. This uses `mpv_command_string` internally,
     /// so that the syntax is the same as described in the [manual for the input.conf]
     /// (https://mpv.io/manual/master/#list-of-input-commands).
@@ -932,6 +955,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         mpv_err((), mpv_command_string(self.ctx(), args.as_ptr()))
     }
 
+    #[inline]
     /// Set the value of a property.
     fn set_property(&self, prop: &mut Property) -> Result<(), Error> {
         let format = prop.data.format().as_val();
@@ -961,6 +985,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         ret
     }
 
+    #[inline]
     /// Get the value of a property.
     fn get_property(&self, name: &str, format: &Format) -> Result<Data, Error> {
         let name = CString::new(name).unwrap();
@@ -1020,6 +1045,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     //
 
 
+    #[inline]
     /// Seek as defined by `Seek`.
     fn seek(&self, seek: &Seek) -> Result<(), Error> {
         match *seek {
@@ -1069,6 +1095,8 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         }
     }
 
+
+    #[inline]
     /// Take a screenshot as defined by `Screenshot`.
     fn screenshot(&self, st: &Screenshot) -> Result<(), Error> {
         match *st {
@@ -1096,6 +1124,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         }
     }
 
+    #[inline]
     /// Execute an operation on the playlist as defined by `PlaylistOp`
     fn playlist(&self, op: &PlaylistOp) -> Result<(), Error> {
         match *op {
@@ -1168,6 +1197,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         }
     }
 
+    #[inline]
     /// Execute an operation as defined by `SubOp`.
     fn subtitle(&self, op: &SubOp) -> Result<(), Error> {
         match *op {
@@ -1246,17 +1276,19 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     //
     
 
+    #[inline]
     /// Add -or subtract- any value from a property. Over/underflow clamps to max/min.
     fn add_property(&self, property: &str, value: isize) -> Result<(), Error> {
         unsafe { self.command(&Command::new("add", &[property, &format!("{}", value)])) }
     }
 
+    #[inline]
     /// Cycle through a given property. `up` specifies direction. On
     /// overflow, set the property back to the minimum, on underflow set it to the maximum.
     fn cycle_property(&self, property: &str, up: &bool) -> Result<(), Error> {
         unsafe {
             self.command(&Command::new("cycle",
-                                       &[&property,
+                                       &[property,
                                          if *up {
                                              "up"
                                          } else {
@@ -1265,6 +1297,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         }
     }
 
+    #[inline]
     /// Multiply any property with any positive factor.
     fn multiply_property(&self, property: &str, factor: &usize) -> Result<(), Error> {
         unsafe {
@@ -1272,11 +1305,13 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         }
     }
 
+    #[inline]
     /// Pause playback at runtime.
     fn pause(&self) -> Result<(), Error> {
         self.set_property(&mut Property::new("pause", Data::Flag(true)))
     }
 
+    #[inline]
     /// Unpause playback at runtime.
     fn unpause(&self) -> Result<(), Error> {
         self.set_property(&mut Property::new("pause", Data::Flag(false)))
