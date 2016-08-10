@@ -41,7 +41,6 @@ use std::ptr;
 use std::ffi::{CStr, CString};
 use std::ops::Drop;
 use std::time::Duration;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[cfg(unix)]
 use std::ffi::OsStr;
@@ -500,7 +499,7 @@ impl Drop for UninitializedParent {
 /// Any method on this struct may panic if any argument contains invalid utf-8.
 pub struct Parent {
     ctx: *mut MpvHandle,
-    suspension_count: AtomicUsize,
+    suspension_count: Mutex<usize>,
     check_events: bool,
     ev_iter_notification: Option<*mut (Mutex<bool>, Condvar)>,
     ev_to_observe: Option<Mutex<Vec<Event>>>,
@@ -683,7 +682,7 @@ impl<'parent> Parent {
 
         Ok(Parent {
             ctx: ctx,
-            suspension_count: AtomicUsize::new(0),
+            suspension_count: Mutex::new(0),
             check_events: check_events,
             ev_iter_notification: ev_iter_notification,
             ev_to_observe: ev_to_observe,
@@ -713,7 +712,7 @@ impl<'parent> Parent {
 
         Ok(Parent {
             ctx: uninit.ctx,
-            suspension_count: AtomicUsize::new(0),
+            suspension_count: Mutex::new(0),
             check_events: uninit.check_events,
             ev_iter_notification: ev_iter_notification,
             ev_to_observe: ev_to_observe,
@@ -791,21 +790,22 @@ impl<'parent> Parent {
     }
 
     #[inline]
-    /// Suspend the playback thread, or freeze the core. If the core is suspended, only
-    /// client API calls will be accepted, ie. input, redrawing etc. will be suspended.
-    /// For the thread to resume there has to be one `resume` call for each `suspend` call.
+    /// Suspend the playback thread. If the core is suspended, only client API calls will be
+    /// accepted, ie. input, redrawing etc. will be suspended.
+    /// For the suspended to resume there has to be one `resume` call for each `suspend` call.
     pub fn suspend(&self) -> Result<(), Error> {
-        self.suspension_count.fetch_add(1, Ordering::Release);
+        *self.suspension_count.lock() += 1;
         Ok(unsafe { mpv_suspend(self.ctx()) })
     }
 
     #[inline]
     /// See `suspend`.
     pub fn resume(&self) -> Result<(), Error> {
-        if self.suspension_count.load(Ordering::Acquire) == 0 {
+        let mut guard = self.suspension_count.lock();
+        if *guard == 0 {
             Err(Error::AlreadyResumed)
         } else {
-            self.suspension_count.fetch_sub(1, Ordering::Release);
+            *guard -= 1;
             Ok(unsafe { mpv_resume(self.ctx()) })
         }
     }
@@ -848,9 +848,9 @@ pub trait MpvInstance<'parent, P>
     fn cycle_property(&self, property: &str, up: &bool) -> Result<(), Error>;
     /// Multiply a given named property by an unsigned factor.
     fn multiply_property(&self, property: &str, factor: &usize) -> Result<(), Error>;
-    /// Pause playblack.
+    /// Pause playback.
     fn pause(&self) -> Result<(), Error>;
-    /// Unpause playblack.
+    /// Unpause playback.
     fn unpause(&self) -> Result<(), Error>;
 }
 
@@ -858,9 +858,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     where P: MpvMarker + 'parent
 {
     #[inline]
-    /// Observe given `Event`s.
-    /// Returns an `EventIter`, on which `next` can be called that blocks while waiting for new
-    /// `Event`s.
+    /// Observe given `Event`s via an `EventIter`.
     fn observe_all(&self, events: &[Event]) -> Result<EventIter<P>, Error> {
         if self.check_events() {
             let mut observe = self.ev_to_observe().as_ref().unwrap().lock();
