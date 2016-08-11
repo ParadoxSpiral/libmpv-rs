@@ -16,7 +16,7 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-#![allow(dead_code, improper_ctypes, missing_docs)]
+#![allow(dead_code, improper_ctypes, missing_docs, non_camel_case_types)]
 use libc;
 
 pub mod prototype {
@@ -187,7 +187,6 @@ pub struct MpvEventClientMessage {
 }
 
 #[repr(C)]
-#[derive(Debug)]
 pub struct MpvEvent {
     pub event_id: MpvEventId,
     pub error: libc::c_int,
@@ -195,14 +194,36 @@ pub struct MpvEvent {
     pub data: *mut libc::c_void,
 }
 
-// Needed because used in lazy_static.
-unsafe impl Send for MpvEvent {}
-unsafe impl Sync for MpvEvent {}
-
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MpvSubApi {
     OpenglCb = 1,
+}
+
+pub type mpv_stream_cb_read_fn = extern "C" fn(cookie: *mut libc::c_void,
+                                               buf: *mut libc::c_char,
+                                               nbytes: libc::uint64_t) -> libc::int64_t;
+pub type mpv_stream_cb_seek_fn = extern "C" fn(cookie: *mut libc::c_void, offset: libc::int64_t)
+                                                                                 -> libc::int64_t;
+pub type mpv_stream_cb_size_fn = extern "C" fn(cookie: *mut libc::c_void) -> libc::int64_t;
+pub type mpv_stream_cb_close_fn = extern "C" fn(cookie: *mut libc::c_void) -> libc::c_void;
+
+pub type mpv_stream_cb_open_ro_fn = extern "C" fn(user_data: *mut libc::c_void,
+                                                  uri: *mut libc::c_char,
+                                                  info: *mut mpv_stream_cb_info) -> libc::c_int;
+pub type mpv_stream_cb_add_ro = extern "C" fn(ctx: *mut prototype::MpvHandle,
+                                              protocol: *const libc::c_char,
+                                              user_data: *mut libc::c_void,
+                                              open_fn: mpv_stream_cb_open_ro_fn) -> libc::c_int;
+
+#[repr(C)]
+pub struct mpv_stream_cb_info {
+    pub cookie: *mut libc::c_void,
+
+    pub read_fn: mpv_stream_cb_read_fn,
+    pub seek_fn: mpv_stream_cb_seek_fn,
+    pub size_fn: mpv_stream_cb_size_fn,
+    pub close_fn: mpv_stream_cb_close_fn,
 }
 
 #[cfg_attr(feature="static", link(name = "mpv", kind = "static"))]
