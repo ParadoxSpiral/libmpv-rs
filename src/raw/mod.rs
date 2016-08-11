@@ -49,6 +49,7 @@ enum_from_primitive! {
         UnknownFormat = -17,
         Unsupported = -18,
         NotImplemented = -19,
+        Generic = -20,
     }
 }
 

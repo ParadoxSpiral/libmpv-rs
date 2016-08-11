@@ -24,7 +24,7 @@
 //! [https://github.com/mpv-player/mpv/tree/master/libmpv] of the (mpv media player)
 //! [https://github.com/mpv-player/mpv].
 //!
-//! Libmpv requires `LC_NUMERIC` to be `C`. This is set once the first `Parent` is created.
+//! Libmpv requires `LC_NUMERIC` to be `C`. This is set once when the first `Parent` is created.
 //! Do not change this during the usage of this crate.
 //!
 //! # Examples
@@ -51,7 +51,7 @@ mod tests;
 #[allow(missing_docs)]
 pub const MPV_CLIENT_API_MAJOR: u32 = 1;
 #[allow(missing_docs)]
-pub const MPV_CLIENT_API_MINOR: u32 = 21;
+pub const MPV_CLIENT_API_MINOR: u32 = 22;
 #[allow(missing_docs)]
 pub const MPV_CLIENT_API_VERSION: u32 = mpv_make_version(MPV_CLIENT_API_MAJOR,
                                                          MPV_CLIENT_API_MINOR);

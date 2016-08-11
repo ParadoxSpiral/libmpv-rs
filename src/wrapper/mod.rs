@@ -900,20 +900,20 @@ impl<'parent, P> MpvInstance<'parent, P> for P
             let mut props_ins = Vec::with_capacity(events.len());
             let start_id = properties.len();
             for (i, elem) in props.iter().enumerate() {
-                unsafe {
-                    let name = CString::new(elem.name.clone()).unwrap();
-                    let err = mpv_err((),
-                                      mpv_observe_property(self.ctx(),
-                                                           (start_id + i) as libc::uint64_t,
-                                                           name.as_ptr(),
-                                                           elem.data.format() as libc::c_int));
-                    if err.is_err() {
-                        for (_, id) in props_ins {
-                            // Ignore errors.
-                            mpv_unobserve_property(self.ctx(), id);
-                        }
-                        return Err(err.unwrap_err());
+                let name = CString::new(elem.name.clone()).unwrap();
+                let err = mpv_err((),
+                                  unsafe {
+                                    mpv_observe_property(self.ctx(),
+                                                         (start_id + i) as libc::uint64_t,
+                                                         name.as_ptr(),
+                                                         elem.data.format() as libc::c_int)
+                                  });
+                if err.is_err() {
+                    for (_, id) in props_ins {
+                        // Ignore errors.
+                        unsafe { mpv_unobserve_property(self.ctx(), id) };
                     }
+                    return Err(err.unwrap_err());
                 }
                 props_ins.push((elem.name.clone(), (start_id + i) as libc::uint64_t));
             }
