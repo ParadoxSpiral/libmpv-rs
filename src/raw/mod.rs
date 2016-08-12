@@ -210,14 +210,10 @@ pub type mpv_stream_cb_close_fn = extern "C" fn(cookie: *mut libc::c_void) -> li
 
 pub type mpv_stream_cb_open_ro_fn = extern "C" fn(user_data: *mut libc::c_void,
                                                   uri: *mut libc::c_char,
-                                                  info: *mut mpv_stream_cb_info) -> libc::c_int;
-pub type mpv_stream_cb_add_ro = extern "C" fn(ctx: *mut prototype::MpvHandle,
-                                              protocol: *const libc::c_char,
-                                              user_data: *mut libc::c_void,
-                                              open_fn: mpv_stream_cb_open_ro_fn) -> libc::c_int;
+                                                  info: *mut MpvStreamCbInfo) -> libc::c_int;
 
 #[repr(C)]
-pub struct mpv_stream_cb_info {
+pub struct MpvStreamCbInfo { 
     pub cookie: *mut libc::c_void,
 
     pub read_fn: mpv_stream_cb_read_fn,
@@ -327,4 +323,9 @@ extern "C" {
     pub fn mpv_get_wakeup_pipe(ctx: *mut prototype::MpvHandle) -> libc::c_int;
     pub fn mpv_wait_async_requests(ctx: *mut prototype::MpvHandle);
     pub fn mpv_get_sub_api(ctx: *mut prototype::MpvHandle, sub_api: MpvSubApi);
+    pub fn mpv_stream_cb_add_ro(ctx: *mut prototype::MpvHandle,
+                                protocol: *const libc::c_char,
+                                user_data: *mut libc::c_void,
+                                open_fn: mpv_stream_cb_open_ro_fn)
+                                -> libc::c_int;
 }
