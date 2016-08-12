@@ -19,6 +19,8 @@
 use super::*;
 
 use std::path::Path;
+use std::time::Duration;
+use std::thread;
 
 #[test]
 fn version() {
@@ -42,6 +44,8 @@ fn options_properties() {
                                                         FileState::AppendPlay,
                                                         None)]))
            .unwrap();
+
+    thread::sleep(Duration::from_millis(250));
 
     assert_eq!(Data::new(0),
                mpv.get_property("volume", &Format::Int64)

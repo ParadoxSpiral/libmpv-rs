@@ -101,7 +101,7 @@ impl MpvError {
 
 impl MpvFormat {
     pub(crate) fn as_val(self) -> libc::c_int {
-        self as libc::c_int
+        self as _
     }
 }
 

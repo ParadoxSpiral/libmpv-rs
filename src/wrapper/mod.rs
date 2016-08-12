@@ -139,9 +139,9 @@ impl Data {
         debug_assert!(!ptr.is_null());
         match fmt {
             MpvFormat::Flag => Data::Flag(unsafe { *(ptr as *mut libc::int64_t) } != 0),
-            MpvFormat::Int64 => Data::Int64(unsafe { *(ptr as *mut libc::int64_t) }),
-            MpvFormat::Double => Data::Double(unsafe { *(ptr as *mut libc::c_double) }),
-            MpvFormat::Node => Data::Node(unsafe { *(ptr as *mut MpvNode) }),
+            MpvFormat::Int64 => Data::Int64(unsafe { *(ptr as *mut _) }),
+            MpvFormat::Double => Data::Double(unsafe { *(ptr as *mut _) }),
+            MpvFormat::Node => Data::Node(unsafe { *(ptr as *mut _) }),
             _ => unreachable!(),
         }
     }
@@ -164,35 +164,35 @@ impl Into<Data> for bool {
 impl Into<Data> for i32 {
     #[inline]
     fn into(self) -> Data {
-        Data::Int64(self as libc::int64_t)
+        Data::Int64(self as _)
     }
 }
 
 impl Into<Data> for i64 {
     #[inline]
     fn into(self) -> Data {
-        Data::Int64(self as libc::int64_t)
+        Data::Int64(self as _)
     }
 }
 
 impl Into<Data> for u32 {
     #[inline]
     fn into(self) -> Data {
-        Data::Int64(self as libc::int64_t)
+        Data::Int64(self as _)
     }
 }
 
 impl Into<Data> for f32 {
     #[inline]
     fn into(self) -> Data {
-        Data::Double(self as libc::c_double)
+        Data::Double(self as _)
     }
 }
 
 impl Into<Data> for f64 {
     #[inline]
     fn into(self) -> Data {
-        Data::Double(self as libc::c_double)
+        Data::Double(self as _)
     }
 }
 
@@ -448,7 +448,7 @@ impl UninitializedParent {
                 let data = CString::new(v.as_bytes()).unwrap().into_raw();
 
                 let ret = mpv_err((), unsafe {
-                    mpv_set_option(self.ctx, name, format, data as *mut libc::c_void)
+                    mpv_set_option(self.ctx, name, format, data as *mut _)
                 });
                 unsafe {
                     CString::from_raw(data);
@@ -648,7 +648,7 @@ impl<'parent> Parent {
                 unsafe {
                     mpv_set_wakeup_callback(ctx,
                                             event_callback,
-                                            ev_iter_notification as *mut libc::c_void);
+                                            ev_iter_notification as *mut _);
                 }
 
                 (Some(ev_iter_notification),
@@ -699,7 +699,7 @@ impl<'parent> Parent {
                 unsafe {
                     mpv_set_wakeup_callback(uninit.ctx,
                                             event_callback,
-                                            ev_iter_notification as *mut libc::c_void);
+                                            ev_iter_notification as *mut _);
                 }
 
                 (Some(ev_iter_notification),
@@ -747,7 +747,7 @@ impl<'parent> Parent {
                 unsafe {
                     mpv_set_wakeup_callback(ctx,
                                             event_callback,
-                                            ev_iter_notification as *mut libc::c_void);
+                                            ev_iter_notification as *mut _);
                 }
 
                 (Some(ev_iter_notification),
@@ -904,9 +904,9 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                 let err = mpv_err((),
                                   unsafe {
                                     mpv_observe_property(self.ctx(),
-                                                         (start_id + i) as libc::uint64_t,
+                                                         (start_id + i) as _,
                                                          name.as_ptr(),
-                                                         elem.data.format() as libc::c_int)
+                                                         elem.data.format() as _)
                                   });
                 if err.is_err() {
                     for (_, id) in props_ins {
@@ -915,7 +915,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                     }
                     return Err(err.unwrap_err());
                 }
-                props_ins.push((elem.name.clone(), (start_id + i) as libc::uint64_t));
+                props_ins.push((elem.name.clone(), (start_id + i) as _));
             }
             observe.extend(evs.clone());
             properties.extend(props_ins);
@@ -964,7 +964,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                 let data = CString::new(v.as_bytes()).unwrap().into_raw();
 
                 let ret = mpv_err((), unsafe {
-                    mpv_set_property(self.ctx(), name, format, data as *mut libc::c_void)
+                    mpv_set_property(self.ctx(), name, format, data as *mut _)
                 });
                 unsafe {
                     CString::from_raw(data);
@@ -988,13 +988,13 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         let name = CString::new(name).unwrap();
         match *format {
             Format::String | Format::OsdString => {
-                let mut ptr = &mut ptr::null::<libc::c_char>();
+                let mut ptr = &mut ptr::null();
 
                 let err = mpv_err((), unsafe {
                     mpv_get_property(self.ctx(),
                                      name.as_ptr(),
                                      format.as_mpv_format().as_val(),
-                                     ptr as *mut *const libc::c_char as *mut libc::c_void)
+                                     ptr as *mut *const libc::c_char as *mut _)
                 });
                 debug_assert!(!ptr.is_null());
 
@@ -1015,7 +1015,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                             data = String::from_utf8_lossy(ret.to_bytes()).into_owned();
                         }
 
-                        unsafe{mpv_free(*ptr as *mut libc::c_void)}
+                        unsafe{mpv_free(*ptr as *mut _)}
 
                         Ok(match *format {
                             Format::String => Data::String(data),
@@ -1025,7 +1025,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                     })
             }
             _ => {
-                let ptr: *mut libc::c_void = unsafe { libc::malloc(format.size()) };
+                let ptr = unsafe { libc::malloc(format.size()) };
 
                 mpv_err((), unsafe {
                     mpv_get_property(self.ctx(),
