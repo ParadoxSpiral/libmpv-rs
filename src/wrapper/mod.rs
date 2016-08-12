@@ -456,8 +456,7 @@ impl UninitializedParent {
                 ret
             }
             _ => {
-                let data = &mut opt.data;
-                let data = data_ptr!(data);
+                let data = data_ptr!(&mut opt.data);
 
                 mpv_err((), unsafe { mpv_set_option(self.ctx, name, format, data) })
             }
@@ -973,8 +972,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                 ret
             }
             _ => {
-                let data = &mut prop.data;
-                let data = data_ptr!(data);
+                let data = data_ptr!(&mut prop.data);
 
                 mpv_err((),
                         unsafe { mpv_set_property(self.ctx(), name, format, data) })

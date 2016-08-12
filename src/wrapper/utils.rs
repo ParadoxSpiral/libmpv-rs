@@ -28,7 +28,7 @@ use std::ffi::CStr;
 
 // Cast `&mut Data` so that libmpv can use it.
 macro_rules! data_ptr {
-    ($data:ident) => (
+    ($data:expr) => (
         #[allow(match_ref_pats)]
         match $data {
             &mut Data::Flag(ref mut v) =>
