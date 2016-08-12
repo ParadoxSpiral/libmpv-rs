@@ -97,7 +97,8 @@ pub enum Error {
     /// Mpv returned a string that uses an unsupported codec. Inside are the raw bytes cast to u8.
     UnsupportedEncoding(Vec<u8>),
     /// The library was compiled against a different mpv version than what is present on the system.
-    VersionMismatch(u32),
+    /// First value is compiled version, second value is linked version.
+    VersionMismatch(u32, u32),
     /// Mpv returned null while creating the core, or if `get_property with` `Format::String` fails.
     Null,
 }
@@ -390,7 +391,7 @@ impl UninitializedParent {
 
         let api_version = unsafe { mpv_client_api_version() };
         if super::MPV_CLIENT_API_VERSION != api_version {
-            return Err(Error::VersionMismatch(api_version));
+            return Err(Error::VersionMismatch(super::MPV_CLIENT_API_VERSION, api_version));
         }
 
         let ctx = unsafe { mpv_create() };
@@ -621,7 +622,7 @@ impl<'parent> Parent {
 
         let api_version = unsafe { mpv_client_api_version() };
         if super::MPV_CLIENT_API_VERSION != api_version {
-            return Err(Error::VersionMismatch(api_version));
+            return Err(Error::VersionMismatch(super::MPV_CLIENT_API_VERSION, api_version));
         }
 
         let ctx = unsafe { mpv_create() };
