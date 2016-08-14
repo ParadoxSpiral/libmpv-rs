@@ -143,6 +143,7 @@ impl MpvEvent {
     }
 }
 
+#[derive(Debug)]
 /// A blocking `Iterator` over some observed events of an mpv instance.
 /// Once the `EventIter` is dropped, it's `Event`s are removed from
 /// the "to be observed" queue, therefore new `Event` invocations won't be observed.
@@ -150,6 +151,7 @@ pub struct EventIter<'parent, P>
     where P: MpvMarker + 'parent
 {
     pub(crate) ctx: *mut MpvHandle,
+    pub(crate) first_iteration: bool,
     pub(crate) notification: *mut (Mutex<bool>, Condvar),
     pub(crate) all_to_observe: &'parent Mutex<Vec<Event>>,
     pub(crate) all_to_observe_properties: &'parent Mutex<HashMap<String, libc::uint64_t>>,
@@ -157,8 +159,6 @@ pub struct EventIter<'parent, P>
     pub(crate) all_observed: &'parent Mutex<Vec<InnerEvent>>,
     pub(crate) _does_not_outlive: PhantomData<&'parent P>,
 }
-
-unsafe impl<'parent, P> Send for EventIter<'parent, P> where P: MpvMarker + 'parent {}
 
 impl<'parent, P> Drop for EventIter<'parent, P>
     where P: MpvMarker + 'parent
@@ -213,14 +213,14 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
     fn next(&mut self) -> Option<Self::Item> {
         'no_events_anchor: loop {
             let mut observed = self.all_observed.lock();
-            if observed.is_empty() {
+            if observed.is_empty() && !self.first_iteration {
                 mem::drop(observed);
                 unsafe { (*self.notification).1.wait(&mut (*self.notification).0.lock()) };
                 observed = self.all_observed.lock();
             }
 
             let mut ret_events = Vec::with_capacity(observed.len());
-            if observed.is_empty() {
+            if observed.is_empty() || self.first_iteration {
                 let all_to_observe = self.all_to_observe.lock();
                 let mut last = false;
                 'events: loop {
@@ -283,6 +283,9 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
                     unsafe { (*self.notification).1.notify_all() };
                 }
             }
+            
+            self.first_iteration = false;
+
             if !ret_events.is_empty() {
                 return Some(ret_events);
             } else {

@@ -365,6 +365,7 @@ pub enum SubOp<'a> {
     SeekBackward,
 }
 
+#[derive(Debug)]
 /// This type allows for operations that should only be done on an uninitialized mpv core.
 pub struct UninitializedParent {
     ctx: *mut MpvHandle,
@@ -493,6 +494,7 @@ impl Drop for UninitializedParent {
     }
 }
 
+#[derive(Debug)]
 /// An mpv instance from which `Client`s can be spawned.
 ///
 /// # Panics
@@ -507,6 +509,7 @@ pub struct Parent {
     ev_observed: Option<Mutex<Vec<InnerEvent>>>,
 }
 
+#[derive(Debug)]
 /// A client of a `Parent`.
 ///
 /// # Panics
@@ -922,6 +925,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
 
             Ok(EventIter {
                 ctx: self.ctx(),
+                first_iteration: true,
                 notification: self.ev_iter_notification().unwrap(),
                 all_to_observe: self.ev_to_observe().as_ref().unwrap(),
                 all_to_observe_properties: self.ev_to_observe_properties().as_ref().unwrap(),
