@@ -18,7 +18,8 @@
 
 extern crate crossbeam;
 
-use mpv::*;
+use mpv::events::*;
+use mpv::utils::*;
 
 use std::process;
 use std::path::Path;
