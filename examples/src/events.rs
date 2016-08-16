@@ -26,14 +26,18 @@ use std::time::Duration;
 use std::thread;
 
 pub fn exec() {
+    // Create an `UninitializedParent` to set some options.
     let mpv = UninitializedParent::new(true).unwrap();
     mpv.set_option(&mut Property::new("cache-initial", Data::new(1))).unwrap();
     mpv.set_option(&mut Property::new("volume", Data::new(10))).unwrap();
     mpv.set_option(&mut Property::new("no-video", Data::new(true))).unwrap();
     mpv.set_option(&mut Property::new("ytdl", Data::new(true))).unwrap();
+    // Consume the `UninitializedParent` and replace it by a `Parent`.
     let mpv = mpv.init().unwrap();
 
+    // Create a crossbeam scope for convenience, to use mpv in multiple threads.
     crossbeam::scope(|scope| {
+        // Spin up 3 threads that observe different sets of `Event`s.
         scope.spawn(|| {
             let iter = mpv.observe_all(&[Event::FileLoaded,
                                          Event::StartFile,
@@ -43,6 +47,7 @@ pub fn exec() {
                           .unwrap();
 
             for vec in iter {
+                // If any `Event` was an `Endfile`, . . .
                 if let Some(&Ok(Event::EndFile(ref v))) = vec.iter().find(|e| {
                     if e.is_ok() {
                         if let Event::EndFile(_) = *e.as_ref().unwrap() {
@@ -51,14 +56,18 @@ pub fn exec() {
                     }
                     false
                 }) {
+                    // . . . print the `EndFile` reason and exit, . . .
                     println!("File ended! Reason: {:?}", v);
+                    thread::sleep(Duration::from_secs(1));
                     process::exit(0);
                 } else {
+                    // . . . otherwise print all `Event`s.
                     println!("playback_events: {:?}", vec);
                 };
             }
         });
         scope.spawn(|| {
+            // Here the value of the `Property` is irrelevant: only the name is used.
             let iter = mpv.observe_all(&[Event::PropertyChange(Property::new("volume",
                                                                              Data::new(0))),
                                          Event::PropertyChange(Property::new("pause",
@@ -78,6 +87,7 @@ pub fn exec() {
             }
         });
 
+        // Add a file to play, ytdl was set to true for this.
         mpv.playlist(&PlaylistOp::Loadfiles(&[File::new(Path::new("https://www.youtube.\
                                                                    com/watch?v=DLzxrzFCyOs"),
                                                         FileState::AppendPlay,
@@ -90,6 +100,7 @@ pub fn exec() {
 
         thread::sleep(Duration::from_secs(30));
 
+        // Trigger `Event::EndFile` observed above to quit.
         mpv.playlist(&PlaylistOp::NextForce).unwrap();
     });
 }
