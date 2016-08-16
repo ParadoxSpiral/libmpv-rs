@@ -188,8 +188,6 @@ impl<'parent, P> Drop for EventIter<'parent, P>
                         .unwrap();
                         return true;
                 }
-                unsafe { mpv_request_event(self.ctx, inner_ev.as_id(), 0) };
-                return true;
             } else if outer_ev.as_id() == inner_ev.as_id() {
                 unsafe { mpv_request_event(self.ctx, inner_ev.as_id(), 0) };
                 return true;
@@ -265,8 +263,6 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
                                 return true;
                             }
                         }
-                        ret_events.push(inner_ev.as_result());
-                        return true;
                     } else if outer_ev.as_id() == inner_ev.as_id() {
                         ret_events.push(inner_ev.as_result());
                         return true;
