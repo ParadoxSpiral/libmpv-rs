@@ -18,11 +18,13 @@
 
 // FIXME: Clean the abstraction up: mod.rs, events.rs, utils.rs
 
-/// Contains event related things
+/// Contains event related abstractions
 pub mod events;
-/// Contains miscellaneous things
+/// Contains miscellaneous abstractions
 #[macro_use]
 pub mod utils;
+/// Contains abstractions to define custom protocol handlers.
+pub mod protocol;
 
 use libc;
 use parking_lot::{Condvar, Mutex, Once, ONCE_INIT};
@@ -31,6 +33,7 @@ use super::raw::*;
 use super::raw::prototype::*;
 use events::*;
 use events::event_callback;
+use protocol::*;
 use utils::*;
 use utils::mpv_err;
 
@@ -39,7 +42,6 @@ use std::marker::PhantomData;
 use std::path::Path;
 use std::ptr;
 use std::ffi::{CStr, CString};
-use std::ops::Drop;
 use std::time::Duration;
 
 #[cfg(unix)]
@@ -367,16 +369,17 @@ pub enum SubOp<'a> {
 
 #[derive(Debug)]
 /// This type allows for operations that should only be done on an uninitialized mpv core.
-pub struct UninitializedParent {
+pub struct UninitializedParent<T, U> {
     ctx: *mut MpvHandle,
     check_events: bool,
     drop_do_destroy: bool,
+    _marker: PhantomData<(T, U)>,
 }
 
-impl UninitializedParent {
+impl<T, U> UninitializedParent<T, U> {
     #[inline]
     /// Initialize the mpv core, return an initialized `Parent`.
-    pub fn init(mut self) -> Result<Parent, Error> {
+    pub fn init(mut self) -> Result<Parent<T, U>, Error> {
         self.drop_do_destroy = false;
         unsafe { destroy_on_err!(self.ctx, mpv_initialize(self.ctx)) }
         Parent::from_uninitialized(self)
@@ -384,7 +387,7 @@ impl UninitializedParent {
 
     #[inline]
     /// Create a new `UninitializedParent` instance.
-    pub fn new(check_events: bool) -> Result<UninitializedParent, Error> {
+    pub fn new(check_events: bool) -> Result<UninitializedParent<T, U>, Error> {
         SET_LC_NUMERIC.call_once(|| {
             let c = CString::new("C").unwrap();
             unsafe { libc::setlocale(libc::LC_NUMERIC, c.as_ptr()) };
@@ -435,6 +438,7 @@ impl UninitializedParent {
             ctx: ctx,
             check_events: check_events,
             drop_do_destroy: true,
+            _marker: PhantomData,
         })
     }
 
@@ -483,7 +487,7 @@ impl UninitializedParent {
     }
 }
 
-impl Drop for UninitializedParent {
+impl<T, U> Drop for UninitializedParent<T, U> {
     #[inline]
     fn drop(&mut self) {
         if self.drop_do_destroy {
@@ -494,12 +498,11 @@ impl Drop for UninitializedParent {
     }
 }
 
-#[derive(Debug)]
 /// An mpv instance from which `Client`s can be spawned.
 ///
 /// # Panics
 /// Any method on this struct may panic if any argument contains invalid utf-8.
-pub struct Parent {
+pub struct Parent<T, U> {
     ctx: *mut MpvHandle,
     suspension_count: Mutex<usize>,
     check_events: bool,
@@ -507,27 +510,27 @@ pub struct Parent {
     ev_to_observe: Option<Mutex<Vec<Event>>>,
     ev_to_observe_properties: Option<Mutex<HashMap<String, libc::uint64_t>>>,
     ev_observed: Option<Mutex<Vec<InnerEvent>>>,
+    custom_protocols: Mutex<Vec<Protocol<T, U>>>,
 }
 
-#[derive(Debug)]
 /// A client of a `Parent`.
 ///
 /// # Panics
 /// Any method on this struct may panic if any argument contains invalid utf-8.
-pub struct Client<'parent> {
+pub struct Client<'parent, T: 'parent, U: 'parent> {
     ctx: *mut MpvHandle,
     check_events: bool,
     ev_iter_notification: Option<*mut (Mutex<bool>, Condvar)>,
     ev_to_observe: Option<Mutex<Vec<Event>>>,
     ev_observed: Option<Mutex<Vec<InnerEvent>>>,
     ev_to_observe_properties: Option<Mutex<HashMap<String, libc::uint64_t>>>,
-    _does_not_outlive: PhantomData<&'parent Parent>,
+    _does_not_outlive: PhantomData<&'parent Parent<T, U>>,
 }
 
-unsafe impl Send for Parent {}
-unsafe impl Sync for Parent {}
-unsafe impl<'parent> Send for Client<'parent> {}
-unsafe impl<'parent> Sync for Client<'parent> {}
+unsafe impl<T, U> Send for Parent<T, U> {}
+unsafe impl<T, U> Sync for Parent<T, U> {}
+unsafe impl<'parent, T, U> Send for Client<'parent, T, U> {}
+unsafe impl<'parent, T, U> Sync for Client<'parent, T, U> {}
 
 #[doc(hidden)]
 #[allow(missing_docs)]
@@ -549,7 +552,7 @@ pub unsafe trait MpvMarker {
     }
 }
 
-unsafe impl MpvMarker for Parent {
+unsafe impl<T, U> MpvMarker for Parent<T, U> {
     fn ctx(&self) -> *mut MpvHandle {
         self.ctx
     }
@@ -570,7 +573,7 @@ unsafe impl MpvMarker for Parent {
     }
 }
 
-unsafe impl<'parent> MpvMarker for Client<'parent> {
+unsafe impl<'parent, T, U> MpvMarker for Client<'parent, T, U> {
     fn ctx(&self) -> *mut MpvHandle {
         self.ctx
     }
@@ -591,7 +594,7 @@ unsafe impl<'parent> MpvMarker for Client<'parent> {
     }
 }
 
-impl Drop for Parent {
+impl<T, U> Drop for Parent<T, U> {
     #[inline]
     fn drop(&mut self) {
         self.drop_ev_iter_step();
@@ -601,7 +604,7 @@ impl Drop for Parent {
     }
 }
 
-impl<'parent> Drop for Client<'parent> {
+impl<'parent, T, U> Drop for Client<'parent, T, U> {
     #[inline]
     fn drop(&mut self) {
         self.drop_ev_iter_step();
@@ -611,12 +614,12 @@ impl<'parent> Drop for Client<'parent> {
     }
 }
 
-impl<'parent> Parent {
+impl<'parent, T, U> Parent<T, U> {
     #[inline]
     /// Create a new `Mpv` instance.
     /// To call any method except for `set_option` on this, it has to be initialized first.
     /// The default settings can be probed by running: ```$ mpv --show-profile=libmpv```
-    pub fn new(check_events: bool) -> Result<Parent, Error> {
+    pub fn new(check_events: bool) -> Result<Parent<T, U>, Error> {
         SET_LC_NUMERIC.call_once(|| {
             let c = CString::new("C").unwrap();
             unsafe { libc::setlocale(libc::LC_NUMERIC, c.as_ptr()) };
@@ -691,10 +694,11 @@ impl<'parent> Parent {
             ev_to_observe: ev_to_observe,
             ev_to_observe_properties: ev_to_observe_properties,
             ev_observed: ev_observed,
+            custom_protocols: Mutex::new(Vec::new()),
         })
     }
 
-    fn from_uninitialized(uninit: UninitializedParent) -> Result<Parent, Error> {
+    fn from_uninitialized(uninit: UninitializedParent<T, U>) -> Result<Parent<T, U>, Error> {
         let (ev_iter_notification, ev_to_observe, ev_to_observe_properties, ev_observed) =
             if uninit.check_events {
                 let ev_iter_notification = Box::into_raw(Box::new((Mutex::new(false),
@@ -721,13 +725,14 @@ impl<'parent> Parent {
             ev_to_observe: ev_to_observe,
             ev_to_observe_properties: ev_to_observe_properties,
             ev_observed: ev_observed,
+            custom_protocols: Mutex::new(Vec::new()),
         })
     }
 
     #[inline]
     /// Create a client with `name`, that is connected to the core of `self`, but has an own queue
     /// for API events and such.
-    pub fn new_client(&self, name: &str, check_events: bool) -> Result<Client, Error> {
+    pub fn new_client(&self, name: &str, check_events: bool) -> Result<Client<T, U>, Error> {
         let ctx = unsafe {
             let name = CString::new(name).unwrap();
             mpv_create_client(self.ctx(), name.as_ptr())
@@ -812,9 +817,22 @@ impl<'parent> Parent {
             Ok(unsafe { mpv_resume(self.ctx()) })
         }
     }
+
+    #[inline]
+    /// Register a custom `Protocol`. Once a protocol has been registered, it lives as long as the
+    /// `Parent`.
+    ///
+    /// Returns `Error::Mpv(MpvError::InvalidParameter)` if a protocol with the same name has
+    /// already been registered.
+    pub fn register_protocol(&self, protocol: Protocol<T, U>) -> Result<(), Error> {
+        let mut protocols = self.custom_protocols.lock();
+        try!(protocol.register(self.ctx));
+        protocols.push(protocol);
+        Ok(())
+    }
 }
 
-impl<'parent> Client<'parent> {
+impl<'parent, T, U> Client<'parent, T, U> {
     #[inline]
     /// Returns the name associated with the instance.
     pub fn name(&self) -> &str {

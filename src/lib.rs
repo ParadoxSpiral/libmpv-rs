@@ -41,6 +41,7 @@ extern crate enum_primitive;
 /// Contains bindings to libmpv functions.
 pub mod raw;
 pub use raw::MpvLogLevel as LogLevel;
+pub use raw::MpvError;
 mod wrapper;
 pub use wrapper::*;
 #[cfg(test)]

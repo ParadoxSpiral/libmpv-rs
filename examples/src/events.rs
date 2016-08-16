@@ -18,6 +18,7 @@
 
 extern crate crossbeam;
 
+use mpv::*;
 use mpv::events::*;
 use mpv::utils::*;
 
@@ -28,7 +29,7 @@ use std::thread;
 
 pub fn exec() {
     // Create an `UninitializedParent` to set some options.
-    let mpv = UninitializedParent::new(true).unwrap();
+    let mpv = UninitializedParent::<(), ()>::new(true).unwrap();
     mpv.set_option(&mut Property::new("cache-initial", Data::new(1))).unwrap();
     mpv.set_option(&mut Property::new("volume", Data::new(10))).unwrap();
     mpv.set_option(&mut Property::new("no-video", Data::new(true))).unwrap();

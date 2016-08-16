@@ -23,9 +23,9 @@ authors = ["ParadoxSpiral <ParadoxSpiral@riseup.net>"]
 
 [features]
 # Decide which examples to show
-default = ['all']
-all = ['events']
+all = ['events', 'protocol']
 events = []
+protocol = []
 
 [dependencies]
 mpv = {path = "../"}

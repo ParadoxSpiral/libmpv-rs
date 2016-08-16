@@ -15,14 +15,18 @@
 // You should have received a copy of the GNU Lesser General Public
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-#![feature(slice_patterns)]
+#![feature(box_syntax, slice_patterns)]
 
 mod events;
+mod protocol;
 
 extern crate mpv;
 
 fn main() {
     if cfg!(any(feature = "all", feature = "events")) {
         events::exec();
+    }
+    if cfg!(any(feature = "all", feature = "protocol")) {
+        protocol::exec();
     }
 }

@@ -200,17 +200,18 @@ pub enum MpvSubApi {
     OpenglCb = 1,
 }
 
-pub type mpv_stream_cb_read_fn = extern "C" fn(cookie: *mut libc::c_void,
-                                               buf: *mut libc::c_char,
-                                               nbytes: libc::uint64_t) -> libc::int64_t;
-pub type mpv_stream_cb_seek_fn = extern "C" fn(cookie: *mut libc::c_void, offset: libc::int64_t)
-                                                                                 -> libc::int64_t;
-pub type mpv_stream_cb_size_fn = extern "C" fn(cookie: *mut libc::c_void) -> libc::int64_t;
-pub type mpv_stream_cb_close_fn = extern "C" fn(cookie: *mut libc::c_void) -> libc::c_void;
+pub type mpv_stream_cb_read_fn = unsafe extern "C" fn(cookie: *mut libc::c_void,
+                                                      buf: *mut libc::c_char,
+                                                      nbytes: libc::uint64_t) -> libc::int64_t;
+pub type mpv_stream_cb_seek_fn = unsafe extern "C" fn(cookie: *mut libc::c_void,
+                                                      offset: libc::int64_t) -> libc::int64_t;
+pub type mpv_stream_cb_size_fn = unsafe extern "C" fn(cookie: *mut libc::c_void) -> libc::int64_t;
+pub type mpv_stream_cb_close_fn = unsafe extern "C" fn(cookie: *mut libc::c_void);
 
-pub type mpv_stream_cb_open_ro_fn = extern "C" fn(user_data: *mut libc::c_void,
-                                                  uri: *mut libc::c_char,
-                                                  info: *mut MpvStreamCbInfo) -> libc::c_int;
+pub type mpv_stream_cb_open_ro_fn = unsafe extern "C" fn(user_data: *mut libc::c_void,
+                                                         uri: *mut libc::c_char,
+                                                         info: *mut MpvStreamCbInfo)
+                                                         -> libc::c_int;
 
 #[repr(C)]
 pub struct MpvStreamCbInfo { 
