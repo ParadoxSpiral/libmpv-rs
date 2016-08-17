@@ -33,8 +33,8 @@ use std::panic;
 use std::panic::AssertUnwindSafe;
 use std::ptr;
 
-/// Do any initialization. `*mut T` & `*mut U` are `NULL`.
-pub type StreamOpen<T, U> = Fn(*mut T, *mut U, &str) -> Result<(), MpvError>;
+/// Do any initialization. `*mut T` is `NULL`.
+pub type StreamOpen<T, U> = Fn(*mut T, &U, &str) -> Result<(), MpvError>;
 /// Do any necessary cleanup.
 pub type StreamClose<T> = Fn(Box<T>);
 /// Seek to the given offset. Return the new offset, or `MpvError::Generic` if seek failed.
@@ -61,7 +61,7 @@ unsafe extern "C" fn stream_open_wrapper<T, U>(user_data: *mut libc::c_void,
 	let ret = panic::catch_unwind(|| {
 		let uri = CString::from_raw(uri);
 		let ret = (*(**data).open_fn)((**data).cookie, 
-									  (**data).user_data,
+									  &(**data).user_data,
 									  uri.to_str().unwrap());
 		if ret.is_ok() {
 			0
@@ -144,7 +144,7 @@ unsafe extern "C" fn stream_close_wrapper<T, U>(cookie: *mut libc::c_void) {
 
 struct ProtocolData<T, U> {
 	cookie: *mut T,
-	user_data: *mut U,
+	user_data: U,
 
 	open_fn: Box<StreamOpen<T, U>>,
 	close_fn: Box<StreamClose<T>>,
@@ -164,13 +164,12 @@ impl<T, U> Protocol<T, U> {
 	///
 	/// `user_data` is data that will be passed to `StreamOpen`.
 	/// 
-	/// `cookie` is data that will be passed to all `Fn`s.
-	/// 
 	/// # Safety
 	///	Do not call libmpv functions in any supplied function.
 	///
 	/// Panic unwinds are catched.
 	pub unsafe fn new(name: String,
+					  user_data: U,
 					  open_fn: Box<StreamOpen<T, U>>,
 					  close_fn: Box<StreamClose<T>>,
 					  read_fn: Box<StreamRead<T>>,
@@ -180,7 +179,7 @@ impl<T, U> Protocol<T, U> {
 	{
 		let data = Box::into_raw(Box::new(ProtocolData {
 								cookie: libc::malloc(mem::size_of::<T>()) as *mut T,
-								user_data: libc::malloc(mem::size_of::<U>()) as *mut U,
+								user_data: user_data,
 
 								open_fn: open_fn,
 								close_fn: close_fn,
@@ -209,8 +208,7 @@ impl<T, U> Protocol<T, U> {
 impl<T, U> Drop for Protocol<T, U> {
 	fn drop(&mut self) {
 		unsafe {
-			let data = Box::from_raw(self.data);
-			libc::free(data.user_data as *mut _);
+			Box::from_raw(self.data);
 			// data.cookie will be consumed by the close callback
 		};
 	}

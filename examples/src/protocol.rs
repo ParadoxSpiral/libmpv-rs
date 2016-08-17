@@ -31,7 +31,7 @@ use std::slice;
 use std::time::Duration;
 use std::thread;
 
-fn open(cookie: *mut File, user_data: *mut (), uri: &str) -> Result<(), MpvError> {
+fn open(cookie: *mut File, user_data: &(), uri: &str) -> Result<(), MpvError> {
 	unsafe {
 		*cookie = File::open(&uri[13..]).unwrap()
 	};
@@ -67,7 +67,7 @@ pub fn exec() {
 	let path = format!("filereader://{}", ::std::env::args().nth(1).unwrap());
 
 	let protocol = unsafe {
-		Protocol::new("filereader".into(), box open, box close,
+		Protocol::new("filereader".into(), (), box open, box close,
 					  box read, Some(box seek), Some(box size))
 	};
 
