@@ -33,18 +33,17 @@ use std::panic;
 use std::panic::AssertUnwindSafe;
 use std::ptr;
 
-/// Do any initialization. `*mut T` & `*mut U` will be `NULL`, and it is expected to not be `NULL`
-/// after this function.
+/// Do any initialization. `*mut T` & `*mut U` are `NULL`.
 pub type StreamOpen<T, U> = Fn(*mut T, *mut U, &str) -> Result<(), MpvError>;
 /// Do any necessary cleanup.
-pub type StreamClose<T> = Fn(*mut T);
+pub type StreamClose<T> = Fn(Box<T>);
 /// Seek to the given offset. Return the new offset, or `MpvError::Generic` if seek failed.
-pub type StreamSeek<T> = Fn(&mut T, i64) -> i64;
+pub type StreamSeek<T> = Fn(*mut T, i64) -> i64;
 /// Read nbytes into the given buffer.
 /// Return either the number of read bytes, 0 on EOF, -1 on error.
-pub type StreamRead<T> = Fn(&mut T, *mut libc::c_char, u64) -> i64;
+pub type StreamRead<T> = Fn(*mut T, *mut libc::c_char, u64) -> i64;
 /// Should return the total size of the stream in bytes.
-pub type StreamSize<T> = Fn(&mut T) -> i64;
+pub type StreamSize<T> = Fn(*mut T) -> i64;
 
 unsafe extern "C" fn stream_open_wrapper<T, U>(user_data: *mut libc::c_void,
                                   uri: *mut libc::c_char,
@@ -81,12 +80,12 @@ unsafe extern "C" fn stream_read_wrapper<T, U>(cookie: *mut libc::c_void,
                                      buf: *mut libc::c_char,
                                      nbytes: libc::uint64_t) -> libc::int64_t
 {
-	let mut data = AssertUnwindSafe(cookie as *mut ProtocolData<T, U>);
+	let data = AssertUnwindSafe(cookie as *mut ProtocolData<T, U>);
 
-	let ret = panic::catch_unwind((AssertUnwindSafe(|| {
+	let ret = panic::catch_unwind((|| {
 		debug_assert!((**data).cookie != ptr::null_mut());
-		(*(**data).read_fn)(&mut *(**data).cookie, buf, nbytes)
-	})));
+		(*(**data).read_fn)((**data).cookie, buf, nbytes)
+	}));
 	if ret.is_ok() {
 		ret.unwrap()
 	} else {
@@ -98,16 +97,16 @@ unsafe extern "C" fn stream_seek_wrapper<T, U>(cookie: *mut libc::c_void,
                                      	offset: libc::int64_t)
 										-> libc::int64_t
 {
-	let mut data = AssertUnwindSafe(cookie as *mut ProtocolData<T, U>);
+	let data = AssertUnwindSafe(cookie as *mut ProtocolData<T, U>);
 
 	if (**data).seek_fn.is_none() {
 		return MpvError::Unsupported as libc::int64_t;
 	}
 
-	let ret = panic::catch_unwind((AssertUnwindSafe(|| {
+	let ret = panic::catch_unwind((|| {
 		debug_assert!((**data).cookie != ptr::null_mut());
-		(*(**data).seek_fn.as_ref().unwrap())(&mut* (**data).cookie, offset)
-	})));
+		(*(**data).seek_fn.as_ref().unwrap())((**data).cookie, offset)
+	}));
 	if ret.is_ok() {
 		ret.unwrap()
 	} else {
@@ -116,16 +115,16 @@ unsafe extern "C" fn stream_seek_wrapper<T, U>(cookie: *mut libc::c_void,
 }
 
 unsafe extern "C" fn stream_size_wrapper<T, U>(cookie: *mut libc::c_void)-> libc::int64_t {
-	let mut data = AssertUnwindSafe(cookie as *mut ProtocolData<T, U>);
+	let data = AssertUnwindSafe(cookie as *mut ProtocolData<T, U>);
 
 	if (**data).size_fn.is_none() {
 		return MpvError::Unsupported as libc::int64_t;
 	}
 
-	let ret = panic::catch_unwind((AssertUnwindSafe(|| {
+	let ret = panic::catch_unwind((|| {
 		debug_assert!((**data).cookie != ptr::null_mut());
-		(*(**data).size_fn.as_ref().unwrap())(&mut *(**data).cookie)
-	})));
+		(*(**data).size_fn.as_ref().unwrap())((**data).cookie)
+	}));
 	if ret.is_ok() {
 		ret.unwrap()
 	} else {
@@ -137,10 +136,10 @@ unsafe extern "C" fn stream_size_wrapper<T, U>(cookie: *mut libc::c_void)-> libc
 unsafe extern "C" fn stream_close_wrapper<T, U>(cookie: *mut libc::c_void) {
 	let data = AssertUnwindSafe(cookie as *mut ProtocolData<T, U>);
 
-	panic::catch_unwind((AssertUnwindSafe(|| {
+	panic::catch_unwind((|| {
 		debug_assert!((**data).cookie != ptr::null_mut());
-		(*(**data).close_fn)((**data).cookie)
-	})));
+		(*(**data).close_fn)(Box::from_raw((**data).cookie))
+	}));
 }
 
 struct ProtocolData<T, U> {
@@ -209,10 +208,10 @@ impl<T, U> Protocol<T, U> {
 
 impl<T, U> Drop for Protocol<T, U> {
 	fn drop(&mut self) {
-		unsafe { 
+		unsafe {
 			let data = Box::from_raw(self.data);
-			libc::free(data.cookie as *mut _);
 			libc::free(data.user_data as *mut _);
+			// data.cookie will be consumed by the close callback
 		};
 	}
 }

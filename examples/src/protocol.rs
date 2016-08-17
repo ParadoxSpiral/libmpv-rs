@@ -18,12 +18,16 @@
 
 #![allow(unused_variables)]
 
-use mpv::*;
+use mpv;
+use mpv::{Data, MpvInstance, MpvError, Parent, Property, PlaylistOp};
+use mpv::utils;
 use mpv::protocol::*;
 
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Seek, SeekFrom};
+use std::mem;
 use std::path::Path;
+use std::slice;
 use std::time::Duration;
 use std::thread;
 
@@ -34,27 +38,37 @@ fn open(cookie: *mut File, user_data: *mut (), uri: &str) -> Result<(), MpvError
 	Ok(())
 }
 
-fn close(cookie: *mut File) {}
+fn close(cookie: Box<File>) {
+	println!("Closing file, bye bye~~");
+}
 
-fn crap_read(cookie: &mut File, buf: *mut i8, nbytes: u64) -> i64 {
-	let mut shitbuf = vec![0u8; nbytes as usize];
-
-	cookie.read_exact(&mut shitbuf).unwrap();
-
+fn read(cookie: *mut File, buf: *mut i8, nbytes: u64) -> i64 {
 	unsafe {
-		for i in 0..nbytes {
-			*buf.offset(i as isize) = shitbuf[i as usize] as i8;
-		}
-	}
+		let slice = slice::from_raw_parts_mut(buf, nbytes as _);
+		let forbidden_magic = mem::transmute::<&mut [i8], &mut [u8]>(slice);
 
-	nbytes as i64
+		(*cookie).read(forbidden_magic).unwrap() as _
+	}
+}
+
+fn seek(cookie: *mut File, offset: i64) -> i64 {
+	unsafe {
+		(&mut (*cookie)).seek(SeekFrom::Start(offset as u64)).unwrap() as i64
+	}
+}
+
+fn size(cookie: *mut File) -> i64 {
+	unsafe {
+		(*cookie).metadata().unwrap().len() as _
+	}
 }
 
 pub fn exec() {
 	let path = format!("filereader://{}", ::std::env::args().nth(1).unwrap());
 
 	let protocol = unsafe {
-		Protocol::new("filereader".into(), box open, box close, box crap_read, None, None)
+		Protocol::new("filereader".into(), box open, box close,
+					  box read, Some(box seek), Some(box size))
 	};
 
 	let mpv = Parent::new(false).unwrap();
@@ -67,5 +81,9 @@ pub fn exec() {
 	                                                        None)]))
 	           .unwrap();
 
-	thread::sleep(Duration::from_secs(11));
+	thread::sleep(Duration::from_secs(10));
+
+	mpv.seek(&mpv::Seek::RelativeForward(Duration::from_secs(15))).unwrap();
+
+	thread::sleep(Duration::from_secs(5));
 }
