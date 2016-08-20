@@ -373,7 +373,7 @@ pub struct UninitializedParent<T, U> {
     ctx: *mut MpvHandle,
     check_events: bool,
     drop_do_destroy: bool,
-    _marker: PhantomData<(T, U)>,
+    _protocol_marker: PhantomData<(T, U)>,
 }
 
 impl<T, U> UninitializedParent<T, U> {
@@ -438,13 +438,13 @@ impl<T, U> UninitializedParent<T, U> {
             ctx: ctx,
             check_events: check_events,
             drop_do_destroy: true,
-            _marker: PhantomData,
+            _protocol_marker: PhantomData,
         })
     }
 
     #[inline]
     /// Set an option.
-    pub fn set_option(&self, opt: &mut Property) -> Result<(), Error> {
+    pub fn set_option(&self, mut opt: Property) -> Result<(), Error> {
         let name = CString::new(&opt.name[..]).unwrap().into_raw();
         let format = opt.data.format().as_val();
         let ret = match opt.data {
@@ -852,7 +852,7 @@ pub trait MpvInstance<'parent, P>
     /// Execute any mpv command. See implementation for information about safety.
     unsafe fn command(&self, cmd: &Command) -> Result<(), Error>;
     /// Set a given `Property` with `prop`, using it's value.
-    fn set_property(&self, prop: &mut Property) -> Result<(), Error>;
+    fn set_property(&self, prop: Property) -> Result<(), Error>;
     /// Get the `Data` of a given named property.
     fn get_property(&self, name: &str, format: &Format) -> Result<Data, Error>;
     /// Seek in a way defined by `Seek`.
@@ -977,7 +977,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
 
     #[inline]
     /// Set the value of a property.
-    fn set_property(&self, prop: &mut Property) -> Result<(), Error> {
+    fn set_property(&self, mut prop: Property) -> Result<(), Error> {
         let format = prop.data.format().as_val();
         let name = CString::new(&prop.name[..]).unwrap().into_raw();
         let ret = match prop.data {
@@ -1327,12 +1327,12 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     #[inline]
     /// Pause playback at runtime.
     fn pause(&self) -> Result<(), Error> {
-        self.set_property(&mut Property::new("pause", Data::Flag(true)))
+        self.set_property(Property::new("pause", Data::Flag(true)))
     }
 
     #[inline]
     /// Unpause playback at runtime.
     fn unpause(&self) -> Result<(), Error> {
-        self.set_property(&mut Property::new("pause", Data::Flag(false)))
+        self.set_property(Property::new("pause", Data::Flag(false)))
     }
 }

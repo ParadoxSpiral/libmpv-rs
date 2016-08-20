@@ -283,6 +283,7 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
             self.first_iteration = false;
 
             if !ret_events.is_empty() {
+                ret_events.shrink_to_fit();
                 return Some(ret_events);
             } else {
                 continue 'no_events_anchor;

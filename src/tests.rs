@@ -17,6 +17,7 @@
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 use super::*;
+use super::utils::*;
 
 use std::path::Path;
 use std::time::Duration;
@@ -32,11 +33,11 @@ fn version() {
 fn options_properties() {
     // TODO: Cover all `Data` variants.
 
-    let mpv = UninitializedParent::new(false).unwrap();
-    mpv.set_option(&mut Property::new("cache-initial", Data::new(1))).unwrap();
-    mpv.set_option(&mut Property::new("volume", Data::new(0))).unwrap();
-    mpv.set_option(&mut Property::new("no-video", Data::new(true))).unwrap();
-    mpv.set_option(&mut Property::new("ytdl", Data::new(true))).unwrap();
+    let mpv = UninitializedParent::<(), ()>::new(false).unwrap();
+    mpv.set_option(Property::new("cache-initial", Data::new(1))).unwrap();
+    mpv.set_option(Property::new("volume", Data::new(0))).unwrap();
+    mpv.set_option(Property::new("no-video", Data::new(true))).unwrap();
+    mpv.set_option(Property::new("ytdl", Data::new(true))).unwrap();
     let mpv = mpv.init().unwrap();
 
     mpv.playlist(&PlaylistOp::Loadfiles(&[File::new(Path::new("https://www.youtube.\
@@ -51,7 +52,7 @@ fn options_properties() {
                mpv.get_property("volume", &Format::Int64)
                   .unwrap());
 
-    mpv.set_property(&mut Property::new("volume", Data::new(4))).unwrap();
+    mpv.set_property(Property::new("volume", Data::new(4))).unwrap();
 
     assert_eq!(Data::new(4),
                mpv.get_property("volume", &Format::Int64)

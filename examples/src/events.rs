@@ -30,10 +30,10 @@ use std::thread;
 pub fn exec() {
     // Create an `UninitializedParent` to set some options.
     let mpv = UninitializedParent::<(), ()>::new(true).unwrap();
-    mpv.set_option(&mut Property::new("cache-initial", Data::new(1))).unwrap();
-    mpv.set_option(&mut Property::new("volume", Data::new(10))).unwrap();
-    mpv.set_option(&mut Property::new("no-video", Data::new(true))).unwrap();
-    mpv.set_option(&mut Property::new("ytdl", Data::new(true))).unwrap();
+    mpv.set_option(Property::new("cache-initial", Data::new(1))).unwrap();
+    mpv.set_option(Property::new("volume", Data::new(10))).unwrap();
+    mpv.set_option(Property::new("no-video", Data::new(true))).unwrap();
+    mpv.set_option(Property::new("ytdl", Data::new(true))).unwrap();
     // Consume the `UninitializedParent` and replace it by a `Parent`.
     let mpv = mpv.init().unwrap();
 
@@ -98,7 +98,7 @@ pub fn exec() {
 
         thread::sleep(Duration::from_secs(3));
 
-        mpv.set_property(&mut Property::new("volume", Data::new(25))).unwrap();
+        mpv.set_property(Property::new("volume", Data::new(25))).unwrap();
 
         thread::sleep(Duration::from_secs(30));
 

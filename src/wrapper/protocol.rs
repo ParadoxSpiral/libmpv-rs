@@ -33,7 +33,7 @@ use std::panic;
 use std::panic::AssertUnwindSafe;
 use std::ptr;
 
-/// Do any initialization. `*mut T` is `NULL`.
+/// Do any initialization. `*mut T` is undefined heap memory.
 pub type StreamOpen<T, U> = Fn(*mut T, &U, &str) -> Result<(), MpvError>;
 /// Do any necessary cleanup.
 pub type StreamClose<T> = Fn(Box<T>);
@@ -45,7 +45,7 @@ pub type StreamRead<T> = Fn(*mut T, *mut libc::c_char, u64) -> i64;
 /// Should return the total size of the stream in bytes.
 pub type StreamSize<T> = Fn(*mut T) -> i64;
 
-unsafe extern "C" fn stream_open_wrapper<T, U>(user_data: *mut libc::c_void,
+unsafe extern "C" fn open_wrapper<T, U>(user_data: *mut libc::c_void,
                                   uri: *mut libc::c_char,
                                   info: *mut MpvStreamCbInfo)
                                   -> libc::c_int
@@ -53,10 +53,10 @@ unsafe extern "C" fn stream_open_wrapper<T, U>(user_data: *mut libc::c_void,
 	let data = AssertUnwindSafe(user_data as *mut ProtocolData<T, U>);
 
 	(*info).cookie = user_data;
-	(*info).read_fn = stream_read_wrapper::<T, U>as _;
-	(*info).seek_fn = stream_seek_wrapper::<T, U> as _;
-	(*info).size_fn = stream_size_wrapper::<T, U> as  _;
-	(*info).close_fn = stream_close_wrapper::<T, U> as  _;
+	(*info).read_fn = read_wrapper::<T, U> as _;
+	(*info).seek_fn = seek_wrapper::<T, U> as _;
+	(*info).size_fn = size_wrapper::<T, U> as  _;
+	(*info).close_fn = close_wrapper::<T, U> as  _;
 
 	let ret = panic::catch_unwind(|| {
 		let uri = CString::from_raw(uri);
@@ -76,7 +76,7 @@ unsafe extern "C" fn stream_open_wrapper<T, U>(user_data: *mut libc::c_void,
 	}
 }
 
-unsafe extern "C" fn stream_read_wrapper<T, U>(cookie: *mut libc::c_void,
+unsafe extern "C" fn read_wrapper<T, U>(cookie: *mut libc::c_void,
                                      buf: *mut libc::c_char,
                                      nbytes: libc::uint64_t) -> libc::int64_t
 {
@@ -93,7 +93,7 @@ unsafe extern "C" fn stream_read_wrapper<T, U>(cookie: *mut libc::c_void,
 	}
 }
 
-unsafe extern "C" fn stream_seek_wrapper<T, U>(cookie: *mut libc::c_void,
+unsafe extern "C" fn seek_wrapper<T, U>(cookie: *mut libc::c_void,
                                      	offset: libc::int64_t)
 										-> libc::int64_t
 {
@@ -114,7 +114,7 @@ unsafe extern "C" fn stream_seek_wrapper<T, U>(cookie: *mut libc::c_void,
 	}
 }
 
-unsafe extern "C" fn stream_size_wrapper<T, U>(cookie: *mut libc::c_void)-> libc::int64_t {
+unsafe extern "C" fn size_wrapper<T, U>(cookie: *mut libc::c_void)-> libc::int64_t {
 	let data = AssertUnwindSafe(cookie as *mut ProtocolData<T, U>);
 
 	if (**data).size_fn.is_none() {
@@ -133,13 +133,14 @@ unsafe extern "C" fn stream_size_wrapper<T, U>(cookie: *mut libc::c_void)-> libc
 }
 
 #[allow(unused_must_use)]
-unsafe extern "C" fn stream_close_wrapper<T, U>(cookie: *mut libc::c_void) {
+unsafe extern "C" fn close_wrapper<T, U>(cookie: *mut libc::c_void) {
 	let data = AssertUnwindSafe(cookie as *mut ProtocolData<T, U>);
 
 	panic::catch_unwind((|| {
 		debug_assert!((**data).cookie != ptr::null_mut());
 		(*(**data).close_fn)(Box::from_raw((**data).cookie))
 	}));
+	println!("leaving close");
 }
 
 struct ProtocolData<T, U> {
@@ -167,7 +168,7 @@ impl<T, U> Protocol<T, U> {
 	/// # Safety
 	///	Do not call libmpv functions in any supplied function.
 	///
-	/// Panic unwinds are catched.
+	/// Panic unwinding is catched and returns an appropriate error.
 	pub unsafe fn new(name: String,
 					  user_data: U,
 					  open_fn: Box<StreamOpen<T, U>>,
@@ -200,7 +201,7 @@ impl<T, U> Protocol<T, U> {
 			mpv_err((), mpv_stream_cb_add_ro(ctx,
 											 name.as_ptr(),
 											 self.data as *mut _,
-											 stream_open_wrapper::<T, U> as _))
+											 open_wrapper::<T, U> as _))
 		}
 	}
 }

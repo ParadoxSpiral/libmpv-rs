@@ -16,8 +16,6 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-#![allow(unused_variables)]
-
 use mpv;
 use mpv::{Data, MpvInstance, MpvError, Parent, Property, PlaylistOp};
 use mpv::utils;
@@ -31,14 +29,16 @@ use std::slice;
 use std::time::Duration;
 use std::thread;
 
-fn open(cookie: *mut File, user_data: &(), uri: &str) -> Result<(), MpvError> {
+fn open(cookie: *mut File, _: &(), uri: &str) -> Result<(), MpvError> {
 	unsafe {
+		// Strip the `filereader://` part
 		*cookie = File::open(&uri[13..]).unwrap()
 	};
+	println!("Opened file, ready for orders o7");
 	Ok(())
 }
 
-fn close(cookie: Box<File>) {
+fn close(_: Box<File>) {
 	println!("Closing file, bye bye~~");
 }
 
@@ -53,7 +53,7 @@ fn read(cookie: *mut File, buf: *mut i8, nbytes: u64) -> i64 {
 
 fn seek(cookie: *mut File, offset: i64) -> i64 {
 	unsafe {
-		(&mut (*cookie)).seek(SeekFrom::Start(offset as u64)).unwrap() as i64
+		(&mut (*cookie)).seek(SeekFrom::Start(offset as u64)).unwrap() as _
 	}
 }
 
@@ -74,7 +74,7 @@ pub fn exec() {
 	let mpv = Parent::new(false).unwrap();
 	mpv.register_protocol(protocol).unwrap();
 
-	mpv.set_property(&mut Property::new("volume", Data::new(40))).unwrap();
+	mpv.set_property(Property::new("volume", Data::new(40))).unwrap();
 
 	mpv.playlist(&PlaylistOp::Loadfiles(&[utils::File::new(Path::new(&path),
 	                                                        utils::FileState::AppendPlay,
