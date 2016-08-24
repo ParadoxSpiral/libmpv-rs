@@ -140,7 +140,6 @@ unsafe extern "C" fn close_wrapper<T, U>(cookie: *mut libc::c_void) {
 		debug_assert!((**data).cookie != ptr::null_mut());
 		(*(**data).close_fn)(Box::from_raw((**data).cookie))
 	}));
-	println!("leaving close");
 }
 
 struct ProtocolData<T, U> {

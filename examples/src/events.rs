@@ -37,7 +37,7 @@ pub fn exec() {
     // Consume the `UninitializedParent` and replace it by a `Parent`.
     let mpv = mpv.init().unwrap();
 
-    // Create a crossbeam scope for convenience, to use mpv in multiple threads.
+    // Create a crossbeam scope for convenience to use mpv in multiple threads.
     crossbeam::scope(|scope| {
         // Spin up 3 threads that observe different sets of `Event`s.
         scope.spawn(|| {

@@ -965,7 +965,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     /// This method is unsafe because arbitrary code may be executed resulting in UB and more.
     unsafe fn command(&self, cmd: &Command) -> Result<(), Error> {
         let mut args = String::with_capacity(cmd.args.iter()
-                                                     .fold(0, |acc, ref e| acc + e.len() + 1));
+                                                     .fold(0, |acc, e| acc + e.len() + 1));
         for elem in cmd.args {
             args.push_str(" ");
             args.push_str(elem);
@@ -1122,21 +1122,21 @@ impl<'parent, P> MpvInstance<'parent, P> for P
             Screenshot::Subtitles => unsafe {
                 self.command(&Command::new("screenshot", &["subtitles"]))
             },
-            Screenshot::SubtitlesFile(ref p) => unsafe {
+            Screenshot::SubtitlesFile(p) => unsafe {
                 self.command(&Command::new("screenshot",
                                            &[p.to_str().unwrap(), "subtitles"]))
             },
             Screenshot::Video => unsafe {
                 self.command(&Command::new("screenshot", &["video"]))
             },
-            Screenshot::VideoFile(ref p) => unsafe {
+            Screenshot::VideoFile(p) => unsafe {
                 self.command(&Command::new("screenshot",
                                            &[p.to_str().unwrap().into(), "video"]))
             },
             Screenshot::Window => unsafe {
                 self.command(&Command::new("screenshot", &["window"]))
             },
-            Screenshot::WindowFile(ref p) => unsafe {
+            Screenshot::WindowFile(p) => unsafe {
                 self.command(&Command::new("screenshot",
                                            &[p.to_str().unwrap(), "window"]))
             },
