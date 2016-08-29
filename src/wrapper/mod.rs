@@ -399,7 +399,7 @@ impl<T, U> UninitializedParent<T, U> {
         }
 
         let ctx = unsafe { mpv_create() };
-        if ctx == ptr::null_mut() {
+        if ctx.is_null() {
             return Err(Error::Null);
         }
 
@@ -631,7 +631,7 @@ impl<'parent, T, U> Parent<T, U> {
         }
 
         let ctx = unsafe { mpv_create() };
-        if ctx == ptr::null_mut() {
+        if ctx.is_null() {
             return Err(Error::Null);
         }
 

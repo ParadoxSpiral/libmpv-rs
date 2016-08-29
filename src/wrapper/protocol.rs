@@ -31,7 +31,6 @@ use std::ffi::CString;
 use std::mem;
 use std::panic;
 use std::panic::AssertUnwindSafe;
-use std::ptr;
 
 /// Do any initialization. `*mut T` is undefined heap memory.
 pub type StreamOpen<T, U> = Fn(*mut T, &U, &str) -> Result<(), MpvError>;
@@ -83,7 +82,7 @@ unsafe extern "C" fn read_wrapper<T, U>(cookie: *mut libc::c_void,
 	let data = AssertUnwindSafe(cookie as *mut ProtocolData<T, U>);
 
 	let ret = panic::catch_unwind((|| {
-		debug_assert!((**data).cookie != ptr::null_mut());
+		debug_assert!(!(**data).cookie.is_null());
 		(*(**data).read_fn)((**data).cookie, buf, nbytes)
 	}));
 	if ret.is_ok() {
@@ -104,7 +103,7 @@ unsafe extern "C" fn seek_wrapper<T, U>(cookie: *mut libc::c_void,
 	}
 
 	let ret = panic::catch_unwind((|| {
-		debug_assert!((**data).cookie != ptr::null_mut());
+		debug_assert!(!(**data).cookie.is_null());
 		(*(**data).seek_fn.as_ref().unwrap())((**data).cookie, offset)
 	}));
 	if ret.is_ok() {
@@ -122,7 +121,7 @@ unsafe extern "C" fn size_wrapper<T, U>(cookie: *mut libc::c_void)-> libc::int64
 	}
 
 	let ret = panic::catch_unwind((|| {
-		debug_assert!((**data).cookie != ptr::null_mut());
+		debug_assert!(!(**data).cookie.is_null());
 		(*(**data).size_fn.as_ref().unwrap())((**data).cookie)
 	}));
 	if ret.is_ok() {
@@ -137,7 +136,7 @@ unsafe extern "C" fn close_wrapper<T, U>(cookie: *mut libc::c_void) {
 	let data = AssertUnwindSafe(cookie as *mut ProtocolData<T, U>);
 
 	panic::catch_unwind((|| {
-		debug_assert!((**data).cookie != ptr::null_mut());
+		debug_assert!(!(**data).cookie.is_null());
 		(*(**data).close_fn)(Box::from_raw((**data).cookie))
 	}));
 }
