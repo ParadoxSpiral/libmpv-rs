@@ -30,60 +30,61 @@ use std::time::Duration;
 use std::thread;
 
 fn open(cookie: *mut File, _: &(), uri: &str) -> Result<(), MpvError> {
-	unsafe {
-		// Strip the `filereader://` part
-		*cookie = File::open(&uri[13..]).unwrap()
-	};
-	println!("Opened file, ready for orders o7");
-	Ok(())
+    unsafe {
+        // Strip the `filereader://` part
+        *cookie = File::open(&uri[13..]).unwrap()
+    };
+    println!("Opened file, ready for orders o7");
+    Ok(())
 }
 
 fn close(_: Box<File>) {
-	println!("Closing file, bye bye~~");
+    println!("Closing file, bye bye~~");
 }
 
 fn read(cookie: *mut File, buf: *mut i8, nbytes: u64) -> i64 {
-	unsafe {
-		let slice = slice::from_raw_parts_mut(buf, nbytes as _);
-		let forbidden_magic = mem::transmute::<&mut [i8], &mut [u8]>(slice);
+    unsafe {
+        let slice = slice::from_raw_parts_mut(buf, nbytes as _);
+        let forbidden_magic = mem::transmute::<&mut [i8], &mut [u8]>(slice);
 
-		(*cookie).read(forbidden_magic).unwrap() as _
-	}
+        (*cookie).read(forbidden_magic).unwrap() as _
+    }
 }
 
 fn seek(cookie: *mut File, offset: i64) -> i64 {
-	unsafe {
-		(&mut (*cookie)).seek(SeekFrom::Start(offset as u64)).unwrap() as _
-	}
+    unsafe { (&mut (*cookie)).seek(SeekFrom::Start(offset as u64)).unwrap() as _ }
 }
 
 fn size(cookie: *mut File) -> i64 {
-	unsafe {
-		(*cookie).metadata().unwrap().len() as _
-	}
+    unsafe { (*cookie).metadata().unwrap().len() as _ }
 }
 
 pub fn exec() {
-	let path = format!("filereader://{}", ::std::env::args().nth(1).unwrap());
+    let path = format!("filereader://{}", ::std::env::args().nth(1).unwrap());
 
-	let protocol = unsafe {
-		Protocol::new("filereader".into(), (), box open, box close,
-					  box read, Some(box seek), Some(box size))
-	};
+    let protocol = unsafe {
+        Protocol::new("filereader".into(),
+                      (),
+                      box open,
+                      box close,
+                      box read,
+                      Some(box seek),
+                      Some(box size))
+    };
 
-	let mpv = Parent::new(false).unwrap();
-	mpv.register_protocol(protocol).unwrap();
+    let mpv = Parent::new(false).unwrap();
+    mpv.register_protocol(protocol).unwrap();
 
-	mpv.set_property(Property::new("volume", Data::new(40))).unwrap();
+    mpv.set_property(Property::new("volume", Data::new(40))).unwrap();
 
-	mpv.playlist(&PlaylistOp::Loadfiles(&[utils::File::new(Path::new(&path),
-	                                                        utils::FileState::AppendPlay,
-	                                                        None)]))
-	           .unwrap();
+    mpv.playlist(&PlaylistOp::Loadfiles(&[utils::File::new(Path::new(&path),
+                                                           utils::FileState::AppendPlay,
+                                                           None)]))
+       .unwrap();
 
-	thread::sleep(Duration::from_secs(10));
+    thread::sleep(Duration::from_secs(10));
 
-	mpv.seek(&mpv::Seek::RelativeForward(Duration::from_secs(15))).unwrap();
+    mpv.seek(&mpv::Seek::RelativeForward(Duration::from_secs(15))).unwrap();
 
-	thread::sleep(Duration::from_secs(5));
+    thread::sleep(Duration::from_secs(5));
 }
