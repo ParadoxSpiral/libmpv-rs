@@ -17,7 +17,7 @@
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 use mpv;
-use mpv::{Data, MpvInstance, MpvError, Parent, Property, PlaylistOp};
+use mpv::{MpvInstance, MpvError, Parent, PlaylistOp};
 use mpv::utils;
 use mpv::protocol::*;
 
@@ -75,7 +75,7 @@ pub fn exec() {
     let mpv = Parent::new(false).unwrap();
     mpv.register_protocol(protocol).unwrap();
 
-    mpv.set_property(Property::new("volume", 40)).unwrap();
+    mpv.set_property("volume", 40).unwrap();
 
     mpv.playlist(&PlaylistOp::Loadfiles(&[utils::File::new(Path::new(&path),
                                                            utils::FileState::AppendPlay,

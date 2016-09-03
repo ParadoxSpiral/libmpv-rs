@@ -34,10 +34,10 @@ fn options_properties() {
     // TODO: Cover all `Data` variants.
 
     let mpv = UninitializedParent::<(), ()>::new(false).unwrap();
-    mpv.set_option(Property::new("cache-initial", 1)).unwrap();
-    mpv.set_option(Property::new("volume", 0)).unwrap();
-    mpv.set_option(Property::new("vo", "null")).unwrap();
-    mpv.set_option(Property::new("ytdl", true)).unwrap();
+    mpv.set_option("cache-initial", 1).unwrap();
+    mpv.set_option("volume", 0).unwrap();
+    mpv.set_option("vo", "null").unwrap();
+    mpv.set_option("ytdl", true).unwrap();
     let mpv = mpv.init().unwrap();
 
     mpv.playlist(&PlaylistOp::Loadfiles(&[File::new(Path::new("https://www.youtube.\
@@ -52,7 +52,7 @@ fn options_properties() {
                mpv.get_property("volume", &Format::Int64)
                   .unwrap());
 
-    mpv.set_property(Property::new("volume", 4)).unwrap();
+    mpv.set_property("volume", 4).unwrap();
 
     assert_eq!(Data::new(4),
                mpv.get_property("volume", &Format::Int64)

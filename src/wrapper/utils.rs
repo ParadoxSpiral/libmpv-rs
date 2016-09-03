@@ -52,6 +52,15 @@ pub(crate) fn mpv_err<T>(ret: T, err_val: libc::c_int) -> Result<T, Error> {
     }
 }
 
+pub(crate) fn property_from_raw(raw: *mut libc::c_void) -> (String, Data) {
+    debug_assert!(!raw.is_null());
+    let raw = unsafe { &mut *(raw as *mut MpvEventProperty) };
+    (
+        unsafe { CStr::from_ptr(raw.name).to_str().unwrap().into() },
+        Data::from_raw(raw.format, raw.data)
+    )
+}
+
 #[allow(missing_docs)]
 /// Equivalent to subset of `MpvFormat` used by the public API.
 pub enum Format {

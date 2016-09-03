@@ -212,44 +212,6 @@ impl Into<Data> for MpvNode {
     }
 }
 
-#[derive(Clone, Debug)]
-#[allow(missing_docs)]
-/// Contains name and data of a property.
-///
-/// Partial equality only implies that the names are equal.
-pub struct Property {
-    pub name: String,
-    pub data: Data,
-}
-
-impl Property {
-    fn from_raw(raw: *mut libc::c_void) -> Property {
-        debug_assert!(!raw.is_null());
-        let raw = unsafe { &mut *(raw as *mut MpvEventProperty) };
-        Property {
-            name: unsafe { CStr::from_ptr(raw.name).to_str().unwrap().into() },
-            data: Data::from_raw(raw.format, raw.data),
-        }
-    }
-
-    #[inline]
-    /// Create a `Property` that is suitable for observing.
-    /// Data is used to infer the format of the property, the value is never used in this case.
-    pub fn new<T: Into<Data>>(name: &str, data: T) -> Property {
-        Property {
-            name: name.into(),
-            data: data.into(),
-        }
-    }
-}
-
-impl PartialEq<Property> for Property {
-    #[inline]
-    fn eq(&self, other: &Property) -> bool {
-        self.name == other.name
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// Possible seek operations by `seek`.
 pub enum Seek {
@@ -451,10 +413,11 @@ impl<T, U> UninitializedParent<T, U> {
 
     #[inline]
     /// Set an option.
-    pub fn set_option(&self, mut opt: Property) -> Result<(), Error> {
-        let name = CString::new(&opt.name[..]).unwrap().into_raw();
-        let format = opt.data.format().as_val();
-        let ret = match opt.data {
+    pub fn set_option<D: Into<Data>>(&self, name: &str, data: D) -> Result<(), Error> {
+        let name = CString::new(name).unwrap().into_raw();
+        let mut data = data.into();
+        let format = data.format().as_val();
+        let ret = match data {
             Data::OsdString(_) => Err(Error::OsdStringWrite),
             Data::String(ref v) => {
                 let data = CString::new(v.as_bytes()).unwrap().into_raw();
@@ -468,7 +431,7 @@ impl<T, U> UninitializedParent<T, U> {
                 ret
             }
             _ => {
-                let data = data_ptr!(&mut opt.data);
+                let data = data_ptr!(&mut data);
 
                 mpv_err((), unsafe { mpv_set_option(self.ctx, name, format, data) })
             }
@@ -858,8 +821,8 @@ pub trait MpvInstance<'parent, P>
     fn observe_all(&self, events: &[Event]) -> Result<EventIter<P>, Error>;
     /// Execute any mpv command. See implementation for information about safety.
     unsafe fn command(&self, cmd: &Command) -> Result<(), Error>;
-    /// Set a given `Property` with `prop`, using it's value.
-    fn set_property(&self, prop: Property) -> Result<(), Error>;
+    /// Set a given property.
+    fn set_property<D: Into<Data>>(&self, name: &str, mut data: D) -> Result<(), Error>;
     /// Get the `Data` of a given named property.
     fn get_property(&self, name: &str, format: &Format) -> Result<Data, Error>;
     /// Seek in a way defined by `Seek`.
@@ -897,7 +860,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
             let mut props = Vec::with_capacity(events.len());
             for elem in events {
                 if let Event::PropertyChange(ref v) = *elem {
-                    if properties.contains_key(&v.name) {
+                    if properties.contains_key(&v.0) {
                         return Err(Error::AlreadyObserved(Box::new(elem.clone())));
                     } else {
                         try!(mpv_err((), unsafe { mpv_request_event(self.ctx(), elem.as_id(), 1) }));
@@ -928,13 +891,13 @@ impl<'parent, P> MpvInstance<'parent, P> for P
             let mut props_ins = Vec::with_capacity(events.len());
             let start_id = properties.len();
             for (i, elem) in props.iter().enumerate() {
-                let name = CString::new(elem.name.clone()).unwrap();
+                let name = CString::new(&elem.0[..]).unwrap();
                 let err = mpv_err((),
                                   unsafe {
                                     mpv_observe_property(self.ctx(),
                                                          (start_id + i) as _,
                                                          name.as_ptr(),
-                                                         elem.data.format() as _)
+                                                         elem.1.format() as _)
                                   });
                 if err.is_err() {
                     for (_, id) in props_ins {
@@ -943,7 +906,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                     }
                     return Err(err.unwrap_err());
                 }
-                props_ins.push((elem.name.clone(), (start_id + i) as _));
+                props_ins.push((elem.0.clone(), (start_id + i) as _));
             }
             observe.extend(evs.clone());
             properties.extend(props_ins);
@@ -984,10 +947,11 @@ impl<'parent, P> MpvInstance<'parent, P> for P
 
     #[inline]
     /// Set the value of a property.
-    fn set_property(&self, mut prop: Property) -> Result<(), Error> {
-        let format = prop.data.format().as_val();
-        let name = CString::new(&prop.name[..]).unwrap().into_raw();
-        let ret = match prop.data {
+    fn set_property<T: Into<Data>>(&self, name: &str, data: T) -> Result<(), Error> {
+        let name = CString::new(name).unwrap().into_raw();
+        let mut data = data.into();
+        let format = data.format().as_val();
+        let ret = match data {
             Data::OsdString(_) => Err(Error::OsdStringWrite),
             Data::String(ref v) => {
                 let data = CString::new(v.as_bytes()).unwrap().into_raw();
@@ -1001,7 +965,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                 ret
             }
             _ => {
-                let data = data_ptr!(&mut prop.data);
+                let data = data_ptr!(&mut data);
 
                 mpv_err((),
                         unsafe { mpv_set_property(self.ctx(), name, format, data) })
@@ -1334,12 +1298,12 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     #[inline]
     /// Pause playback at runtime.
     fn pause(&self) -> Result<(), Error> {
-        self.set_property(Property::new("pause", true))
+        self.set_property("pause", true)
     }
 
     #[inline]
     /// Unpause playback at runtime.
     fn unpause(&self) -> Result<(), Error> {
-        self.set_property(Property::new("pause", false))
+        self.set_property("pause", false)
     }
 }

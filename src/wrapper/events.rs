@@ -20,7 +20,7 @@ use libc;
 use parking_lot::{Condvar, Mutex};
 
 use super::*;
-use super::utils::mpv_err;
+use super::utils::{mpv_err, property_from_raw};
 use super::super::LogLevel;
 use super::super::raw::*;
 use super::super::raw::prototype::*;
@@ -72,7 +72,7 @@ pub enum Event {
     AudioReconfig,
     Seek,
     PlaybackRestart,
-    PropertyChange(Property),
+    PropertyChange((String, Data)),
 }
 
 impl Event {
@@ -109,7 +109,7 @@ impl MpvEvent {
             MpvEventId::AudioReconfig => Event::AudioReconfig,
             MpvEventId::Seek => Event::Seek,
             MpvEventId::PlaybackRestart => Event::PlaybackRestart,
-            MpvEventId::PropertyChange => Event::PropertyChange(Property::from_raw(self.data)),
+            MpvEventId::PropertyChange => Event::PropertyChange(property_from_raw(self.data)),
             _ => unreachable!(),
         })
     }
@@ -128,7 +128,7 @@ impl MpvEvent {
                 MpvEventId::AudioReconfig => Event::AudioReconfig,
                 MpvEventId::Seek => Event::Seek,
                 MpvEventId::PlaybackRestart => Event::PlaybackRestart,
-                MpvEventId::PropertyChange => Event::PropertyChange(Property::from_raw(self.data)),
+                MpvEventId::PropertyChange => Event::PropertyChange(property_from_raw(self.data)),
                 _ => unreachable!(),
             },
             err: {
@@ -173,10 +173,10 @@ impl<'parent, P> Drop for EventIter<'parent, P>
         let mut compare_ev_unobserve = |outer_ev: &Event, inner_ev: &Event| {
             if let Event::PropertyChange(ref outer_prop) = *outer_ev {
                 if let Event::PropertyChange(ref inner_prop) = *inner_ev {
-                    if outer_prop.name == inner_prop.name {
+                    if outer_prop.0 == inner_prop.0 {
                         unsafe {
                             mpv_unobserve_property(self.ctx, all_to_observe_properties.remove(
-                                                                        &outer_prop.name).unwrap());
+                                                                        &outer_prop.0).unwrap());
                         }
                         return true;
                     }
@@ -258,7 +258,7 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
                 let mut compare_ev = |outer_ev: &Event, inner_ev: &InnerEvent| {
                     if let Event::PropertyChange(ref outer_prop) = *outer_ev {
                         if let Event::PropertyChange(ref inner_prop) = *inner_ev.as_event() {
-                            if outer_prop.name == inner_prop.name {
+                            if outer_prop.0 == inner_prop.0 {
                                 ret_events.push(inner_ev.as_result());
                                 return true;
                             }
