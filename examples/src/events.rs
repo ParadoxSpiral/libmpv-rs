@@ -30,10 +30,10 @@ use std::thread;
 pub fn exec() {
     // Create an `UninitializedParent` (with events enabled) to set some options.
     let mpv = UninitializedParent::<(), ()>::new(true).unwrap();
-    mpv.set_option(Property::new("cache-initial", Data::new(1))).unwrap();
-    mpv.set_option(Property::new("volume", Data::new(10))).unwrap();
-    mpv.set_option(Property::new("vo", Data::new("null"))).unwrap();
-    mpv.set_option(Property::new("ytdl", Data::new(true))).unwrap();
+    mpv.set_option(Property::new("cache-initial", 1)).unwrap();
+    mpv.set_option(Property::new("volume", 10)).unwrap();
+    mpv.set_option(Property::new("vo", "null")).unwrap();
+    mpv.set_option(Property::new("ytdl", true)).unwrap();
     // Consume the `UninitializedParent` and replace it by a `Parent`.
     let mpv = mpv.init().unwrap();
 
@@ -70,10 +70,8 @@ pub fn exec() {
         });
         scope.spawn(|| {
             // Here the value of the `Property` is irrelevant: only the name is used.
-            let iter = mpv.observe_all(&[Event::PropertyChange(Property::new("volume",
-                                                                             Data::new(0))),
-                                         Event::PropertyChange(Property::new("pause",
-                                                                             Data::new(false)))])
+            let iter = mpv.observe_all(&[Event::PropertyChange(Property::new("volume", 0)),
+                                         Event::PropertyChange(Property::new("pause", false))])
                           .unwrap();
 
             for vec in iter {
@@ -98,7 +96,7 @@ pub fn exec() {
 
         thread::sleep(Duration::from_secs(3));
 
-        mpv.set_property(Property::new("volume", Data::new(25))).unwrap();
+        mpv.set_property(Property::new("volume", 25)).unwrap();
 
         thread::sleep(Duration::from_secs(30));
 

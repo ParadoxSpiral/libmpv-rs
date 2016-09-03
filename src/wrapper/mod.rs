@@ -235,10 +235,10 @@ impl Property {
     #[inline]
     /// Create a `Property` that is suitable for observing.
     /// Data is used to infer the format of the property, the value is never used in this case.
-    pub fn new(name: &str, data: Data) -> Property {
+    pub fn new<T: Into<Data>>(name: &str, data: T) -> Property {
         Property {
             name: name.into(),
-            data: data,
+            data: data.into(),
         }
     }
 }
@@ -1334,12 +1334,12 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     #[inline]
     /// Pause playback at runtime.
     fn pause(&self) -> Result<(), Error> {
-        self.set_property(Property::new("pause", Data::Flag(true)))
+        self.set_property(Property::new("pause", true))
     }
 
     #[inline]
     /// Unpause playback at runtime.
     fn unpause(&self) -> Result<(), Error> {
-        self.set_property(Property::new("pause", Data::Flag(false)))
+        self.set_property(Property::new("pause", false))
     }
 }

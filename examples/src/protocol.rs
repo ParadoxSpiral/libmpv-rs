@@ -75,7 +75,7 @@ pub fn exec() {
     let mpv = Parent::new(false).unwrap();
     mpv.register_protocol(protocol).unwrap();
 
-    mpv.set_property(Property::new("volume", Data::new(40))).unwrap();
+    mpv.set_property(Property::new("volume", 40)).unwrap();
 
     mpv.playlist(&PlaylistOp::Loadfiles(&[utils::File::new(Path::new(&path),
                                                            utils::FileState::AppendPlay,
