@@ -19,7 +19,7 @@
 //! This abstraction lets you register custom protocols, which you then can use via 
 //! `PlaylistOp::Loadfiles`.
 
-// FIXME: test me pls, cleanup, better API: less *mut
+// FIXME: test me pls, cleanup
 
 use libc;
 
@@ -33,23 +33,24 @@ use std::panic;
 use std::panic::AssertUnwindSafe;
 
 /// Do any initialization. `*mut T` is undefined heap memory.
-pub type StreamOpen<T, U> = Fn(*mut T, &U, &str) -> Result<(), MpvError>;
+/// It is assumed that *mut T is initialized properly after the function returns.
+pub type StreamOpen<T, U> = Fn(*mut T, &mut U, &str) -> Result<(), MpvError>;
 /// Do any necessary cleanup.
 pub type StreamClose<T> = Fn(Box<T>);
 /// Seek to the given offset. Return the new offset, or `MpvError::Generic` if seek failed.
-pub type StreamSeek<T> = Fn(*mut T, i64) -> i64;
+pub type StreamSeek<T> = Fn(&mut T, i64) -> i64;
 /// Read nbytes into the given buffer.
 /// Return either the number of read bytes, 0 on EOF, -1 on error.
-pub type StreamRead<T> = Fn(*mut T, *mut libc::c_char, u64) -> i64;
+pub type StreamRead<T> = Fn(&mut T, *mut libc::c_char, u64) -> i64;
 /// Should return the total size of the stream in bytes.
-pub type StreamSize<T> = Fn(*mut T) -> i64;
+pub type StreamSize<T> = Fn(&mut T) -> i64;
 
 unsafe extern "C" fn open_wrapper<T, U>(user_data: *mut libc::c_void,
                                   uri: *mut libc::c_char,
                                   info: *mut MpvStreamCbInfo)
                                   -> libc::c_int
 {
-	let data = AssertUnwindSafe(user_data as *mut ProtocolData<T, U>);
+	let data = user_data as *mut ProtocolData<T, U>;
 
 	(*info).cookie = user_data;
 	(*info).read_fn = read_wrapper::<T, U> as _;
@@ -57,17 +58,17 @@ unsafe extern "C" fn open_wrapper<T, U>(user_data: *mut libc::c_void,
 	(*info).size_fn = size_wrapper::<T, U> as  _;
 	(*info).close_fn = close_wrapper::<T, U> as  _;
 
-	let ret = panic::catch_unwind(|| {
+	let ret = panic::catch_unwind(AssertUnwindSafe(|| {
 		let uri = CString::from_raw(uri);
-		let ret = (*(**data).open_fn)((**data).cookie, 
-									  &(**data).user_data,
+		let ret = (*(*data).open_fn)((*data).cookie,
+									  &mut (*data).user_data,
 									  uri.to_str().unwrap());
 		if ret.is_ok() {
 			0
 		} else {
 		    ret.unwrap_err() as libc::c_int
 		}
-	});
+	}));
 	if ret.is_ok() {
 		ret.unwrap()
 	} else {
@@ -79,12 +80,12 @@ unsafe extern "C" fn read_wrapper<T, U>(cookie: *mut libc::c_void,
                                      buf: *mut libc::c_char,
                                      nbytes: libc::uint64_t) -> libc::int64_t
 {
-	let data = AssertUnwindSafe(cookie as *mut ProtocolData<T, U>);
+	let data = cookie as *mut ProtocolData<T, U>;
 
-	let ret = panic::catch_unwind((|| {
-		debug_assert!(!(**data).cookie.is_null());
-		(*(**data).read_fn)((**data).cookie, buf, nbytes)
-	}));
+	let ret = panic::catch_unwind((AssertUnwindSafe(|| {
+		debug_assert!(!(*data).cookie.is_null());
+		(*(*data).read_fn)(&mut*(*data).cookie, buf, nbytes)
+	})));
 	if ret.is_ok() {
 		ret.unwrap()
 	} else {
@@ -96,16 +97,16 @@ unsafe extern "C" fn seek_wrapper<T, U>(cookie: *mut libc::c_void,
                                      	offset: libc::int64_t)
 										-> libc::int64_t
 {
-	let data = AssertUnwindSafe(cookie as *mut ProtocolData<T, U>);
+	let data = cookie as *mut ProtocolData<T, U>;
 
-	if (**data).seek_fn.is_none() {
+	if (*data).seek_fn.is_none() {
 		return MpvError::Unsupported as libc::int64_t;
 	}
 
-	let ret = panic::catch_unwind((|| {
-		debug_assert!(!(**data).cookie.is_null());
-		(*(**data).seek_fn.as_ref().unwrap())((**data).cookie, offset)
-	}));
+	let ret = panic::catch_unwind((AssertUnwindSafe(|| {
+		debug_assert!(!(*data).cookie.is_null());
+		(*(*data).seek_fn.as_ref().unwrap())(&mut*(*data).cookie, offset)
+	})));
 	if ret.is_ok() {
 		ret.unwrap()
 	} else {
@@ -114,15 +115,15 @@ unsafe extern "C" fn seek_wrapper<T, U>(cookie: *mut libc::c_void,
 }
 
 unsafe extern "C" fn size_wrapper<T, U>(cookie: *mut libc::c_void)-> libc::int64_t {
-	let data = AssertUnwindSafe(cookie as *mut ProtocolData<T, U>);
+	let data = cookie as *mut ProtocolData<T, U>;
 
-	if (**data).size_fn.is_none() {
+	if (*data).size_fn.is_none() {
 		return MpvError::Unsupported as libc::int64_t;
 	}
 
-	let ret = panic::catch_unwind((|| {
-		debug_assert!(!(**data).cookie.is_null());
-		(*(**data).size_fn.as_ref().unwrap())((**data).cookie)
+	let ret = panic::catch_unwind(AssertUnwindSafe(|| {
+		debug_assert!(!(*data).cookie.is_null());
+		(*(*data).size_fn.as_ref().unwrap())(&mut*(*data).cookie)
 	}));
 	if ret.is_ok() {
 		ret.unwrap()

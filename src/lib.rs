@@ -18,7 +18,7 @@
 
 #![deny(missing_docs)]
 #![allow(unknown_lints)]
-#![feature(pub_restricted, const_fn, stmt_expr_attributes)]
+#![feature(alloc_system, pub_restricted, const_fn, stmt_expr_attributes)]
 
 //! This crate provides abstractions for (libmpv)
 //! [https://github.com/mpv-player/mpv/tree/master/libmpv] of the (mpv media player)
@@ -30,6 +30,8 @@
 //! # Examples
 //!
 //! See the 'examples' directory in the crate root.
+
+extern crate alloc_system;
 
 extern crate libc;
 extern crate parking_lot;
@@ -50,7 +52,7 @@ mod tests;
 #[allow(missing_docs)]
 pub const MPV_CLIENT_API_MAJOR: u32 = 1;
 #[allow(missing_docs)]
-pub const MPV_CLIENT_API_MINOR: u32 = 22;
+pub const MPV_CLIENT_API_MINOR: u32 = 23;
 #[allow(missing_docs)]
 pub const MPV_CLIENT_API_VERSION: u32 = mpv_make_version(MPV_CLIENT_API_MAJOR,
                                                          MPV_CLIENT_API_MINOR);

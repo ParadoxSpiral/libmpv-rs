@@ -28,11 +28,11 @@ use std::time::Duration;
 use std::thread;
 
 pub fn exec() {
-    // Create an `UninitializedParent` to set some options.
+    // Create an `UninitializedParent` (with events enabled) to set some options.
     let mpv = UninitializedParent::<(), ()>::new(true).unwrap();
     mpv.set_option(Property::new("cache-initial", Data::new(1))).unwrap();
     mpv.set_option(Property::new("volume", Data::new(10))).unwrap();
-    mpv.set_option(Property::new("no-video", Data::new(true))).unwrap();
+    mpv.set_option(Property::new("vo", Data::new("null"))).unwrap();
     mpv.set_option(Property::new("ytdl", Data::new(true))).unwrap();
     // Consume the `UninitializedParent` and replace it by a `Parent`.
     let mpv = mpv.init().unwrap();

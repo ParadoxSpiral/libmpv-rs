@@ -36,7 +36,7 @@ fn options_properties() {
     let mpv = UninitializedParent::<(), ()>::new(false).unwrap();
     mpv.set_option(Property::new("cache-initial", Data::new(1))).unwrap();
     mpv.set_option(Property::new("volume", Data::new(0))).unwrap();
-    mpv.set_option(Property::new("no-video", Data::new(true))).unwrap();
+    mpv.set_option(Property::new("vo", Data::new("null"))).unwrap();
     mpv.set_option(Property::new("ytdl", Data::new(true))).unwrap();
     let mpv = mpv.init().unwrap();
 

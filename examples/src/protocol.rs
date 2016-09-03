@@ -29,7 +29,7 @@ use std::slice;
 use std::time::Duration;
 use std::thread;
 
-fn open(cookie: *mut File, _: &(), uri: &str) -> Result<(), MpvError> {
+fn open(cookie: *mut File, _: &mut (), uri: &str) -> Result<(), MpvError> {
     unsafe {
         // Strip the `filereader://` part
         *cookie = File::open(&uri[13..]).unwrap()
@@ -42,21 +42,21 @@ fn close(_: Box<File>) {
     println!("Closing file, bye bye~~");
 }
 
-fn read(cookie: *mut File, buf: *mut i8, nbytes: u64) -> i64 {
+fn read(cookie: &mut File, buf: *mut i8, nbytes: u64) -> i64 {
     unsafe {
         let slice = slice::from_raw_parts_mut(buf, nbytes as _);
         let forbidden_magic = mem::transmute::<&mut [i8], &mut [u8]>(slice);
 
-        (*cookie).read(forbidden_magic).unwrap() as _
+        cookie.read(forbidden_magic).unwrap() as _
     }
 }
 
-fn seek(cookie: *mut File, offset: i64) -> i64 {
-    unsafe { (&mut (*cookie)).seek(SeekFrom::Start(offset as u64)).unwrap() as _ }
+fn seek(cookie: &mut File, offset: i64) -> i64 {
+    cookie.seek(SeekFrom::Start(offset as u64)).unwrap() as _
 }
 
-fn size(cookie: *mut File) -> i64 {
-    unsafe { (*cookie).metadata().unwrap().len() as _ }
+fn size(cookie: &mut File) -> i64 {
+    cookie.metadata().unwrap().len() as _
 }
 
 pub fn exec() {

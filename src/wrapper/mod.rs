@@ -156,6 +156,13 @@ impl Into<Data> for String {
     }
 }
 
+impl<'a> Into<Data> for &'a str {
+    #[inline]
+    fn into(self) -> Data {
+        Data::String(self.to_owned())
+    }
+}
+
 impl Into<Data> for bool {
     #[inline]
     fn into(self) -> Data {
