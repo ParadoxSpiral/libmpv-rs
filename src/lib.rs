@@ -18,7 +18,7 @@
 
 #![deny(missing_docs)]
 #![allow(unknown_lints)]
-#![feature(pub_restricted, const_fn, stmt_expr_attributes)]
+#![feature(pub_restricted, const_fn, stmt_expr_attributes, untagged_unions)]
 
 //! This crate provides abstractions for (libmpv)
 //! [https://github.com/mpv-player/mpv/tree/master/libmpv] of the (mpv media player)

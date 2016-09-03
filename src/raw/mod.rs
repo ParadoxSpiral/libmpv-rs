@@ -68,17 +68,20 @@ pub enum MpvFormat {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Eq)]
+#[derive(Clone)]
+pub union NodeUnion {
+    char_: *mut libc::c_char,
+    flag: libc::c_int,
+    int64: libc::int64_t,
+    double: libc::c_double,
+    list: *mut MpvNodeList,
+    ba: *mut MpvByteArray,
+}
+
+#[repr(C)]
+#[derive(Clone, Debug, Eq)]
 pub struct MpvNode {
-    // FIXME:
-    // union {
-    // char *string;
-    // int flag;
-    // int64_t int64;
-    // double double_;
-    // struct mpv_node_list *list;
-    // struct mpv_byte_array *ba;
-    // } u;
+    pub u: NodeUnion,
     pub format: MpvFormat,
 }
 

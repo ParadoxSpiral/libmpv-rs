@@ -126,9 +126,7 @@ impl MpvNode {
     }
     #[inline]
     pub(crate) fn get_inner(&self) -> Data {
-        // TODO: this
-        // Data::from_union(self.format, self.data)
-        unimplemented!()
+        Data::from_union(self.format, self.u)
     }
 }
 

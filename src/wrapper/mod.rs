@@ -148,7 +148,15 @@ impl Data {
         }
     }
 
-    //fn from_union(fmt: MpvFormat, data: )
+    fn from_union(fmt: MpvFormat, data: NodeUnion) -> Data {
+        match fmt {
+            // TODO: impl other formats
+            MpvFormat::Flag => Data::Flag(unsafe { data.flag != 0),
+            MpvFormat::Int64 => Data::Int64(unsafe { data.int64 }),
+            MpvFormat::Double => Data::Double(unsafe { data.double }),
+            _ => unreachable!(),
+        }
+    }
 }
 
 impl Into<Data> for String {
