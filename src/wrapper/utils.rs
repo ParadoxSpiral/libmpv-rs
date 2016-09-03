@@ -63,7 +63,7 @@ pub(crate) fn property_from_raw(raw: *mut libc::c_void) -> (String, Data) {
 }
 
 #[allow(missing_docs)]
-/// Equivalent to subset of `MpvFormat` used by the public API.
+/// Subset of `MpvFormat` used by the public API.
 pub enum Format {
     String,
     OsdString,
@@ -102,7 +102,7 @@ impl MpvError {
     }
 
     #[inline]
-    /// Returns a string slice associated with the `MpvError`.
+    /// Returns the associated error string.
     pub fn error_string(&self) -> &str {
         let raw = unsafe { mpv_error_string(self.as_val()) };
         unsafe { CStr::from_ptr(raw) }.to_str().unwrap()
@@ -117,24 +117,34 @@ impl MpvFormat {
 
 impl MpvNode {
     #[inline]
-    /// Create a `MpvNode` from a supported value.
-    pub fn new<T>(val: T) -> MpvNode
-        where T: Into<MpvNode>
-    {
-        val.into()
+    /// Create an `MpvNode`.
+    pub fn new<T: Into<Data>>(data: T) -> MpvNode {
+        let data = data.into();
+        MpvNode {
+            format: data.format(),
+        }
     }
-
+    #[inline]
     pub(crate) fn get_inner(&self) -> Data {
-        // TODO: this.
-        unimplemented!();
+        // TODO: this
+        // Data::from_union(self.format, self.data)
+        unimplemented!()
     }
 }
 
-// TODO: impl Into<MpvNode> for types
-
 impl PartialEq for MpvNode {
+    #[inline]
     fn eq(&self, other: &MpvNode) -> bool {
-        self.get_inner() == other.get_inner()
+        self.format == other.format && self.get_inner() == other.get_inner()
+    }
+}
+
+impl Into<MpvNode> for Data {
+    #[inline]
+    fn into(self) -> MpvNode {
+        MpvNode {
+            format: self.format(),
+        }
     }
 }
 

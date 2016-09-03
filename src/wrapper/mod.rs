@@ -147,6 +147,8 @@ impl Data {
             _ => unreachable!(),
         }
     }
+
+    //fn from_union(fmt: MpvFormat, data: )
 }
 
 impl Into<Data> for String {
