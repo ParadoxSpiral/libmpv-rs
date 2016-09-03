@@ -20,16 +20,15 @@
 use libc;
 
 pub mod prototype {
-    #[repr(C)]
-    /// This is ok, because you only ever need a `*mut MpvHandle`.
-    pub struct MpvHandle;
+    // Opaque struct
+    pub enum MpvHandle {}
 }
 
 enum_from_primitive! {
     #[repr(C)]
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum MpvError {
-        // Success = 0, Handled internally
+        Success = 0,
         EventQueueFull = -1,
         NoMem = -2,
         Uninitialized = -3,

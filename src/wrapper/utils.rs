@@ -45,6 +45,7 @@ macro_rules! data_ptr {
 }
 
 pub(crate) fn mpv_err<T>(ret: T, err_val: libc::c_int) -> Result<T, Error> {
+    debug_assert!(err_val <= 0);
     if err_val == 0 {
         Ok(ret)
     } else {

@@ -31,6 +31,8 @@
 //!
 //! See the 'examples' directory in the crate root.
 
+// TODO: proofread docs
+
 extern crate alloc_system;
 
 extern crate libc;

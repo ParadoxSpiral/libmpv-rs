@@ -69,7 +69,7 @@ pub fn exec() {
             }
         });
         scope.spawn(|| {
-            // Here the value of the `Property` is irrelevant: only the name is used.
+            // Here the value of the property is irrelevant: only the name is used.
             let iter = mpv.observe_all(&[Event::PropertyChange(("volume".into(), 0.into())),
                                          Event::PropertyChange(("pause".into(), false.into()))])
                           .unwrap();
