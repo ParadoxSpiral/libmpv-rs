@@ -21,6 +21,7 @@ use mpv::{MpvInstance, MpvError, Parent, PlaylistOp};
 use mpv::utils;
 use mpv::protocol::*;
 
+use std::env;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::mem;
@@ -60,7 +61,8 @@ fn size(cookie: &mut File) -> i64 {
 }
 
 pub fn exec() {
-    let path = format!("filereader://{}", ::std::env::args().nth(1).unwrap());
+    let path = format!("filereader://{}", env::args()
+                                            .nth(1).expect("Expected local path, found nil."));
 
     let protocol = unsafe {
         Protocol::new("filereader".into(),
