@@ -44,11 +44,6 @@ use std::ptr;
 use std::ffi::{CStr, CString};
 use std::time::Duration;
 
-#[cfg(unix)]
-use std::ffi::OsStr;
-#[cfg(unix)]
-use std::os::unix::ffi::OsStrExt;
-
 macro_rules! destroy_on_err {
     ($ctx:expr, $exec:expr) => (
         {
@@ -154,6 +149,7 @@ impl Data {
             MpvFormat::Flag => Data::Flag(unsafe { data.flag } != 0 ),
             MpvFormat::Int64 => Data::Int64(unsafe { data.int64 }),
             MpvFormat::Double => Data::Double(unsafe { data.double }),
+            MpvFormat::String => Data::String(unsafe { utils::cstr_to_string(CStr::from_ptr(data._char)) }),
             _ => unreachable!(),
         }
     }
@@ -1003,18 +999,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                     .and_then(|_| {
                         let ret = unsafe { CStr::from_ptr(*ptr) };
 
-                        let data;
-                        #[cfg(windows)] {
-                            // Mpv returns all strings on windows in UTF-8.
-                            data = ret.to_str().unwrap().to_owned();
-                        }
-                        #[cfg(unix)] {
-                            data = OsStr::from_bytes(ret.to_bytes()).to_string_lossy().into_owned();
-                        }
-                        #[cfg(all(not(unix), not(windows)))] {
-                            // Hope that all is well
-                            data = String::from_utf8_lossy(ret.to_bytes()).into_owned();
-                        }
+                        let data = utils::cstr_to_string(ret);
 
                         unsafe{mpv_free(*ptr as *mut _)}
 

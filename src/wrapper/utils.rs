@@ -26,6 +26,11 @@ use std::mem;
 use std::path::Path;
 use std::ffi::{CStr, CString};
 
+#[cfg(unix)]
+use std::ffi::OsStr;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
+
 // Cast `&mut Data` so that libmpv can use it.
 macro_rules! data_ptr {
     ($data:expr) => (
@@ -60,6 +65,22 @@ pub(crate) fn property_from_raw(raw: *mut libc::c_void) -> (String, Data) {
         unsafe { CStr::from_ptr(raw.name).to_str().unwrap().into() },
         Data::from_raw(raw.format, raw.data)
     )
+}
+
+pub(crate) fn cstr_to_string(cstr: &CStr) -> String {
+    let data;
+    #[cfg(windows)] {
+        // Mpv returns all strings on windows in UTF-8.
+        data = cstr.to_str().unwrap().to_owned();
+    }
+    #[cfg(unix)] {
+        data = OsStr::from_bytes(cstr.to_bytes()).to_string_lossy().into_owned();
+    }
+    #[cfg(all(not(unix), not(windows)))] {
+        // Hope that all is well
+        data = String::from_utf8_lossy(cstr.to_bytes()).into_owned();
+    }
+    data
 }
 
 #[allow(missing_docs)]
@@ -150,6 +171,13 @@ impl Into<MpvNode> for Data {
     #[inline]
     fn into(self) -> MpvNode {
         MpvNode {
+            u: NodeUnion(match self {
+                Data::Double(v) => v,
+                Data::Flag(v) => if v { 0 } else { 1 },
+                Data::Int64(v) => v,
+                Data::Node(v) => &mut v as *mut _,
+                Data::String(v) => &mut CString::new(v).unwrap().into_raw() as *mut _,
+            }),
             format: self.format(),
         }
     }
