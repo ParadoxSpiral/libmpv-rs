@@ -19,6 +19,8 @@
 #![allow(dead_code, improper_ctypes, missing_docs, non_camel_case_types)]
 use libc;
 
+use std::fmt::{Debug, Formatter};
+
 pub mod prototype {
     // Opaque struct
     pub enum MpvHandle {}
@@ -68,25 +70,36 @@ pub enum MpvFormat {
 }
 
 #[repr(C)]
-#[derive(Clone)]
 pub union NodeUnion {
-    char_: *mut libc::c_char,
-    flag: libc::c_int,
-    int64: libc::int64_t,
-    double: libc::c_double,
-    list: *mut MpvNodeList,
-    ba: *mut MpvByteArray,
+    pub _char: *mut libc::c_char,
+    pub flag: libc::c_int,
+    pub int64: libc::int64_t,
+    pub double: libc::c_double,
+    pub list: *mut MpvNodeList,
+    pub ba: *mut MpvByteArray,
+}
+
+impl Clone for NodeUnion {
+    fn clone(&self) -> NodeUnion {
+        unreachable!("Clone for NodeUnion; This should never happen");
+    }
+}
+
+impl Debug for NodeUnion {
+    fn fmt(&self, fmt: &mut Formatter) -> Result<(), ::std::fmt::Error> {
+        write!(fmt, "debug print untagged union")
+    }
 }
 
 #[repr(C)]
-#[derive(Clone, Debug, Eq)]
+#[derive(Clone, Debug)]
 pub struct MpvNode {
     pub u: NodeUnion,
     pub format: MpvFormat,
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct MpvNodeList {
     pub num: libc::c_int,
     pub values: *mut MpvNode,

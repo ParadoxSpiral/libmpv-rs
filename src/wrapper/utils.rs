@@ -24,7 +24,7 @@ use super::super::raw::*;
 
 use std::mem;
 use std::path::Path;
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
 
 // Cast `&mut Data` so that libmpv can use it.
 macro_rules! data_ptr {
@@ -120,9 +120,18 @@ impl MpvNode {
     /// Create an `MpvNode`.
     pub fn new<T: Into<Data>>(data: T) -> MpvNode {
         let data = data.into();
-        MpvNode {
+        let ret = MpvNode {
+            u: NodeUnion(match data {
+                Data::Double(v) => v,
+                Data::Flag(v) => if v { 0 } else { 1 },
+                Data::Int64(v) => v,
+                Data::Node(v) => &mut v as *mut _,
+                Data::String(v) => &mut CString::new(v).unwrap().into_raw() as *mut _,
+            }),
             format: data.format(),
-        }
+        };
+        mem::forget(data);
+        ret
     }
     #[inline]
     pub(crate) fn get_inner(&self) -> Data {
@@ -142,6 +151,15 @@ impl Into<MpvNode> for Data {
     fn into(self) -> MpvNode {
         MpvNode {
             format: self.format(),
+        }
+    }
+}
+
+impl Drop for MpvNode {
+    fn drop(&mut self) {
+        // TODO: needs testing
+        if self.format == MpvFormat::String {
+            CString::from_raw(self.u._char);
         }
     }
 }

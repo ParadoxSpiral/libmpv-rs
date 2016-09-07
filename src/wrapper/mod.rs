@@ -140,7 +140,7 @@ impl Data {
     fn from_raw(fmt: MpvFormat, ptr: *mut libc::c_void) -> Data {
         debug_assert!(!ptr.is_null());
         match fmt {
-            MpvFormat::Flag => Data::Flag(unsafe { *(ptr as *mut libc::int64_t) } != 0),
+            MpvFormat::Flag => Data::Flag(unsafe { *(ptr as *mut libc::int64_t) } != 0 ),
             MpvFormat::Int64 => Data::Int64(unsafe { *(ptr as *mut _) }),
             MpvFormat::Double => Data::Double(unsafe { *(ptr as *mut _) }),
             MpvFormat::Node => Data::Node(unsafe { *(ptr as *mut _) }),
@@ -151,7 +151,7 @@ impl Data {
     fn from_union(fmt: MpvFormat, data: NodeUnion) -> Data {
         match fmt {
             // TODO: impl other formats
-            MpvFormat::Flag => Data::Flag(unsafe { data.flag != 0),
+            MpvFormat::Flag => Data::Flag(unsafe { data.flag } != 0 ),
             MpvFormat::Int64 => Data::Int64(unsafe { data.int64 }),
             MpvFormat::Double => Data::Double(unsafe { data.double }),
             _ => unreachable!(),
@@ -523,11 +523,9 @@ pub unsafe trait MpvMarker {
     fn ev_to_observe(&self) -> &Option<Mutex<Vec<Event>>>;
     fn ev_to_observe_properties(&self) -> &Option<Mutex<HashMap<String, libc::uint64_t>>>;
     fn ev_observed(&self) -> &Option<Mutex<Vec<InnerEvent>>>;
-    fn drop_ev_iter_step(&mut self) {
+    unsafe fn drop_ev_iter_step(&mut self) {
         if self.check_events() {
-            unsafe {
-                Box::from_raw(self.ev_iter_notification().unwrap());
-            }
+            Box::from_raw(self.ev_iter_notification().unwrap());
         }
     }
 }
@@ -577,8 +575,8 @@ unsafe impl<'parent, T, U> MpvMarker for Client<'parent, T, U> {
 impl<T, U> Drop for Parent<T, U> {
     #[inline]
     fn drop(&mut self) {
-        self.drop_ev_iter_step();
         unsafe {
+            self.drop_ev_iter_step();
             mpv_terminate_destroy(self.ctx());
         }
     }
@@ -587,8 +585,8 @@ impl<T, U> Drop for Parent<T, U> {
 impl<'parent, T, U> Drop for Client<'parent, T, U> {
     #[inline]
     fn drop(&mut self) {
-        self.drop_ev_iter_step();
         unsafe {
+            self.drop_ev_iter_step();
             mpv_detach_destroy(self.ctx());
         }
     }
