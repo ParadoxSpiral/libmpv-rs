@@ -24,7 +24,7 @@ use super::super::raw::*;
 
 use std::mem;
 use std::path::Path;
-use std::ffi::{CStr, CString};
+use std::ffi::{CStr, /*CString*/};
 
 #[cfg(unix)]
 use std::ffi::OsStr;
@@ -42,8 +42,8 @@ macro_rules! data_ptr {
                 v as *mut libc::int64_t as *mut libc::c_void,
             &mut Data::Double(ref mut v) =>
                 v as *mut libc::c_double as *mut libc::c_void,
-            &mut Data::Node(ref mut v) =>
-                v as *mut MpvNode as *mut libc::c_void,
+            /*&mut Data::Node(ref mut v) =>
+                v as *mut MpvNode as *mut libc::c_void,*/
             _ => unreachable!(),
         }
     )
@@ -136,34 +136,65 @@ impl MpvFormat {
     }
 }
 
+/*
 impl MpvNode {
     #[inline]
     /// Create an `MpvNode`.
     pub fn new<T: Into<Data>>(data: T) -> MpvNode {
         let data = data.into();
-        let ret = MpvNode {
-            u: NodeUnion(match data {
-                Data::Double(v) => v,
-                Data::Flag(v) => if v { 0 } else { 1 },
-                Data::Int64(v) => v,
-                Data::Node(v) => &mut v as *mut _,
-                Data::String(v) => &mut CString::new(v).unwrap().into_raw() as *mut _,
-            }),
+        MpvNode {
             format: data.format(),
-        };
-        mem::forget(data);
-        ret
+            u: match data {
+                Data::Double(v) => NodeUnion{ double: v},
+                Data::Flag(v) => if v { NodeUnion{ flag: 0} } else { NodeUnion{ flag: 1} },
+                Data::Int64(v) => NodeUnion{ int64: v},
+                Data::Node(v) => NodeUnion{ list: &mut MpvNodeList::from_node(v) as _},
+                Data::String(v) => NodeUnion{ _char: &mut CString::new(v).unwrap().into_raw() as *mut *mut libc::c_char as _},
+                Data::OsdString(v) => unimplemented!(),
+            },
+        }
     }
+    fn as_data(&self) -> Data {
+        match self.format {
+            MpvFormat::Flag => Data::Flag(unsafe { self.u.flag } != 0 ),
+            MpvFormat::Int64 => Data::Int64(unsafe { self.u.int64 }),
+            MpvFormat::Double => Data::Double(unsafe { self.u.double }),
+            MpvFormat::String => Data::String(unsafe { utils::cstr_to_string(CStr::from_ptr(self.u._char)) }),
+            MpvFormat::OsdString => Data::String(unsafe { utils::cstr_to_string(CStr::from_ptr(self.u._char)) }),
+            MpvFormat::Node => Data::Node(unsafe{ *(*self.u.list).values.clone() }),
+            _ => unreachable!(),
+        }
+    }
+    fn as_node_list(&self) -> MpvNodeList {
+        MpvNodeList {
+            num: 1,
+            values: ,
+            keys: 
+        }
+    }
+}
+
+impl Clone for MpvNode {
     #[inline]
-    pub(crate) fn get_inner(&self) -> Data {
-        Data::from_union(self.format, self.u)
+    fn clone(&self) -> MpvNode {
+        MpvNode {
+            format: self.format,
+            u: match self.format {
+                MpvFormat::Double => NodeUnion{ double: self.u.double},
+                MpvFormat::Flag => NodeUnion{ flag: self.u.flag},
+                MpvFormat::Int64 => NodeUnion{ int64: self.u.int64},
+                MpvFormat::Node => NodeUnion{ list: &mut self.as_node_list() as _},
+                MpvFormat::String => NodeUnion{ _char: &mut CString::new(self.u._char).unwrap().into_raw() as *mut *mut libc::c_char as _},
+                MpvFormat::OsdString => unimplemented!(),
+            },
+        }
     }
 }
 
 impl PartialEq for MpvNode {
     #[inline]
     fn eq(&self, other: &MpvNode) -> bool {
-        self.format == other.format && self.get_inner() == other.get_inner()
+        self.format == other.format && self.as_data() == other.as_data()
     }
 }
 
@@ -171,26 +202,39 @@ impl Into<MpvNode> for Data {
     #[inline]
     fn into(self) -> MpvNode {
         MpvNode {
-            u: NodeUnion(match self {
-                Data::Double(v) => v,
-                Data::Flag(v) => if v { 0 } else { 1 },
-                Data::Int64(v) => v,
-                Data::Node(v) => &mut v as *mut _,
-                Data::String(v) => &mut CString::new(v).unwrap().into_raw() as *mut _,
-            }),
             format: self.format(),
+            u: match self {
+                Data::Double(v) => NodeUnion{ double: v},
+                Data::Flag(v) => if v { NodeUnion{ flag: 0} } else { NodeUnion{ flag: 1} },
+                Data::Int64(v) => NodeUnion{ int64: v},
+                Data::Node(v) => NodeUnion{ list: &mut MpvNodeList::from_node(v) as _},
+                Data::String(v) => NodeUnion{ _char: &mut CString::new(v).unwrap().into_raw() as *mut *mut libc::c_char as _},
+                Data::OsdString(v) => unimplemented!(),
+            },
         }
     }
 }
 
 impl Drop for MpvNode {
+    #[inline]
     fn drop(&mut self) {
         // TODO: needs testing
         if self.format == MpvFormat::String {
-            CString::from_raw(self.u._char);
+            unsafe { mpv_free(self.u._char as _) };
         }
     }
 }
+
+impl MpvNodeList {
+    fn from_node(mut node: MpvNode) -> MpvNodeList {
+        MpvNodeList {
+            num: 1,
+            values: &mut node as _,
+            keys: ::std::ptr::null_mut(),
+        }
+    }
+}
+*/
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// How a `File` is inserted into the playlist.

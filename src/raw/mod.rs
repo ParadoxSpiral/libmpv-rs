@@ -79,12 +79,6 @@ pub union NodeUnion {
     pub ba: *mut MpvByteArray,
 }
 
-impl Clone for NodeUnion {
-    fn clone(&self) -> NodeUnion {
-        unreachable!("Clone for NodeUnion; This should never happen");
-    }
-}
-
 impl Debug for NodeUnion {
     fn fmt(&self, fmt: &mut Formatter) -> Result<(), ::std::fmt::Error> {
         write!(fmt, "debug print untagged union")
@@ -92,7 +86,7 @@ impl Debug for NodeUnion {
 }
 
 #[repr(C)]
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct MpvNode {
     pub u: NodeUnion,
     pub format: MpvFormat,
