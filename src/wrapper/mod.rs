@@ -417,15 +417,10 @@ impl<T, U> UninitializedParent<T, U> {
         let ret = match data {
             Data::OsdString(_) => Err(Error::OsdStringWrite),
             Data::String(ref v) => {
-                let data = CString::new(v.as_bytes()).unwrap().into_raw();
+                let data = CString::new(v.as_bytes()).unwrap();
+                let ptr: *mut _ = &mut data.as_ptr();
 
-                let ret = mpv_err((), unsafe {
-                    mpv_set_option(self.ctx, name, format, data as *mut _)
-                });
-                unsafe {
-                    CString::from_raw(data);
-                };
-                ret
+                mpv_err((), unsafe { mpv_set_option(self.ctx, name, format, ptr as *mut _) })
             }
             _ => {
                 let data = data_ptr!(&mut data);
@@ -949,15 +944,10 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         let ret = match data {
             Data::OsdString(_) => Err(Error::OsdStringWrite),
             Data::String(ref v) => {
-                let data = CString::new(v.as_bytes()).unwrap().into_raw();
+                let data = CString::new(v.as_bytes()).unwrap();
+                let ptr: *mut _ = &mut data.as_ptr();
 
-                let ret = mpv_err((), unsafe {
-                    mpv_set_property(self.ctx(), name, format, data as *mut _)
-                });
-                unsafe {
-                    CString::from_raw(data);
-                };
-                ret
+                mpv_err((), unsafe { mpv_set_option(self.ctx(), name, format, ptr as *mut _) })
             }
             _ => {
                 let data = data_ptr!(&mut data);
