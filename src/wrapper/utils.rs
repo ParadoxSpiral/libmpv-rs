@@ -91,7 +91,7 @@ pub enum Format {
     Flag,
     Int64,
     Double,
-    Node,
+    //Node,
 }
 
 impl Format {
@@ -102,7 +102,7 @@ impl Format {
             Format::Flag => MpvFormat::Flag,
             Format::Int64 => MpvFormat::Int64,
             Format::Double => MpvFormat::Double,
-            Format::Node => MpvFormat::Node,
+            //Format::Node => MpvFormat::Node,
         }
     }
 
@@ -111,7 +111,7 @@ impl Format {
             Format::Flag => mem::size_of::<bool>(),
             Format::Int64 => mem::size_of::<libc::int64_t>(),
             Format::Double => mem::size_of::<libc::c_double>(),
-            Format::Node => mem::size_of::<MpvNode>(),
+            //Format::Node => mem::size_of::<MpvNode>(),
             _ => unreachable!(),
         }
     }
