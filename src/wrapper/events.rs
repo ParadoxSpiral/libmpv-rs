@@ -27,7 +27,6 @@ use super::super::raw::prototype::*;
 
 use std::collections::HashMap;
 use std::marker::PhantomData;
-use std::mem;
 use std::ffi::{CStr, CString};
 
 pub(crate) unsafe extern "C" fn event_callback(d: *mut libc::c_void) {
@@ -212,7 +211,7 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
         'no_events_anchor: loop {
             let mut observed = self.all_observed.lock();
             if observed.is_empty() && !self.first_iteration {
-                mem::drop(observed);
+                drop(observed);
                 unsafe { (*self.notification).1.wait(&mut (*self.notification).0.lock()) };
                 observed = self.all_observed.lock();
             }
@@ -250,7 +249,7 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
                     }
                 }
                 if !observed.is_empty() {
-                    mem::drop(observed);
+                    drop(observed);
                     unsafe { (*self.notification).1.notify_all() };
                 }
             } else {
@@ -275,7 +274,7 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
                 }
 
                 if !observed.is_empty() {
-                    mem::drop(observed);
+                    drop(observed);
                     unsafe { (*self.notification).1.notify_all() };
                 }
             }

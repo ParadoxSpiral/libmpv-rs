@@ -33,17 +33,17 @@ use std::panic;
 use std::panic::AssertUnwindSafe;
 
 /// Do any initialization. `*mut T` is undefined heap memory.
-/// It is assumed that *mut T is initialized properly after the function returns.
-pub type StreamOpen<T, U> = Fn(*mut T, &mut U, &str) -> Result<(), MpvError>;
+/// It is assumed that `*mut T` is initialized to a legal value of `T` after the function exited.
+pub type StreamOpen<T, U> = unsafe fn(*mut T, &mut U, &str) -> Result<(), MpvError>;
 /// Do any necessary cleanup.
-pub type StreamClose<T> = Fn(Box<T>);
+pub type StreamClose<T> = unsafe fn(Box<T>);
 /// Seek to the given offset. Return the new offset, or `MpvError::Generic` if seek failed.
-pub type StreamSeek<T> = Fn(&mut T, i64) -> i64;
+pub type StreamSeek<T> = unsafe fn(&mut T, i64) -> i64;
 /// Read nbytes into the given buffer.
-/// Return either the number of read bytes, 0 on EOF, -1 on error.
-pub type StreamRead<T> = Fn(&mut T, *mut libc::c_char, u64) -> i64;
-/// Should return the total size of the stream in bytes.
-pub type StreamSize<T> = Fn(&mut T) -> i64;
+/// Return either the number of read bytes, `0` on EOF, `-1` on error.
+pub type StreamRead<T> = unsafe fn(&mut T, *mut libc::c_char, u64) -> i64;
+/// Return the total size of the stream in bytes.
+pub type StreamSize<T> = unsafe fn(&mut T) -> i64;
 
 unsafe extern "C" fn open_wrapper<T, U>(user_data: *mut libc::c_void,
                                   uri: *mut libc::c_char,
@@ -60,7 +60,7 @@ unsafe extern "C" fn open_wrapper<T, U>(user_data: *mut libc::c_void,
 
 	let ret = panic::catch_unwind(AssertUnwindSafe(|| {
 		let uri = CString::from_raw(uri);
-		let ret = (*(*data).open_fn)((*data).cookie,
+		let ret = ((*data).open_fn)((*data).cookie,
 									  &mut (*data).user_data,
 									  uri.to_str().unwrap());
 		if ret.is_ok() {
@@ -84,7 +84,7 @@ unsafe extern "C" fn read_wrapper<T, U>(cookie: *mut libc::c_void,
 
 	let ret = panic::catch_unwind((AssertUnwindSafe(|| {
 		debug_assert!(!(*data).cookie.is_null());
-		(*(*data).read_fn)(&mut*(*data).cookie, buf, nbytes)
+		((*data).read_fn)(&mut*(*data).cookie, buf, nbytes)
 	})));
 	if ret.is_ok() {
 		ret.unwrap()
@@ -138,7 +138,7 @@ unsafe extern "C" fn close_wrapper<T, U>(cookie: *mut libc::c_void) {
 
 	panic::catch_unwind((|| {
 		debug_assert!(!(**data).cookie.is_null());
-		(*(**data).close_fn)(Box::from_raw((**data).cookie))
+		((**data).close_fn)(Box::from_raw((**data).cookie))
 	}));
 }
 
@@ -146,11 +146,11 @@ struct ProtocolData<T, U> {
 	cookie: *mut T,
 	user_data: U,
 
-	open_fn: Box<StreamOpen<T, U>>,
-	close_fn: Box<StreamClose<T>>,
-	read_fn: Box<StreamRead<T>>,
-	seek_fn: Option<Box<StreamSeek<T>>>,
-	size_fn: Option<Box<StreamSize<T>>>,
+	open_fn: StreamOpen<T, U>,
+	close_fn: StreamClose<T>,
+	read_fn: StreamRead<T>,
+	seek_fn: Option<StreamSeek<T>>,
+	size_fn: Option<StreamSize<T>>,
 }
 
 /// `Protocol` holds all state used by a custom protocol.
@@ -168,17 +168,17 @@ impl<T, U> Protocol<T, U> {
 	///	Do not call libmpv functions in any supplied function.
 	///
 	/// Panic unwinding is catched and returns an appropriate error.
-	pub unsafe fn new(name: String,
+	pub fn new(name: String,
 					  user_data: U,
-					  open_fn: Box<StreamOpen<T, U>>,
-					  close_fn: Box<StreamClose<T>>,
-					  read_fn: Box<StreamRead<T>>,
-					  seek_fn: Option<Box<StreamSeek<T>>>,
-					  size_fn: Option<Box<StreamSize<T>>>,)
+					  open_fn: StreamOpen<T, U>,
+					  close_fn: StreamClose<T>,
+					  read_fn: StreamRead<T>,
+					  seek_fn: Option<StreamSeek<T>>,
+					  size_fn: Option<StreamSize<T>>,)
 					  -> Protocol<T, U>
 	{
 		let data = Box::into_raw(Box::new(ProtocolData {
-								cookie: libc::malloc(mem::size_of::<T>()) as *mut T,
+								cookie: unsafe{ libc::malloc(mem::size_of::<T>()) as *mut T },
 								user_data: user_data,
 
 								open_fn: open_fn,

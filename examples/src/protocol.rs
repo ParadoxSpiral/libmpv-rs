@@ -30,49 +30,46 @@ use std::slice;
 use std::time::Duration;
 use std::thread;
 
-fn open(cookie: *mut File, _: &mut (), uri: &str) -> Result<(), MpvError> {
-    unsafe {
-        // Strip the `filereader://` part
-        *cookie = File::open(&uri[13..]).unwrap()
-    };
+unsafe fn open(cookie: *mut File, _: &mut (), uri: &str) -> Result<(), MpvError> {
+    // Strip the `filereader://` part
+    *cookie = File::open(&uri[13..]).unwrap();
+
     println!("Opened file, ready for orders o7");
     Ok(())
 }
 
-fn close(_: Box<File>) {
+unsafe fn close(_: Box<File>) {
     println!("Closing file, bye bye~~");
 }
 
-fn read(cookie: &mut File, buf: *mut i8, nbytes: u64) -> i64 {
-    unsafe {
-        let slice = slice::from_raw_parts_mut(buf, nbytes as _);
-        let forbidden_magic = mem::transmute::<&mut [i8], &mut [u8]>(slice);
+unsafe fn read(cookie: &mut File, buf: *mut i8, nbytes: u64) -> i64 {
+    let slice = slice::from_raw_parts_mut(buf, nbytes as _);
+    let forbidden_magic = mem::transmute::<&mut [i8], &mut [u8]>(slice);
 
-        cookie.read(forbidden_magic).unwrap() as _
-    }
+    cookie.read(forbidden_magic).unwrap() as _
 }
 
-fn seek(cookie: &mut File, offset: i64) -> i64 {
+unsafe fn seek(cookie: &mut File, offset: i64) -> i64 {
     cookie.seek(SeekFrom::Start(offset as u64)).unwrap() as _
 }
 
-fn size(cookie: &mut File) -> i64 {
+unsafe fn size(cookie: &mut File) -> i64 {
     cookie.metadata().unwrap().len() as _
 }
 
 pub fn exec() {
-    let path = format!("filereader://{}", env::args()
-                                            .nth(1).expect("Expected local path, found nil."));
+    let path = format!("filereader://{}",
+                       env::args()
+                           .nth(1)
+                           .expect("Expected local path, found nil."));
 
-    let protocol = unsafe {
-        Protocol::new("filereader".into(),
-                      (),
-                      box open,
-                      box close,
-                      box read,
-                      Some(box seek),
-                      Some(box size))
-    };
+    let protocol = Protocol::new("filereader".into(),
+                                 (),
+                                 open as _,
+                                 close as _,
+                                 read as _,
+                                 Some(seek as _),
+                                 Some(size as _));
 
     let mpv = Parent::new(false).unwrap();
     mpv.register_protocol(protocol).unwrap();
