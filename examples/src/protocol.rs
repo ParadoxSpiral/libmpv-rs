@@ -65,11 +65,11 @@ pub fn exec() {
 
     let protocol = Protocol::new("filereader".into(),
                                  (),
-                                 open as _,
-                                 close as _,
-                                 read as _,
-                                 Some(seek as _),
-                                 Some(size as _));
+                                 open,
+                                 close,
+                                 read,
+                                 Some(seek),
+                                 Some(size));
 
     let mpv = Parent::new(false).unwrap();
     mpv.register_protocol(protocol).unwrap();
