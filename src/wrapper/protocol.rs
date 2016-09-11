@@ -53,10 +53,10 @@ unsafe extern "C" fn open_wrapper<T, U>(user_data: *mut libc::c_void,
 	let data = user_data as *mut ProtocolData<T, U>;
 
 	(*info).cookie = user_data;
-	(*info).read_fn = read_wrapper::<T, U> as _;
-	(*info).seek_fn = seek_wrapper::<T, U> as _;
-	(*info).size_fn = size_wrapper::<T, U> as  _;
-	(*info).close_fn = close_wrapper::<T, U> as  _;
+	(*info).read_fn = read_wrapper::<T, U>;
+	(*info).seek_fn = seek_wrapper::<T, U>;
+	(*info).size_fn = size_wrapper::<T, U>;
+	(*info).close_fn = close_wrapper::<T, U>;
 
 	let ret = panic::catch_unwind(AssertUnwindSafe(|| {
 		let uri = CString::from_raw(uri);
