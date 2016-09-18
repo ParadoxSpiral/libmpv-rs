@@ -39,6 +39,7 @@ use utils::mpv_err;
 
 use std::collections::HashMap;
 use std::marker::PhantomData;
+use std::mem;
 use std::path::Path;
 use std::ptr;
 use std::ffi::{CStr, CString};
@@ -980,7 +981,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                     })
             }
             _ => {
-                let ptr = unsafe { libc::malloc(format.size()) };
+                let ptr = unsafe { &mut mem::zeroed() };
 
                 mpv_err((), unsafe {
                     mpv_get_property(self.ctx(),

@@ -17,7 +17,7 @@
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 use mpv;
-use mpv::{MpvInstance, MpvError, Parent, PlaylistOp};
+use mpv::{MpvInstance, Parent, PlaylistOp};
 use mpv::utils;
 use mpv::protocol::*;
 
@@ -30,30 +30,32 @@ use std::slice;
 use std::time::Duration;
 use std::thread;
 
-unsafe fn open(cookie: *mut File, _: &mut (), uri: &str) -> Result<(), MpvError> {
-    // Strip the `filereader://` part
-    *cookie = File::open(&uri[13..]).unwrap();
+fn open(_: &mut (), uri: &str) -> File {
+    // Open the file, and strip the `filereader://` part
+    let ret = File::open(&uri[13..]).unwrap();
 
-    println!("Opened file, ready for orders o7");
-    Ok(())
+    println!("Opened file[{}], ready for orders o7", &uri[13..]);
+    ret
 }
 
-unsafe fn close(_: Box<File>) {
+fn close(_: Box<File>) {
     println!("Closing file, bye bye~~");
 }
 
-unsafe fn read(cookie: &mut File, buf: *mut i8, nbytes: u64) -> i64 {
-    let slice = slice::from_raw_parts_mut(buf, nbytes as _);
-    let forbidden_magic = mem::transmute::<&mut [i8], &mut [u8]>(slice);
+fn read(cookie: &mut File, buf: *mut i8, nbytes: u64) -> i64 {
+    unsafe {
+        let slice = slice::from_raw_parts_mut(buf, nbytes as _);
+        let forbidden_magic = mem::transmute::<&mut [i8], &mut [u8]>(slice);
 
-    cookie.read(forbidden_magic).unwrap() as _
+        cookie.read(forbidden_magic).unwrap() as _
+    }    
 }
 
-unsafe fn seek(cookie: &mut File, offset: i64) -> i64 {
+fn seek(cookie: &mut File, offset: i64) -> i64 {
     cookie.seek(SeekFrom::Start(offset as u64)).unwrap() as _
 }
 
-unsafe fn size(cookie: &mut File) -> i64 {
+fn size(cookie: &mut File) -> i64 {
     cookie.metadata().unwrap().len() as _
 }
 

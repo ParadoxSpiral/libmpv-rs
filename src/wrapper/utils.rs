@@ -22,7 +22,6 @@ use enum_primitive::FromPrimitive;
 use super::*;
 use super::super::raw::*;
 
-use std::mem;
 use std::path::Path;
 use std::ffi::{CStr, /*CString*/};
 
@@ -99,15 +98,6 @@ impl Format {
             Format::Flag => MpvFormat::Flag,
             Format::Int64 => MpvFormat::Int64,
             Format::Double => MpvFormat::Double,
-        }
-    }
-
-    pub(crate) fn size(&self) -> usize {
-        match *self {
-            Format::Flag => mem::size_of::<bool>(),
-            Format::Int64 => mem::size_of::<libc::int64_t>(),
-            Format::Double => mem::size_of::<libc::c_double>(),
-            _ => unreachable!(),
         }
     }
 }

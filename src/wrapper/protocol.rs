@@ -27,23 +27,23 @@ use super::*;
 use super::utils::mpv_err;
 use super::super::raw::*;
 
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::mem;
 use std::panic;
 use std::panic::AssertUnwindSafe;
+use std::ptr;
 
-/// Do any initialization. `*mut T` is undefined heap memory.
-/// It is assumed that `*mut T` is initialized to a legal value of `T` after the function exited.
-pub type StreamOpen<T, U> = unsafe fn(*mut T, &mut U, &str) -> Result<(), MpvError>;
+/// Return an initialized `T`, panic on errors.
+pub type StreamOpen<T, U> = fn(&mut U, &str) -> T;
 /// Do any necessary cleanup.
-pub type StreamClose<T> = unsafe fn(Box<T>);
+pub type StreamClose<T> = fn(Box<T>);
 /// Seek to the given offset. Return the new offset, or `MpvError::Generic` if seek failed.
-pub type StreamSeek<T> = unsafe fn(&mut T, i64) -> i64;
+pub type StreamSeek<T> = fn(&mut T, i64) -> i64;
 /// Read nbytes into the given buffer.
 /// Return either the number of read bytes, `0` on EOF, `-1` on error.
-pub type StreamRead<T> = unsafe fn(&mut T, *mut libc::c_char, u64) -> i64;
+pub type StreamRead<T> = fn(&mut T, *mut libc::c_char, u64) -> i64;
 /// Return the total size of the stream in bytes.
-pub type StreamSize<T> = unsafe fn(&mut T) -> i64;
+pub type StreamSize<T> = fn(&mut T) -> i64;
 
 unsafe extern "C" fn open_wrapper<T, U>(user_data: *mut libc::c_void,
                                   uri: *mut libc::c_char,
@@ -59,18 +59,12 @@ unsafe extern "C" fn open_wrapper<T, U>(user_data: *mut libc::c_void,
 	(*info).close_fn = close_wrapper::<T, U>;
 
 	let ret = panic::catch_unwind(AssertUnwindSafe(|| {
-		let uri = CString::from_raw(uri);
-		let ret = ((*data).open_fn)((*data).cookie,
-									  &mut (*data).user_data,
-									  uri.to_str().unwrap());
-		if ret.is_ok() {
-			0
-		} else {
-		    ret.unwrap_err() as libc::c_int
-		}
+		let uri = CStr::from_ptr(uri as *const _);
+		ptr::write((*data).cookie,
+				   ((*data).open_fn)(&mut (*data).user_data, &utils::cstr_to_string(&uri)));
 	}));
 	if ret.is_ok() {
-		ret.unwrap()
+		0
 	} else {
 		MpvError::Generic as libc::c_int
 	}
@@ -154,7 +148,7 @@ struct ProtocolData<T, U> {
 }
 
 /// `Protocol` holds all state used by a custom protocol.
-pub struct Protocol<T, U> {
+pub struct Protocol<T: Sized, U> {
 	name: String,
 	data: *mut ProtocolData<T, U>,
 }
