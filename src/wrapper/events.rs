@@ -42,13 +42,6 @@ pub struct InnerEvent {
 }
 
 impl InnerEvent {
-    fn as_result(&self) -> Result<Event, Error> {
-        if self.err.is_some() {
-            Err(self.err.clone().unwrap())
-        } else {
-            Ok(self.event.clone())
-        }
-    }
     fn as_event(&self) -> &Event {
         &self.event
     }
@@ -93,9 +86,10 @@ impl Event {
 }
 
 impl MpvEvent {
-    fn as_event(&self) -> Result<Event, Error> {
-        try!(mpv_err((), self.error));
-        Ok(match self.event_id {
+    // WARNING: This ignores the erro value, as it is only used for asynchronous calls
+    fn as_event(&self) -> Event {
+        debug_assert!(mpv_err((), self.error).is_ok());
+        match self.event_id {
             MpvEventId::LogMessage => Event::LogMessage(LogMessage::from_raw(self.data)),
             MpvEventId::StartFile => Event::StartFile,
             MpvEventId::EndFile => {
@@ -110,7 +104,7 @@ impl MpvEvent {
             MpvEventId::PlaybackRestart => Event::PlaybackRestart,
             MpvEventId::PropertyChange => Event::PropertyChange(property_from_raw(self.data)),
             _ => unreachable!(),
-        })
+        }
     }
     fn as_inner_event(&self) -> InnerEvent {
         InnerEvent {
@@ -205,7 +199,7 @@ impl<'parent, P> Drop for EventIter<'parent, P>
 impl<'parent, P> Iterator for EventIter<'parent, P>
     where P: MpvMarker + 'parent
 {
-    type Item = Vec<Result<Event, Error>>;
+    type Item = Vec<Event>;
 
     fn next(&mut self) -> Option<Self::Item> {
         'no_events_anchor: loop {
@@ -258,12 +252,12 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
                     if let Event::PropertyChange(ref outer_prop) = *outer_ev {
                         if let Event::PropertyChange(ref inner_prop) = *inner_ev.as_event() {
                             if outer_prop.0 == inner_prop.0 {
-                                ret_events.push(inner_ev.as_result());
+                                ret_events.push(inner_ev.as_event().clone());
                                 return true;
                             }
                         }
                     } else if outer_ev.as_id() == inner_ev.as_id() {
-                        ret_events.push(inner_ev.as_result());
+                        ret_events.push(inner_ev.as_event().clone());
                         return true;
                     }
                     false

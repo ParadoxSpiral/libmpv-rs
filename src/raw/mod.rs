@@ -19,8 +19,6 @@
 #![allow(dead_code, improper_ctypes, missing_docs, non_camel_case_types)]
 use libc;
 
-use std::fmt::{Debug, Formatter};
-
 pub mod prototype {
     // Opaque struct
     pub enum MpvHandle {}
@@ -79,21 +77,13 @@ pub union NodeUnion {
     pub ba: *mut MpvByteArray,
 }
 
-impl Debug for NodeUnion {
-    fn fmt(&self, fmt: &mut Formatter) -> Result<(), ::std::fmt::Error> {
-        write!(fmt, "debug print untagged union")
-    }
-}
-
 #[repr(C)]
-#[derive(Debug)]
 pub struct MpvNode {
     pub u: NodeUnion,
     pub format: MpvFormat,
 }
 
 #[repr(C)]
-#[derive(Clone, Debug)]
 pub struct MpvNodeList {
     pub num: libc::c_int,
     pub values: *mut MpvNode,

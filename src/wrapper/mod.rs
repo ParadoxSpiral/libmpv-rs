@@ -109,7 +109,6 @@ pub enum Data {
     Flag(bool),
     Int64(libc::int64_t),
     Double(libc::c_double),
-    //Node(MpvNode),
 }
 
 impl Data {
@@ -128,7 +127,6 @@ impl Data {
             Data::Flag(_) => MpvFormat::Flag,
             Data::Int64(_) => MpvFormat::Int64,
             Data::Double(_) => MpvFormat::Double,
-            //Data::Node(_) => MpvFormat::Node,
         }
     }
 
@@ -138,7 +136,6 @@ impl Data {
             MpvFormat::Flag => Data::Flag(unsafe { *(ptr as *mut libc::int64_t) } != 0 ),
             MpvFormat::Int64 => Data::Int64(unsafe { *(ptr as *mut _) }),
             MpvFormat::Double => Data::Double(unsafe { *(ptr as *mut _) }),
-            //MpvFormat::Node => Data::Node(unsafe { *(ptr as *mut _) }),
             _ => unreachable!(),
         }
     }
@@ -199,15 +196,6 @@ impl Into<Data> for f64 {
         Data::Double(self as _)
     }
 }
-
-/*
-impl Into<Data> for MpvNode {
-    #[inline]
-    fn into(self) -> Data {
-        Data::Node(self)
-    }
-}
-*/
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// Possible seek operations by `seek`.

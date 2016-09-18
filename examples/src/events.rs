@@ -50,13 +50,12 @@ pub fn exec() {
 
             for vec in iter {
                 // If any `Event` was an `Endfile`, . . .
-                if let Some(&Ok(Event::EndFile(ref v))) = vec.iter().find(|e| {
-                    if e.is_ok() {
-                        if let Event::EndFile(_) = *e.as_ref().unwrap() {
-                            return true;
-                        }
+                if let Some(&Event::EndFile(ref v)) = vec.iter().find(|e| {
+                    if let Event::EndFile(_) = **e {
+                        true
+                    } else {
+                        false
                     }
-                    false
                 }) {
                     // . . . print the `EndFile` reason and exit, . . .
                     println!("File ended! Reason: {:?}", v);
