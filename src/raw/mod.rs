@@ -328,7 +328,7 @@ extern "C" {
                                    d: *mut libc::c_void);
     pub fn mpv_get_wakeup_pipe(ctx: *mut MpvHandle) -> libc::c_int;
     pub fn mpv_wait_async_requests(ctx: *mut MpvHandle);
-    pub fn mpv_get_sub_api(ctx: *mut MpvHandle, sub_api: MpvSubApi);
+    pub fn mpv_get_sub_api(ctx: *mut MpvHandle, sub_api: MpvSubApi) -> *mut libc::c_void;
     pub fn mpv_stream_cb_add_ro(ctx: *mut MpvHandle,
                                 protocol: *const libc::c_char,
                                 user_data: *mut libc::c_void,
