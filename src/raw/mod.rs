@@ -22,6 +22,9 @@ use libc;
 // Used in basically every API call.
 pub enum MpvHandle {}
 
+// Used for opengl callback.
+pub enum MpvOpenGlCbContext {}
+
 enum_from_primitive! {
     #[repr(C)]
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -210,6 +213,11 @@ pub type mpv_stream_cb_open_ro_fn = unsafe extern "C" fn(user_data: *mut libc::c
                                                          info: *mut MpvStreamCbInfo)
                                                          -> libc::c_int;
 
+pub type mpv_opengl_cb_update_fn = unsafe extern "C" fn(cb_ctx: *mut libc::c_void);
+pub type mpv_opengl_cb_get_proc_address_fn = unsafe extern "C" fn(fn_ctx: *mut libc::c_void,
+                                                                  name: *const libc::c_char,
+                                                                  info: *mut MpvStreamCbInfo);
+
 #[repr(C)]
 pub struct MpvStreamCbInfo { 
     pub cookie: *mut libc::c_void,
@@ -326,4 +334,26 @@ extern "C" {
                                 user_data: *mut libc::c_void,
                                 open_fn: mpv_stream_cb_open_ro_fn)
                                 -> libc::c_int;
+    pub fn mpv_opengl_cb_set_update_callback(ctx: *mut MpvOpenGlCbContext,
+                                    callback: mpv_opengl_cb_update_fn,
+                                    callback_ctx: *mut libc::c_void);
+    pub fn mpv_opengl_cb_init_gl(ctx: *mut MpvOpenGlCbContext,
+                                 exts: *const libc::c_char,
+                                 get_proc_address: mpv_opengl_cb_get_proc_address_fn,
+                                 get_proc_address_ctx: *mut libc::c_void)
+                                 -> libc::c_int;
+    pub fn mpv_opengl_cb_draw(ctx: *mut MpvOpenGlCbContext,
+                              fbo: libc::c_int,
+                              w: libc::c_int,
+                              h: libc::c_int,)
+                              -> libc::c_int;
+    pub fn mpv_opengl_cb_render(ctx: *mut MpvOpenGlCbContext,
+                                fbo: libc::c_int,
+                                vp: [libc::c_int; 4])
+                                -> libc::c_int;
+    pub fn mpv_opengl_cb_report_flip(ctx: *mut MpvOpenGlCbContext,
+                                     time: libc::int64_t)
+                                     -> libc::c_int;
+    pub fn mpv_opengl_cb_uninit_gl(ctx: *mut MpvOpenGlCbContext)
+                                   -> libc::c_int;
 }
