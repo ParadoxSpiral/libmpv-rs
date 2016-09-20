@@ -19,10 +19,8 @@
 #![allow(dead_code, improper_ctypes, missing_docs, non_camel_case_types)]
 use libc;
 
-pub mod prototype {
-    // Opaque struct
-    pub enum MpvHandle {}
-}
+// Used in basically every API call.
+pub enum MpvHandle {}
 
 enum_from_primitive! {
     #[repr(C)]
@@ -228,102 +226,102 @@ extern "C" {
     pub fn mpv_client_api_version() -> u32;
     pub fn mpv_error_string(error: libc::c_int) -> *const libc::c_char;
     pub fn mpv_free(data: *mut libc::c_void);
-    pub fn mpv_client_name(ctx: *const prototype::MpvHandle) -> *const libc::c_char;
-    pub fn mpv_create() -> *mut prototype::MpvHandle;
-    pub fn mpv_initialize(ctx: *mut prototype::MpvHandle) -> libc::c_int;
-    pub fn mpv_detach_destroy(ctx: *mut prototype::MpvHandle);
-    pub fn mpv_terminate_destroy(ctx: *mut prototype::MpvHandle);
-    pub fn mpv_create_client(ctx: *mut prototype::MpvHandle,
+    pub fn mpv_client_name(ctx: *const MpvHandle) -> *const libc::c_char;
+    pub fn mpv_create() -> *mut MpvHandle;
+    pub fn mpv_initialize(ctx: *mut MpvHandle) -> libc::c_int;
+    pub fn mpv_detach_destroy(ctx: *mut MpvHandle);
+    pub fn mpv_terminate_destroy(ctx: *mut MpvHandle);
+    pub fn mpv_create_client(ctx: *mut MpvHandle,
                              name: *const libc::c_char)
-                             -> *mut prototype::MpvHandle;
-    pub fn mpv_load_config_file(ctx: *mut prototype::MpvHandle,
+                             -> *mut MpvHandle;
+    pub fn mpv_load_config_file(ctx: *mut MpvHandle,
                                 filename: *const libc::c_char)
                                 -> libc::c_int;
-    pub fn mpv_suspend(ctx: *mut prototype::MpvHandle);
-    pub fn mpv_resume(ctx: *mut prototype::MpvHandle);
+    pub fn mpv_suspend(ctx: *mut MpvHandle);
+    pub fn mpv_resume(ctx: *mut MpvHandle);
     pub fn mpv_free_node_contents(node: *mut MpvNode);
-    pub fn mpv_set_option(ctx: *mut prototype::MpvHandle,
+    pub fn mpv_set_option(ctx: *mut MpvHandle,
                           name: *const libc::c_char,
                           format: libc::c_int,
                           data: *mut libc::c_void)
                           -> libc::c_int;
-    pub fn mpv_set_option_string(ctx: *mut prototype::MpvHandle,
+    pub fn mpv_set_option_string(ctx: *mut MpvHandle,
                                  name: *const libc::c_char,
                                  data: *const libc::c_char)
                                  -> libc::c_int;
-    pub fn mpv_command(ctx: *mut prototype::MpvHandle,
+    pub fn mpv_command(ctx: *mut MpvHandle,
                        args: *mut *const libc::c_char)
                        -> libc::c_int;
-    pub fn mpv_command_node(ctx: *mut prototype::MpvHandle,
+    pub fn mpv_command_node(ctx: *mut MpvHandle,
                             args: *mut MpvNode,
                             result: *mut MpvNode)
                             -> libc::c_int;
-    pub fn mpv_command_string(ctx: *mut prototype::MpvHandle,
+    pub fn mpv_command_string(ctx: *mut MpvHandle,
                               args: *const libc::c_char)
                               -> libc::c_int;
-    pub fn mpv_get_time_us(ctx: *mut prototype::MpvHandle) -> libc::int64_t;
-    pub fn mpv_command_async(ctx: *mut prototype::MpvHandle,
+    pub fn mpv_get_time_us(ctx: *mut MpvHandle) -> libc::int64_t;
+    pub fn mpv_command_async(ctx: *mut MpvHandle,
                              reply_userdata: libc::uint64_t,
                              args: *const *const libc::c_char)
                              -> libc::c_int;
-    pub fn mpv_set_property(ctx: *mut prototype::MpvHandle,
+    pub fn mpv_set_property(ctx: *mut MpvHandle,
                             name: *const libc::c_char,
                             format: libc::c_int,
                             data: *mut libc::c_void)
                             -> libc::c_int;
-    pub fn mpv_set_property_string(ctx: *mut prototype::MpvHandle,
+    pub fn mpv_set_property_string(ctx: *mut MpvHandle,
                                    name: *const libc::c_char,
                                    data: *const libc::c_char)
                                    -> libc::c_int;
-    pub fn mpv_set_property_async(ctx: *mut prototype::MpvHandle,
+    pub fn mpv_set_property_async(ctx: *mut MpvHandle,
                                   reply_userdata: libc::uint64_t,
                                   name: *const libc::c_char,
                                   format: libc::c_int,
                                   data: *mut libc::c_void)
                                   -> libc::c_int;
-    pub fn mpv_get_property(ctx: *mut prototype::MpvHandle,
+    pub fn mpv_get_property(ctx: *mut MpvHandle,
                             name: *const libc::c_char,
                             format: libc::c_int,
                             data: *mut libc::c_void)
                             -> libc::c_int;
-    pub fn mpv_get_property_string(ctx: *mut prototype::MpvHandle,
+    pub fn mpv_get_property_string(ctx: *mut MpvHandle,
                                    name: *const libc::c_char)
                                    -> *mut libc::c_char;
-    pub fn mpv_get_property_osd_string(ctx: *mut prototype::MpvHandle,
+    pub fn mpv_get_property_osd_string(ctx: *mut MpvHandle,
                                        name: *const libc::c_char)
                                        -> *mut libc::c_char;
-    pub fn mpv_get_property_async(ctx: *mut prototype::MpvHandle,
+    pub fn mpv_get_property_async(ctx: *mut MpvHandle,
                                   reply_userdata: libc::uint64_t,
                                   name: *const libc::c_char,
                                   format: libc::c_int)
                                   -> libc::c_int;
-    pub fn mpv_observe_property(mpv: *mut prototype::MpvHandle,
+    pub fn mpv_observe_property(mpv: *mut MpvHandle,
                                 reply_userdata: libc::uint64_t,
                                 name: *const libc::c_char,
                                 format: libc::c_int)
                                 -> libc::c_int;
-    pub fn mpv_unobserve_property(mpv: *mut prototype::MpvHandle,
+    pub fn mpv_unobserve_property(mpv: *mut MpvHandle,
                                   registered_reply_userdata: libc::uint64_t)
                                   -> libc::c_int;
     pub fn mpv_event_name(event: MpvEventId) -> *const libc::c_char;
-    pub fn mpv_request_event(ctx: *mut prototype::MpvHandle,
+    pub fn mpv_request_event(ctx: *mut MpvHandle,
                              event: MpvEventId,
                              enable: libc::c_int)
                              -> libc::c_int;
-    pub fn mpv_request_log_messages(ctx: *mut prototype::MpvHandle,
+    pub fn mpv_request_log_messages(ctx: *mut MpvHandle,
                                     min_level: *const libc::c_char)
                                     -> libc::c_int;
-    pub fn mpv_wait_event(ctx: *mut prototype::MpvHandle,
+    pub fn mpv_wait_event(ctx: *mut MpvHandle,
                           timeout: libc::c_double)
                           -> *mut MpvEvent;
-    pub fn mpv_wakeup(ctx: *mut prototype::MpvHandle);
-    pub fn mpv_set_wakeup_callback(ctx: *mut prototype::MpvHandle,
+    pub fn mpv_wakeup(ctx: *mut MpvHandle);
+    pub fn mpv_set_wakeup_callback(ctx: *mut MpvHandle,
                                    cb: unsafe extern "C" fn(*mut libc::c_void),
                                    d: *mut libc::c_void);
-    pub fn mpv_get_wakeup_pipe(ctx: *mut prototype::MpvHandle) -> libc::c_int;
-    pub fn mpv_wait_async_requests(ctx: *mut prototype::MpvHandle);
-    pub fn mpv_get_sub_api(ctx: *mut prototype::MpvHandle, sub_api: MpvSubApi);
-    pub fn mpv_stream_cb_add_ro(ctx: *mut prototype::MpvHandle,
+    pub fn mpv_get_wakeup_pipe(ctx: *mut MpvHandle) -> libc::c_int;
+    pub fn mpv_wait_async_requests(ctx: *mut MpvHandle);
+    pub fn mpv_get_sub_api(ctx: *mut MpvHandle, sub_api: MpvSubApi);
+    pub fn mpv_stream_cb_add_ro(ctx: *mut MpvHandle,
                                 protocol: *const libc::c_char,
                                 user_data: *mut libc::c_void,
                                 open_fn: mpv_stream_cb_open_ro_fn)

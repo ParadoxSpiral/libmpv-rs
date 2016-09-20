@@ -30,7 +30,6 @@ use libc;
 use parking_lot::{Condvar, Mutex, Once, ONCE_INIT};
 
 use super::raw::*;
-use super::raw::prototype::*;
 use events::*;
 use events::event_callback;
 use protocol::*;

@@ -23,7 +23,6 @@ use super::*;
 use super::utils::{mpv_err, property_from_raw};
 use super::super::LogLevel;
 use super::super::raw::*;
-use super::super::raw::prototype::*;
 
 use std::collections::HashMap;
 use std::marker::PhantomData;
