@@ -64,7 +64,7 @@ pub(crate) fn property_from_raw(raw: *mut libc::c_void) -> (String, Data) {
     )
 }
 
-pub(crate) fn cstr_to_string(cstr: &CStr) -> String {
+pub(crate) fn mpv_cstr_to_string(cstr: &CStr) -> String {
     let data;
     #[cfg(windows)] {
         // Mpv returns all strings on windows in UTF-8.

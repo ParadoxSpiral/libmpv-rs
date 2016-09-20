@@ -50,9 +50,9 @@ impl InnerEvent {
     }
 }
 
-/// An event returned by `EventIter`.
 #[derive(Clone, Debug, PartialEq)]
 #[allow(missing_docs)]
+/// An event returned by `EventIter`.
 pub enum Event {
     LogMessage(LogMessage),
     StartFile,
@@ -86,7 +86,7 @@ impl Event {
 }
 
 impl MpvEvent {
-    // WARNING: This ignores the erro value, as it is only used for asynchronous calls
+    // WARNING: This ignores the error value, as it is only used for asynchronous calls
     fn as_event(&self) -> Event {
         debug_assert!(mpv_err((), self.error).is_ok());
         match self.event_id {

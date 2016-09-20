@@ -38,11 +38,12 @@ use utils::*;
 use utils::mpv_err;
 
 use std::collections::HashMap;
+use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
 use std::mem;
 use std::path::Path;
 use std::ptr;
-use std::ffi::{CStr, CString};
+use std::rc::Rc;
 use std::time::Duration;
 
 macro_rules! destroy_on_err {
@@ -85,25 +86,23 @@ pub enum Error {
     /// If an argument (like a percentage > 100) was out of bounds.
     OutOfBounds,
     /// If a command failed during a `loadfiles` call, contains index of failed command and `Error`.
-    Loadfiles((usize, Box<Error>)),
-    /// Events are not enabled for this `Mpv` instance.
+    Loadfiles((usize, Rc<Error>)),
+    /// Events are not enabled for this mpv instance.
     EventsDisabled,
     /// This event is already being observed by another `EventIter`.
-    AlreadyObserved(Box<Event>),
+    AlreadyObserved(Rc<Event>),
     /// Used a `Data::OsdString` while writing.
     OsdStringWrite,
-    /// Mpv returned a string that uses an unsupported codec. Inside are the raw bytes cast to u8.
-    UnsupportedEncoding(Vec<u8>),
     /// The library was compiled against a different mpv version than what is present on the system.
-    /// First value is compiled version, second value is linked version.
+    /// First value is compiled version, second value is loaded version.
     VersionMismatch(u32, u32),
-    /// Mpv returned null while creating the core, or if `get_property with` `Format::String` fails.
+    /// Mpv returned null while creating the core.
     Null,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 #[allow(missing_docs)]
-/// Data that can be sent to or retrieved from `Mpv`.
+/// Data types that are used by the API.
 pub enum Data {
     String(String),
     OsdString(String),
@@ -114,7 +113,7 @@ pub enum Data {
 
 impl Data {
     #[inline]
-    /// Create a `Data` from a supported value.
+    /// Create a `Data`.
     pub fn new<T>(val: T) -> Data
         where T: Into<Data>
     {
@@ -199,7 +198,7 @@ impl Into<Data> for f64 {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-/// Possible seek operations by `seek`.
+/// Seek operations supported by `seek`.
 pub enum Seek {
     /// Seek forward relatively from current position at runtime.
     /// This is less exact than `seek_abs`, see [mpv manual]
@@ -232,7 +231,7 @@ pub enum Seek {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-/// Possible screenshot operations by `screenshot`.
+/// Screenshot operations supported by `screenshot`.
 pub enum Screenshot<'a> {
     /// "Save the video image, in its original resolution, and with subtitles.
     /// Some video outputs may still include the OSD in the output under certain circumstances.".
@@ -246,18 +245,18 @@ pub enum Screenshot<'a> {
     /// "Like subtitles, but typically without OSD or subtitles.
     /// The exact behaviour depends on the selected video output.".
     Video,
-    /// See `screenshot_subtitles_to_file`.
+    /// See `Video`, with the addition of specifying a path.
     VideoFile(&'a Path),
     /// "Save the contents of the mpv window. Typically scaled, with OSD
     /// and subtitles. The exact behaviour depends on the selected video output, and if no support
     /// is available, this will act like video.".
     Window,
-    /// See `screenshot_subtitles_to_file`.
+    /// See `Window`, with the addition of specifying a path.
     WindowFile(&'a Path),
 }
 
 #[derive(Clone, Copy, Debug)]
-/// Operations on the playlist supported by `playlist`.
+/// Playlist operations supported by `playlist`.
 pub enum PlaylistOp<'a> {
     /// Play the next item of the current playlist.
     /// This does nothing if the current item is the last item.
@@ -333,7 +332,7 @@ pub struct UninitializedParent<T, U> {
 
 impl<T, U> UninitializedParent<T, U> {
     #[inline]
-    /// Initialize the mpv core, return an initialized `Parent`.
+    /// Consume `self`, return an initialized `Parent`.
     pub fn init(mut self) -> Result<Parent<T, U>, Error> {
         self.drop_do_destroy = false;
         unsafe { destroy_on_err!(self.ctx, mpv_initialize(self.ctx)) }
@@ -422,8 +421,7 @@ impl<T, U> UninitializedParent<T, U> {
     }
 
     #[inline]
-    /// Load a configuration file into the `Mpv` instance.
-    /// The path has to be absolute, and a file.
+    /// Load a configuration file. The path has to be absolute, and a file.
     pub fn load_config(&self, path: &Path) -> Result<(), Error> {
         if path.is_relative() {
             Err(Error::ExpectedAbsolute)
@@ -450,9 +448,6 @@ impl<T, U> Drop for UninitializedParent<T, U> {
 }
 
 /// An mpv instance from which `Client`s can be spawned.
-///
-/// # Panics
-/// Any method on this struct may panic if any argument contains invalid utf-8.
 pub struct Parent<T, U> {
     ctx: *mut MpvHandle,
     suspension_count: Mutex<usize>,
@@ -465,9 +460,6 @@ pub struct Parent<T, U> {
 }
 
 /// A client of a `Parent`.
-///
-/// # Panics
-/// Any method on this struct may panic if any argument contains invalid utf-8.
 pub struct Client<'parent, T: 'parent, U: 'parent> {
     ctx: *mut MpvHandle,
     check_events: bool,
@@ -565,9 +557,8 @@ impl<'parent, T, U> Drop for Client<'parent, T, U> {
 
 impl<'parent, T, U> Parent<T, U> {
     #[inline]
-    /// Create a new `Mpv` instance.
-    /// To call any method except for `set_option` on this, it has to be initialized first.
-    /// The default settings can be probed by running: ```$ mpv --show-profile=libmpv```
+    /// Create a new `Parent`.
+    /// The default settings can be probed by running: `$ mpv --show-profile=libmpv`
     pub fn new(check_events: bool) -> Result<Parent<T, U>, Error> {
         SET_LC_NUMERIC.call_once(|| {
             let c = CString::new("C").unwrap();
@@ -750,9 +741,9 @@ impl<'parent, T, U> Parent<T, U> {
     /// Suspend the playback thread. If the core is suspended, only client API calls will be
     /// accepted, ie. input, redrawing etc. will be suspended.
     /// For the suspended to resume there has to be one `resume` call for each `suspend` call.
-    pub fn suspend(&self) -> Result<(), Error> {
+    pub fn suspend(&self) {
         *self.suspension_count.lock() += 1;
-        Ok(unsafe { mpv_suspend(self.ctx()) })
+        unsafe { mpv_suspend(self.ctx()) }
     }
 
     #[inline]
@@ -783,26 +774,23 @@ impl<'parent, T, U> Parent<T, U> {
 
 impl<'parent, T, U> Client<'parent, T, U> {
     #[inline]
-    /// Returns the name associated with the instance.
+    /// Returns the name associated with `self`.
     pub fn name(&self) -> &str {
         unsafe { CStr::from_ptr(mpv_client_name(self.ctx())).to_str().unwrap() }
     }
 }
 
 /// Core functionality that is supported by both `Client` and `Parent`.
-///
-/// # Panics
-/// Any method may panic if any argument contains invalid utf-8.
 pub trait MpvInstance<'parent, P>
     where P: MpvMarker + 'parent
 {
-    /// Observe all `Event`s by means of an `EventIter`.
+    /// Observe all given `Event`s by means of an `EventIter`.
     fn observe_all(&self, events: &[Event]) -> Result<EventIter<P>, Error>;
     /// Execute any mpv command. See implementation for information about safety.
     unsafe fn command(&self, cmd: &Command) -> Result<(), Error>;
     /// Set a given property.
     fn set_property<D: Into<Data>>(&self, name: &str, mut data: D) -> Result<(), Error>;
-    /// Get the `Data` of a given named property.
+    /// Get the `Data` of a given property.
     fn get_property(&self, name: &str, format: &Format) -> Result<Data, Error>;
     /// Seek in a way defined by `Seek`.
     fn seek(&self, seek: &Seek) -> Result<(), Error>;
@@ -840,7 +828,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
             for elem in events {
                 if let Event::PropertyChange(ref v) = *elem {
                     if properties.contains_key(&v.0) {
-                        return Err(Error::AlreadyObserved(Box::new(elem.clone())));
+                        return Err(Error::AlreadyObserved(Rc::new(elem.clone())));
                     } else {
                         try!(mpv_err((), unsafe { mpv_request_event(self.ctx(), elem.as_id(), 1) }));
                         props.push(v);
@@ -850,7 +838,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                 } else {
                     for id in &*observe {
                         if elem.as_id() == id.as_id() {
-                            return Err(Error::AlreadyObserved(Box::new(elem.clone())));
+                            return Err(Error::AlreadyObserved(Rc::new(elem.clone())));
                         }
                     }
 
@@ -969,7 +957,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                     .and_then(|_| {
                         let ret = unsafe { CStr::from_ptr(*ptr) };
 
-                        let data = utils::cstr_to_string(ret);
+                        let data = utils::mpv_cstr_to_string(ret);
 
                         unsafe{mpv_free(*ptr as *mut _)}
 
@@ -1142,7 +1130,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                         })
                     };
                     if ret.is_err() {
-                        return Err(Error::Loadfiles((i, Box::new(ret.unwrap_err()))));
+                        return Err(Error::Loadfiles((i, Rc::new(ret.unwrap_err()))));
                     }
                 }
                 Ok(())

@@ -24,14 +24,12 @@
 //! [https://github.com/mpv-player/mpv/tree/master/libmpv] of the (mpv media player)
 //! [https://github.com/mpv-player/mpv].
 //!
-//! Libmpv requires `LC_NUMERIC` to be `C`. This is set once when the first `Parent` is created.
+//! Libmpv requires `LC_NUMERIC` to be `C`. This is set once when the first parent is created.
 //! Do not change this during the usage of this crate.
 //!
 //! # Examples
 //!
 //! See the 'examples' directory in the crate root.
-
-// TODO: proofread docs
 
 extern crate libc;
 extern crate parking_lot;
@@ -40,7 +38,7 @@ extern crate lazy_static;
 #[macro_use]
 extern crate enum_primitive;
 
-/// Contains bindings to libmpv functions.
+/// Contains bindings to libmpv functions and data structures.
 pub mod raw;
 pub use raw::MpvLogLevel as LogLevel;
 pub use raw::MpvError;

@@ -16,10 +16,8 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-//! This abstraction lets you register custom protocols, which you then can use via 
+//! This abstraction allows registering custom protocols, which then can be used via 
 //! `PlaylistOp::Loadfiles`.
-
-// FIXME: test me pls, cleanup
 
 use libc;
 
@@ -61,7 +59,7 @@ unsafe extern "C" fn open_wrapper<T, U>(user_data: *mut libc::c_void,
 	let ret = panic::catch_unwind(AssertUnwindSafe(|| {
 		let uri = CStr::from_ptr(uri as *const _);
 		ptr::write((*data).cookie,
-				   ((*data).open_fn)(&mut (*data).user_data, &utils::cstr_to_string(&uri)));
+				   ((*data).open_fn)(&mut (*data).user_data, &utils::mpv_cstr_to_string(&uri)));
 	}));
 	if ret.is_ok() {
 		0
@@ -154,7 +152,7 @@ pub struct Protocol<T: Sized, U> {
 }
 
 impl<T, U> Protocol<T, U> {
-	/// `name` is the prefix of the protocol, e.g. `protocol://path`.
+	/// `name` is the prefix of the protocol, e.g. `myprotocol://path`.
 	///
 	/// `user_data` is data that will be passed to `StreamOpen`.
 	/// 
