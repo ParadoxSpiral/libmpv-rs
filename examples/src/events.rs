@@ -29,13 +29,11 @@ use std::thread;
 
 pub fn exec() {
     // Create an `UninitializedParent` (with events enabled) to set some options.
-    let mpv = UninitializedParent::<(), ()>::new(true).unwrap();
-    mpv.set_option("cache-initial", 1).unwrap();
-    mpv.set_option("volume", 10).unwrap();
-    mpv.set_option("vo", "null").unwrap();
-    mpv.set_option("ytdl", true).unwrap();
-    // Consume the `UninitializedParent` and replace it by a `Parent`.
-    let mpv = mpv.init().unwrap();
+    let mpv = Parent::<(), ()>::new(true).unwrap();
+    mpv.set_property("cache-initial", 1).unwrap();
+    mpv.set_property("volume", 10).unwrap();
+    mpv.set_property("vo", "null").unwrap();
+    mpv.set_property("ytdl", true).unwrap();
 
     // Create a crossbeam scope for convenience to use mpv in multiple threads.
     crossbeam::scope(|scope| {

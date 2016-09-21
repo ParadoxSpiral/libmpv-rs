@@ -320,132 +320,6 @@ pub enum SubOp<'a> {
     SeekBackward,
 }
 
-#[derive(Debug)]
-/// This type allows for operations that should only be done on an uninitialized mpv core.
-pub struct UninitializedParent<T, U> {
-    ctx: *mut MpvHandle,
-    check_events: bool,
-    drop_do_destroy: bool,
-    _protocol_marker: PhantomData<(T, U)>,
-}
-
-impl<T, U> UninitializedParent<T, U> {
-    #[inline]
-    /// Consume `self`, return an initialized `Parent`.
-    pub fn init(mut self) -> Result<Parent<T, U>, Error> {
-        self.drop_do_destroy = false;
-        unsafe { destroy_on_err!(self.ctx, mpv_initialize(self.ctx)) }
-        Parent::from_uninitialized(self)
-    }
-
-    #[inline]
-    /// Create a new `UninitializedParent` instance.
-    pub fn new(check_events: bool) -> Result<UninitializedParent<T, U>, Error> {
-        SET_LC_NUMERIC.call_once(|| {
-            let c = CString::new("C").unwrap();
-            unsafe { libc::setlocale(libc::LC_NUMERIC, c.as_ptr()) };
-        });
-
-        let api_version = unsafe { mpv_client_api_version() };
-        if super::MPV_CLIENT_API_VERSION != api_version {
-            return Err(Error::VersionMismatch(super::MPV_CLIENT_API_VERSION, api_version));
-        }
-
-        let ctx = unsafe { mpv_create() };
-        if ctx.is_null() {
-            return Err(Error::Null);
-        }
-
-        unsafe {
-            // Disable deprecated events.
-            destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::TracksChanged, 0));
-            destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::TrackSwitched, 0));
-            destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::Pause, 0));
-            destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::Unpause, 0));
-            destroy_on_err!(ctx,
-                            mpv_request_event(ctx, MpvEventId::ScriptInputDispatch, 0));
-            destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::MetadataUpdate, 0));
-            destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::ChapterChange, 0));
-
-            if !check_events {
-                // Disable remaining events
-                destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::LogMessage, 0));
-                destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::GetPropertyReply, 0));
-                destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::SetPropertyReply, 0));
-                destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::CommandReply, 0));
-                destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::StartFile, 0));
-                destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::EndFile, 0));
-                destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::FileLoaded, 0));
-                destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::Idle, 0));
-                destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::ClientMessage, 0));
-                destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::VideoReconfig, 0));
-                destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::AudioReconfig, 0));
-                destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::Seek, 0));
-                destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::PlaybackRestart, 0));
-                destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::PropertyChange, 0));
-                destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::QueueOverflow, 0));
-            }
-        }
-
-        Ok(UninitializedParent {
-            ctx: ctx,
-            check_events: check_events,
-            drop_do_destroy: true,
-            _protocol_marker: PhantomData,
-        })
-    }
-
-    #[inline]
-    /// Set an option.
-    pub fn set_option<D: Into<Data>>(&self, name: &str, data: D) -> Result<(), Error> {
-        let name = CString::new(name).unwrap().into_raw();
-        let mut data = data.into();
-        let format = data.format().as_val();
-        let ret = match data {
-            Data::OsdString(_) => Err(Error::OsdStringWrite),
-            Data::String(ref v) => {
-                let data = CString::new(v.as_bytes()).unwrap();
-                let ptr: *mut _ = &mut data.as_ptr();
-
-                mpv_err((), unsafe { mpv_set_option(self.ctx, name, format, ptr as *mut _) })
-            }
-            _ => {
-                let data = data_ptr!(&mut data);
-
-                mpv_err((), unsafe { mpv_set_option(self.ctx, name, format, data) })
-            }
-        };
-        unsafe { CString::from_raw(name) };
-        ret
-    }
-
-    #[inline]
-    /// Load a configuration file. The path has to be absolute, and a file.
-    pub fn load_config(&self, path: &Path) -> Result<(), Error> {
-        if path.is_relative() {
-            Err(Error::ExpectedAbsolute)
-        } else if !path.is_file() {
-            Err(Error::ExpectedFile)
-        } else {
-            let file = CString::new(path.to_str().unwrap()).unwrap().into_raw();
-            let ret = mpv_err((), unsafe { mpv_load_config_file(self.ctx, file) });
-            unsafe { CString::from_raw(file) };
-            ret
-        }
-    }
-}
-
-impl<T, U> Drop for UninitializedParent<T, U> {
-    #[inline]
-    fn drop(&mut self) {
-        if self.drop_do_destroy {
-            unsafe {
-                mpv_terminate_destroy(self.ctx);
-            }
-        }
-    }
-}
-
 /// An mpv instance from which `Client`s can be spawned.
 pub struct Parent<T, U> {
     ctx: *mut MpvHandle,
@@ -637,37 +511,6 @@ impl<'parent, T, U> Parent<T, U> {
         })
     }
 
-    fn from_uninitialized(uninit: UninitializedParent<T, U>) -> Result<Parent<T, U>, Error> {
-        let (ev_iter_notification, ev_to_observe, ev_to_observe_properties, ev_observed) =
-            if uninit.check_events {
-                let ev_iter_notification = Box::into_raw(Box::new((Mutex::new(false),
-                                                                   Condvar::new())));
-                unsafe {
-                    mpv_set_wakeup_callback(uninit.ctx,
-                                            event_callback,
-                                            ev_iter_notification as *mut _);
-                }
-
-                (Some(ev_iter_notification),
-                 Some(Mutex::new(Vec::with_capacity(15))),
-                 Some(Mutex::new(HashMap::with_capacity(10))),
-                 Some(Mutex::new(Vec::with_capacity(22))))
-            } else {
-                (None, None, None, None)
-            };
-
-        Ok(Parent {
-            ctx: uninit.ctx,
-            suspension_count: Mutex::new(0),
-            check_events: uninit.check_events,
-            ev_iter_notification: ev_iter_notification,
-            ev_to_observe: ev_to_observe,
-            ev_to_observe_properties: ev_to_observe_properties,
-            ev_observed: ev_observed,
-            custom_protocols: Mutex::new(Vec::new()),
-        })
-    }
-
     #[inline]
     /// Create a client with `name`, that is connected to the core of `self`, but has an own queue
     /// for API events and such.
@@ -783,6 +626,8 @@ impl<'parent, T, U> Client<'parent, T, U> {
 pub trait MpvInstance<'parent, P>
     where P: MpvMarker + 'parent
 {
+    /// Load a configuration file.
+    fn load_config(&self, path: &Path) -> Result<(), Error>;
     /// Observe all given `Event`s by means of an `EventIter`.
     fn observe_all(&self, events: &[Event]) -> Result<EventIter<P>, Error>;
     /// Execute any mpv command. See implementation for information about safety.
@@ -814,6 +659,21 @@ pub trait MpvInstance<'parent, P>
 impl<'parent, P> MpvInstance<'parent, P> for P
     where P: MpvMarker + 'parent
 {
+    #[inline]
+    /// Load a configuration file. The path has to be absolute, and a file.
+    fn load_config(&self, path: &Path) -> Result<(), Error> {
+        if path.is_relative() {
+            Err(Error::ExpectedAbsolute)
+        } else if !path.is_file() {
+            Err(Error::ExpectedFile)
+        } else {
+            let file = CString::new(path.to_str().unwrap()).unwrap().into_raw();
+            let ret = mpv_err((), unsafe { mpv_load_config_file(self.ctx(), file) });
+            unsafe { CString::from_raw(file) };
+            ret
+        }
+    }
+
     #[inline]
     /// Observe given `Event`s via an `EventIter`.
     fn observe_all(&self, events: &[Event]) -> Result<EventIter<P>, Error> {

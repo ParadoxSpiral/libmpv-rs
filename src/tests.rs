@@ -33,12 +33,11 @@ fn version() {
 fn options_properties() {
     // TODO: Cover all `Data` variants.
 
-    let mpv = UninitializedParent::<(), ()>::new(false).unwrap();
-    mpv.set_option("cache-initial", 1).unwrap();
-    mpv.set_option("volume", 0).unwrap();
-    mpv.set_option("vo", "null").unwrap();
-    mpv.set_option("ytdl", true).unwrap();
-    let mpv = mpv.init().unwrap();
+    let mpv = Parent::<(), ()>::new(false).unwrap();
+    mpv.set_property("cache-initial", 1).unwrap();
+    mpv.set_property("volume", 0).unwrap();
+    mpv.set_property("vo", "null").unwrap();
+    mpv.set_property("ytdl", true).unwrap();
 
     mpv.playlist(&PlaylistOp::Loadfiles(&[File::new(Path::new("https://www.youtube.\
                                                                    com/watch?v=DLzxrzFCyOs"),
