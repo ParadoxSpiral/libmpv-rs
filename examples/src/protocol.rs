@@ -48,7 +48,7 @@ fn read(cookie: &mut File, buf: *mut i8, nbytes: u64) -> i64 {
         let forbidden_magic = mem::transmute::<&mut [i8], &mut [u8]>(slice);
 
         cookie.read(forbidden_magic).unwrap() as _
-    }    
+    }
 }
 
 fn seek(cookie: &mut File, offset: i64) -> i64 {
@@ -65,13 +65,15 @@ pub fn exec() {
                            .nth(1)
                            .expect("Expected local path, found nil."));
 
-    let protocol = unsafe { Protocol::new("filereader".into(),
-                                 (),
-                                 open,
-                                 close,
-                                 read,
-                                 Some(seek),
-                                 Some(size)) };
+    let protocol = unsafe {
+        Protocol::new("filereader".into(),
+                      (),
+                      open,
+                      close,
+                      read,
+                      Some(seek),
+                      Some(size))
+    };
 
     let mpv = Parent::new(false).unwrap();
     mpv.register_protocol(protocol).unwrap();

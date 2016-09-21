@@ -28,7 +28,7 @@ use std::time::Duration;
 use std::thread;
 
 pub fn exec() {
-    // Create an `UninitializedParent` (with events enabled) to set some options.
+    // Create a `Parent` (with events enabled) and set some properties.
     let mpv = Parent::<(), ()>::new(true).unwrap();
     mpv.set_property("cache-initial", 1).unwrap();
     mpv.set_property("volume", 10).unwrap();

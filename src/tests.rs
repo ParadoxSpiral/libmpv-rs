@@ -30,9 +30,7 @@ fn version() {
 }
 
 #[test]
-fn options_properties() {
-    // TODO: Cover all `Data` variants.
-
+fn properties() {
     let mpv = Parent::<(), ()>::new(false).unwrap();
     mpv.set_property("cache-initial", 1).unwrap();
     mpv.set_property("volume", 0).unwrap();
@@ -58,8 +56,6 @@ fn options_properties() {
                   .unwrap());
 
     let title = mpv.get_property("media-title", &Format::String).unwrap();
-    assert!(Data::new("Rick Astley - Never Gonna Give You Up [HQ]".to_owned()) ==
-            title ||
-            Data::new("watch?v=DLzxrzFCyOs".to_owned()) ==
-            title);
+    assert!(Data::new("Rick Astley - Never Gonna Give You Up [HQ]".to_owned()) == title ||
+            Data::new("watch?v=DLzxrzFCyOs".to_owned()) == title);
 }
