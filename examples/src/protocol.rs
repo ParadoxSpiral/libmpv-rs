@@ -65,13 +65,13 @@ pub fn exec() {
                            .nth(1)
                            .expect("Expected local path, found nil."));
 
-    let protocol = Protocol::new("filereader".into(),
+    let protocol = unsafe { Protocol::new("filereader".into(),
                                  (),
                                  open,
                                  close,
                                  read,
                                  Some(seek),
-                                 Some(size));
+                                 Some(size)) };
 
     let mpv = Parent::new(false).unwrap();
     mpv.register_protocol(protocol).unwrap();

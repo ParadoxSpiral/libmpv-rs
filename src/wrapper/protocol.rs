@@ -160,7 +160,7 @@ impl<T, U> Protocol<T, U> {
 	///	Do not call libmpv functions in any supplied function.
 	///
 	/// Panic unwinding is catched and returns an appropriate error.
-	pub fn new(name: String,
+	pub unsafe fn new(name: String,
 					  user_data: U,
 					  open_fn: StreamOpen<T, U>,
 					  close_fn: StreamClose<T>,
@@ -170,7 +170,7 @@ impl<T, U> Protocol<T, U> {
 					  -> Protocol<T, U>
 	{
 		let data = Box::into_raw(Box::new(ProtocolData {
-								cookie: unsafe{ libc::malloc(mem::size_of::<T>()) as *mut T },
+								cookie: libc::malloc(mem::size_of::<T>()) as *mut T,
 								user_data: user_data,
 
 								open_fn: open_fn,
