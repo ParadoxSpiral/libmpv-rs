@@ -964,30 +964,28 @@ impl<'parent, P> MpvInstance<'parent, P> for P
             PlaylistOp::Shuffle => unsafe { self.command(&Command::new("playlist-shuffle", &[])) },
             PlaylistOp::Loadfiles(lfiles) => {
                 for (i, elem) in lfiles.iter().enumerate() {
+                    let args = match elem.options {
+                            Some(v) => {
+                                [format!("\"{}\"",
+                                         elem.path
+                                             .to_str()
+                                             .unwrap()),
+                                 elem.state.val().into(),
+                                 v.into()]
+                            }
+                            None => {
+                                [format!("\"{}\"",
+                                         elem.path
+                                             .to_str()
+                                             .unwrap()),
+                                 elem.state.val().into(),
+                                 "".into()]
+                            }};
                     let ret = unsafe {
-                        let args = match elem.options {
-                                        Some(v) => {
-                                            [format!("\"{}\"",
-                                                     elem.path
-                                                         .to_str()
-                                                         .unwrap()),
-                                             elem.state.val().into(),
-                                             v.into()]
-                                        }
-                                        None => {
-                                            [format!("\"{}\"",
-                                                     elem.path
-                                                         .to_str()
-                                                         .unwrap()),
-                                             elem.state.val().into(),
-                                             "".into()]
-                                        }
-                                    };
                         self.command(&Command {
-                            name: "loadfile",
-                            args: &[&args[0], &args[1], &args[2]],
-                        })
-                    };
+                                name: "loadfile",
+                                args: &[&args[0], &args[1], &args[2]],
+                    })};
                     if ret.is_err() {
                         return Err(Error::Loadfiles((i, Rc::new(ret.unwrap_err()))));
                     }
@@ -1031,7 +1029,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                                                          "".into()
                                                      })]))
             },
-            SubOp::AddCached(p, t, l) => unsafe {
+            SubOp::AddCached(p, t, l) => {
                 let t = if t.is_some() {
                             format!(" {}", t.unwrap())
                         } else {
@@ -1042,25 +1040,25 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                         } else {
                             "".into()
                         };
-                self.command(&Command::new("sub-add",
-                                           &[&format!("\"{}\"", p.to_str().unwrap()),
-                                             &format!("cached{}{}", t, l)]))
+                unsafe {self.command(&Command::new("sub-add",
+                                                   &[&format!("\"{}\"", p.to_str().unwrap()),
+                                                   &format!("cached{}{}", t, l)]))}
             },
-            SubOp::Remove(i) => unsafe {
+            SubOp::Remove(i) => {
                 let i = if i.is_some() {
                             format!("{}", i.unwrap())
                         } else {
                             "".into()
                         };
-                self.command(&Command::new("sub-remove", &[&i]))
+                unsafe{self.command(&Command::new("sub-remove", &[&i]))}
             },
-            SubOp::Reload(i) => unsafe {
+            SubOp::Reload(i) => {
                 let i = if i.is_some() {
                             format!("{}", i.unwrap())
                         } else {
                             "".into()
                         };
-                self.command(&Command::new("sub-reload", &[&i]))
+                unsafe{self.command(&Command::new("sub-reload", &[&i]))}
             },
             SubOp::Step(i) => unsafe {
                 self.command(&Command::new("sub-step", &[&format!("{}", i)]))

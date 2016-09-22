@@ -32,7 +32,7 @@ use std::panic::AssertUnwindSafe;
 use std::ptr;
 
 /// Return an initialized `T`, panic on errors.
-pub type StreamOpen<T, U> = fn(&mut U, &str) -> T;
+pub type StreamOpen<T, U> = fn(&mut U, String) -> T;
 /// Do any necessary cleanup.
 pub type StreamClose<T> = fn(Box<T>);
 /// Seek to the given offset. Return the new offset, or `MpvError::Generic` if seek failed.
@@ -59,7 +59,7 @@ unsafe extern "C" fn open_wrapper<T, U>(user_data: *mut libc::c_void,
 	let ret = panic::catch_unwind(AssertUnwindSafe(|| {
 		let uri = CStr::from_ptr(uri as *const _);
 		ptr::write((*data).cookie,
-				   ((*data).open_fn)(&mut (*data).user_data, &utils::mpv_cstr_to_string(uri)));
+				   ((*data).open_fn)(&mut (*data).user_data, utils::mpv_cstr_to_string(uri)));
 	}));
 	if ret.is_ok() {
 		0

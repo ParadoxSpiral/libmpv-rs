@@ -30,7 +30,7 @@ use std::slice;
 use std::time::Duration;
 use std::thread;
 
-fn open(_: &mut (), uri: &str) -> File {
+fn open(_: &mut (), uri: String) -> File {
     // Open the file, and strip the `filereader://` part
     let ret = File::open(&uri[13..]).unwrap();
 
