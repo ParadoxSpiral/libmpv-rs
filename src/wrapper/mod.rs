@@ -877,7 +877,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                     })
             }
             _ => {
-                let ptr = unsafe { &mut mem::zeroed() };
+                let ptr = unsafe { &mut mem::zeroed() } as *mut Data as _;
 
                 mpv_err((), unsafe {
                     mpv_get_property(self.ctx(),

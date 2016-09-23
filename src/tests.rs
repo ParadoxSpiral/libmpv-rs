@@ -49,12 +49,6 @@ fn properties() {
                mpv.get_property("volume", &Format::Int64)
                   .unwrap());
 
-    mpv.set_property("volume", 4).unwrap();
-
-    assert_eq!(Data::new(4),
-               mpv.get_property("volume", &Format::Int64)
-                  .unwrap());
-
     let title = mpv.get_property("media-title", &Format::String).unwrap();
     assert!(Data::new("Rick Astley - Never Gonna Give You Up [HQ]".to_owned()) == title ||
             Data::new("watch?v=DLzxrzFCyOs".to_owned()) == title);
