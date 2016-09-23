@@ -27,7 +27,7 @@ pub mod utils;
 pub mod protocol;
 
 use libc;
-use parking_lot::{Condvar, Mutex, Once, ONCE_INIT};
+use parking_lot::{Condvar, Mutex, MutexGuard, Once, ONCE_INIT};
 
 use super::raw::*;
 use events::*;
@@ -95,6 +95,8 @@ pub enum Error {
     /// The library was compiled against a different mpv version than what is present on the system.
     /// First value is compiled version, second value is loaded version.
     VersionMismatch(u32, u32),
+    /// An opengl callback has already been registered.
+    CallbackExists,
     /// Mpv returned null while creating the core.
     Null,
 }
@@ -320,6 +322,37 @@ pub enum SubOp<'a> {
     SeekBackward,
 }
 
+/// Holds all state relevant to opengl callback functions.
+pub struct OpenGlState {
+    mpv_ctx: *mut MpvHandle,
+    gl_ctx: *mut MpvOpenGlCbContext,
+}
+
+impl OpenGlState {
+    fn empty() -> OpenGlState {
+        OpenGlState{
+            mpv_ctx: ptr::null_mut(),
+            gl_ctx: ptr::null_mut(),
+        }
+    }
+
+    fn new(mpv_ctx: *mut MpvHandle) -> OpenGlState {
+        OpenGlState{
+            mpv_ctx: mpv_ctx,
+            gl_ctx: ptr::null_mut(),
+        }
+    }
+}
+
+impl Drop for OpenGlState {
+    #[inline]
+    fn drop(&mut self) {
+        unsafe {
+            mpv_opengl_cb_uninit_gl(self.gl_ctx);
+        }
+    }
+}
+
 /// An mpv instance from which `Client`s can be spawned.
 pub struct Parent<T, U> {
     ctx: *mut MpvHandle,
@@ -330,6 +363,7 @@ pub struct Parent<T, U> {
     ev_to_observe_properties: Option<Mutex<HashMap<String, libc::uint64_t>>>,
     ev_observed: Option<Mutex<Vec<InnerEvent>>>,
     custom_protocols: Mutex<Vec<Protocol<T, U>>>,
+    opengl_state: Mutex<OpenGlState>,
 }
 
 /// A client of a `Parent`.
@@ -508,6 +542,7 @@ impl<'parent, T, U> Parent<T, U> {
             ev_to_observe_properties: ev_to_observe_properties,
             ev_observed: ev_observed,
             custom_protocols: Mutex::new(Vec::new()),
+            opengl_state: Mutex::new(OpenGlState::empty()),
         })
     }
 
@@ -577,6 +612,20 @@ impl<'parent, T, U> Parent<T, U> {
             _does_not_outlive: PhantomData::<&Self>,
         };
         Ok(instance)
+    }
+
+    #[inline]
+    /// Enable opengl callback for this `Parent`
+    pub fn init_opengl_callback(&self) -> Result<MutexGuard<OpenGlState>, Error> {
+        let guard = self.opengl_state.try_lock();
+
+        if guard.is_none() {
+            Err(Error::CallbackExists)
+        } else {
+            let mut guard = guard.unwrap();
+            *guard = OpenGlState::new(self.ctx);
+            Ok(guard)
+        }
     }
 
     #[inline]
