@@ -49,7 +49,7 @@ unsafe extern "C" fn get_proc_addr_wrapper<F>(cookie: *mut libc::c_void,
 /// Holds all state relevant to opengl callback functions.
 pub struct OpenGlState  {
     api_ctx: *mut MpvOpenGlCbContext,
-    proc_addr: Box<for<'a> Fn(&'a str) -> *const ()>,
+    proc_addr: *mut for<'a> Fn(&'a str) -> *const (),
     is_empty: bool,
 }
 
@@ -57,12 +57,12 @@ impl OpenGlState {
     pub(crate) fn empty() -> OpenGlState {
         OpenGlState{
             api_ctx: ptr::null_mut(),
-            proc_addr: unsafe{ mem::uninitialized() },
+            proc_addr: unsafe{ mem::zeroed() },
             is_empty: true,
         }
     }
 
-    pub(crate) fn new<F>(mpv_ctx: *mut MpvHandle, proc_addr: F) -> Result<OpenGlState, Error>
+    pub(crate) fn new<F>(mpv_ctx: *mut MpvHandle, mut proc_addr: F) -> Result<OpenGlState, Error>
         where F: for<'a> Fn(&'a str) -> *const () + 'static
     {
         let api_ctx = unsafe {
@@ -70,13 +70,12 @@ impl OpenGlState {
         };
         debug_assert!(!api_ctx.is_null());
 
-        let mut proc_addr = Box::new(proc_addr);
-        let proc_addr_ptr = &mut*proc_addr as *mut F;
+        let proc_addr_ptr = &mut proc_addr as *mut F;
 
-        mpv_err(
+        let ret = mpv_err(
             OpenGlState {
                 api_ctx: api_ctx,
-                proc_addr: proc_addr,
+                proc_addr: proc_addr_ptr,
                 is_empty: false
             },
             unsafe {
@@ -84,7 +83,11 @@ impl OpenGlState {
                                           get_proc_addr_wrapper::<F>,
                                           proc_addr_ptr as *mut libc::c_void)
             }
-        )
+        );
+        if ret.is_ok() {
+            mem::forget(proc_addr);
+        }
+        ret
     }
 }
 
