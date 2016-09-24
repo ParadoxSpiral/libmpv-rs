@@ -17,6 +17,8 @@
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 #![feature(box_syntax, slice_patterns)]
 
+// For an example of opengl callback, see pmpv.
+
 mod events;
 mod protocol;
 

@@ -19,7 +19,7 @@
 #![allow(dead_code, improper_ctypes, missing_docs, non_camel_case_types)]
 use libc;
 
-// Used in basically every API call.
+// Used with basically every API call.
 pub enum MpvHandle {}
 
 // Used for opengl callback.
@@ -215,8 +215,8 @@ pub type mpv_stream_cb_open_ro_fn = unsafe extern "C" fn(user_data: *mut libc::c
 
 pub type mpv_opengl_cb_update_fn = unsafe extern "C" fn(cb_ctx: *mut libc::c_void);
 pub type mpv_opengl_cb_get_proc_address_fn = unsafe extern "C" fn(fn_ctx: *mut libc::c_void,
-                                                                  name: *const libc::c_char,
-                                                                  info: *mut MpvStreamCbInfo);
+                                                                  name: *const libc::c_char)
+                                                                  -> *mut libc::c_void;
 
 #[repr(C)]
 pub struct MpvStreamCbInfo { 

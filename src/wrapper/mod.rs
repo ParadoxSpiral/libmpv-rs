@@ -25,6 +25,8 @@ pub mod events;
 pub mod utils;
 /// Contains abstractions to define custom protocol handlers.
 pub mod protocol;
+/// Contains abstractions to use the opengl callback interface.
+pub mod opengl_cb;
 
 use libc;
 use parking_lot::{Condvar, Mutex, MutexGuard, Once, ONCE_INIT};
@@ -35,6 +37,7 @@ use events::event_callback;
 use protocol::*;
 use utils::*;
 use utils::mpv_err;
+use opengl_cb::*;
 
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
@@ -322,39 +325,8 @@ pub enum SubOp<'a> {
     SeekBackward,
 }
 
-/// Holds all state relevant to opengl callback functions.
-pub struct OpenGlState {
-    mpv_ctx: *mut MpvHandle,
-    gl_ctx: *mut MpvOpenGlCbContext,
-}
-
-impl OpenGlState {
-    fn empty() -> OpenGlState {
-        OpenGlState{
-            mpv_ctx: ptr::null_mut(),
-            gl_ctx: ptr::null_mut(),
-        }
-    }
-
-    fn new(mpv_ctx: *mut MpvHandle) -> OpenGlState {
-        OpenGlState{
-            mpv_ctx: mpv_ctx,
-            gl_ctx: ptr::null_mut(),
-        }
-    }
-}
-
-impl Drop for OpenGlState {
-    #[inline]
-    fn drop(&mut self) {
-        unsafe {
-            mpv_opengl_cb_uninit_gl(self.gl_ctx);
-        }
-    }
-}
-
 /// An mpv instance from which `Client`s can be spawned.
-pub struct Parent<T, U> {
+pub struct Parent<T, U, F> where F: for<'a> Fn(&'a str) -> *const () {
     ctx: *mut MpvHandle,
     suspension_count: Mutex<usize>,
     check_events: bool,
@@ -363,24 +335,26 @@ pub struct Parent<T, U> {
     ev_to_observe_properties: Option<Mutex<HashMap<String, libc::uint64_t>>>,
     ev_observed: Option<Mutex<Vec<InnerEvent>>>,
     custom_protocols: Mutex<Vec<Protocol<T, U>>>,
-    opengl_state: Mutex<OpenGlState>,
+    opengl_state: Mutex<OpenGlState<F>>,
 }
 
 /// A client of a `Parent`.
-pub struct Client<'parent, T: 'parent, U: 'parent> {
+pub struct Client<'parent, T: 'parent, U: 'parent, F> 
+    where F: for<'a> Fn(&'a str) -> *const () + 'parent
+{
     ctx: *mut MpvHandle,
     check_events: bool,
     ev_iter_notification: Option<*mut (Mutex<bool>, Condvar)>,
     ev_to_observe: Option<Mutex<Vec<Event>>>,
     ev_observed: Option<Mutex<Vec<InnerEvent>>>,
     ev_to_observe_properties: Option<Mutex<HashMap<String, libc::uint64_t>>>,
-    _does_not_outlive: PhantomData<&'parent Parent<T, U>>,
+    _does_not_outlive: PhantomData<&'parent Parent<T, U, F>>,
 }
 
-unsafe impl<T, U> Send for Parent<T, U> {}
-unsafe impl<T, U> Sync for Parent<T, U> {}
-unsafe impl<'parent, T, U> Send for Client<'parent, T, U> {}
-unsafe impl<'parent, T, U> Sync for Client<'parent, T, U> {}
+unsafe impl<T, U, F> Send for Parent<T, U, F> where F: for<'a> Fn(&'a str) -> *const () {}
+unsafe impl<T, U, F> Sync for Parent<T, U, F> where F: for<'a> Fn(&'a str) -> *const () {}
+unsafe impl<'parent, T, U, F> Send for Client<'parent, T, U, F> where F: for<'a> Fn(&'a str) -> *const () + 'parent {}
+unsafe impl<'parent, T, U, F> Sync for Client<'parent, T, U, F> where F: for<'a> Fn(&'a str) -> *const () + 'parent {}
 
 #[doc(hidden)]
 #[allow(missing_docs)]
@@ -400,7 +374,7 @@ pub unsafe trait MpvMarker {
     }
 }
 
-unsafe impl<T, U> MpvMarker for Parent<T, U> {
+unsafe impl<T, U, F> MpvMarker for Parent<T, U, F> where F: for<'a> Fn(&'a str) -> *const () {
     fn ctx(&self) -> *mut MpvHandle {
         self.ctx
     }
@@ -421,7 +395,9 @@ unsafe impl<T, U> MpvMarker for Parent<T, U> {
     }
 }
 
-unsafe impl<'parent, T, U> MpvMarker for Client<'parent, T, U> {
+unsafe impl<'parent, T, U, F> MpvMarker for Client<'parent, T, U, F>
+    where F: for<'a> Fn(&'a str) -> *const ()
+{
     fn ctx(&self) -> *mut MpvHandle {
         self.ctx
     }
@@ -442,7 +418,7 @@ unsafe impl<'parent, T, U> MpvMarker for Client<'parent, T, U> {
     }
 }
 
-impl<T, U> Drop for Parent<T, U> {
+impl<T, U, F> Drop for Parent<T, U, F> where F: for<'a> Fn(&'a str) -> *const () {
     #[inline]
     fn drop(&mut self) {
         unsafe {
@@ -452,7 +428,7 @@ impl<T, U> Drop for Parent<T, U> {
     }
 }
 
-impl<'parent, T, U> Drop for Client<'parent, T, U> {
+impl<'parent, T, U, F> Drop for Client<'parent, T, U, F> where F: for<'a> Fn(&'a str) -> *const ()  + 'parent {
     #[inline]
     fn drop(&mut self) {
         unsafe {
@@ -462,11 +438,11 @@ impl<'parent, T, U> Drop for Client<'parent, T, U> {
     }
 }
 
-impl<'parent, T, U> Parent<T, U> {
+impl<'parent, T, U, F> Parent<T, U, F> where F: for<'a> Fn(&'a str) -> *const ()  + 'parent {
     #[inline]
     /// Create a new `Parent`.
     /// The default settings can be probed by running: `$ mpv --show-profile=libmpv`
-    pub fn new(check_events: bool) -> Result<Parent<T, U>, Error> {
+    pub fn new(check_events: bool) -> Result<Parent<T, U, F>, Error> {
         SET_LC_NUMERIC.call_once(|| {
             let c = CString::new("C").unwrap();
             unsafe { libc::setlocale(libc::LC_NUMERIC, c.as_ptr()) };
@@ -549,7 +525,7 @@ impl<'parent, T, U> Parent<T, U> {
     #[inline]
     /// Create a client with `name`, that is connected to the core of `self`, but has an own queue
     /// for API events and such.
-    pub fn new_client(&self, name: &str, check_events: bool) -> Result<Client<T, U>, Error> {
+    pub fn new_client(&self, name: &str, check_events: bool) -> Result<Client<T, U, F>, Error> {
         let ctx = unsafe {
             let name = CString::new(name).unwrap();
             mpv_create_client(self.ctx(), name.as_ptr())
@@ -615,15 +591,15 @@ impl<'parent, T, U> Parent<T, U> {
     }
 
     #[inline]
-    /// Enable opengl callback for this `Parent`
-    pub fn init_opengl_callback(&self) -> Result<MutexGuard<OpenGlState>, Error> {
+    /// Enable opengl callback for this `Parent`.
+    pub fn init_opengl_callback(&self, procaddr: F) -> Result<MutexGuard<OpenGlState<F>>, Error> {
         let guard = self.opengl_state.try_lock();
 
         if guard.is_none() {
             Err(Error::CallbackExists)
         } else {
             let mut guard = guard.unwrap();
-            *guard = OpenGlState::new(self.ctx);
+            *guard = try!(OpenGlState::new(self.ctx, procaddr));
             Ok(guard)
         }
     }
@@ -663,7 +639,7 @@ impl<'parent, T, U> Parent<T, U> {
     }
 }
 
-impl<'parent, T, U> Client<'parent, T, U> {
+impl<'parent, T, U, F> Client<'parent, T, U, F> where F: for<'a> Fn(&'a str) -> *const () + 'parent {
     #[inline]
     /// Returns the name associated with `self`.
     pub fn name(&self) -> &str {
