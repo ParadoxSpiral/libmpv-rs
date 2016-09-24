@@ -419,6 +419,8 @@ impl<T, U> Drop for Parent<T, U> {
     fn drop(&mut self) {
         unsafe {
             self.drop_ev_iter_step();
+            // FIXME: Ugly hack: Force drop call by replacing data
+            self.opengl_state = Mutex::new(OpenGlState::empty());
             mpv_terminate_destroy(self.ctx());
         }
     }
@@ -434,7 +436,7 @@ impl<'parent, T, U> Drop for Client<'parent, T, U> {
     }
 }
 
-impl<'parent, T, U> Parent<T, U> {
+impl<T, U> Parent<T, U> {
     #[inline]
     /// Create a new `Parent`.
     /// The default settings can be probed by running: `$ mpv --show-profile=libmpv`
