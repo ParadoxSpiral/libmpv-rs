@@ -23,7 +23,6 @@ use super::utils::mpv_err;
 use super::super::raw::*;
 
 use std::ffi::CStr;
-use std::mem;
 use std::panic;
 use std::panic::AssertUnwindSafe;
 use std::ptr;
@@ -70,7 +69,7 @@ impl OpenGlState {
 
         let proc_addr_ptr = &mut proc_addr as *mut F;
 
-        let ret = mpv_err(
+        mpv_err(
             OpenGlState {
                 api_ctx: api_ctx,
                 is_empty: false,
@@ -80,11 +79,7 @@ impl OpenGlState {
                                           get_proc_addr_wrapper::<F>,
                                           proc_addr_ptr as *mut libc::c_void)
             }
-        );
-        if ret.is_ok() {
-            mem::forget(proc_addr);
-        }
-        ret
+        )
     }
 
     #[inline]
