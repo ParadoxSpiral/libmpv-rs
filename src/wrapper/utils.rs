@@ -23,7 +23,7 @@ use super::*;
 use super::super::raw::*;
 
 use std::path::Path;
-use std::ffi::{CStr, /*CString*/};
+use std::ffi::CStr;
 
 #[cfg(unix)]
 use std::ffi::OsStr;

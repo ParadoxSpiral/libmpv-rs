@@ -21,6 +21,7 @@ name = "mpv"
 version = "0.0.1"
 authors = ["ParadoxSpiral <paradoxspiral@riseup.net>"]
 license = "LGPLv2.1"
+build = "build.rs"
 
 [dependencies]
 libc = "0.2"
@@ -28,5 +29,9 @@ lazy_static = "0.2"
 parking_lot = {version = "0.2", features = ['nightly']}
 enum_primitive = "0.1"
 
+[build-dependencies]
+hyper = "0.9"
+git2 = "0.4"
+
 [features]
-static = [] # link mpv statically (testing needed)
+build_libmpv = [] # build libmpv automatically at compile time

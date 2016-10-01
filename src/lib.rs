@@ -20,9 +20,7 @@
 #![allow(unknown_lints)]
 #![feature(pub_restricted, const_fn, stmt_expr_attributes, untagged_unions)]
 
-//! This crate provides abstractions for (libmpv)
-//! [https://github.com/mpv-player/mpv/tree/master/libmpv] of the (mpv media player)
-//! [https://github.com/mpv-player/mpv].
+//! This crate provides abstractions for (libmpv)[https://github.com/mpv-player/mpv/tree/master/libmpv] of the (mpv media player)[https://github.com/mpv-player/mpv].
 //!
 //! Libmpv requires `LC_NUMERIC` to be `C`. This is set once when the first parent is created.
 //! Do not change this during the usage of this crate.
