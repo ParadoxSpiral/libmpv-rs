@@ -19,7 +19,7 @@
 use libc;
 
 use super::*;
-use super::utils::mpv_err;
+use super::mpv_err;
 use super::super::raw::*;
 
 use std::ffi::CStr;

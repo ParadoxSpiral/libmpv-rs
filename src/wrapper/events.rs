@@ -20,7 +20,7 @@ use libc;
 use parking_lot::{Condvar, Mutex};
 
 use super::*;
-use super::utils::{mpv_err, property_from_raw};
+use super::mpv_err;
 use super::super::LogLevel;
 use super::super::raw::*;
 
@@ -30,6 +30,15 @@ use std::ffi::{CStr, CString};
 
 pub(crate) unsafe extern "C" fn event_callback(d: *mut libc::c_void) {
     (*(d as *mut (Mutex<bool>, Condvar))).1.notify_one();
+}
+
+fn property_from_raw(raw: *mut libc::c_void) -> (String, Data) {
+    debug_assert!(!raw.is_null());
+    let raw = unsafe { &mut *(raw as *mut MpvEventProperty) };
+    (
+        unsafe { CStr::from_ptr(raw.name).to_str().unwrap().into() },
+        Data::from_raw(raw.format, raw.data)
+    )
 }
 
 #[doc(hidden)]

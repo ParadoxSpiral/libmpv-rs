@@ -22,7 +22,7 @@
 use libc;
 
 use super::*;
-use super::utils::mpv_err;
+use super::{mpv_err, mpv_cstr_to_string};
 use super::super::raw::*;
 
 use std::ffi::{CStr, CString};
@@ -59,7 +59,7 @@ unsafe extern "C" fn open_wrapper<T, U>(user_data: *mut libc::c_void,
 	let ret = panic::catch_unwind(AssertUnwindSafe(|| {
 		let uri = CStr::from_ptr(uri as *const _);
 		ptr::write((*data).cookie,
-				   ((*data).open_fn)(&mut (*data).user_data, utils::mpv_cstr_to_string(uri)));
+				   ((*data).open_fn)(&mut (*data).user_data, mpv_cstr_to_string(uri)));
 	}));
 	if ret.is_ok() {
 		0

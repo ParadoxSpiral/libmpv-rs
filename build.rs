@@ -55,10 +55,10 @@ fn main() {
 							  .arg(archive).output().expect("7z execution failed");
 
 			#[cfg(target_pointer_width = "32")] {
-				println!("cargo:rustc-link-search=native={}/32/", out_dir);	
+				println!("cargo:rustc-link-search=native={}/32/", out_dir);
 			}
 			#[cfg(target_pointer_width = "64")] {
-				println!("cargo:rustc-link-search=native={}/64/", out_dir);	
+				println!("cargo:rustc-link-search=native={}/64/", out_dir);
 			}
 		} else {
 		    // Assume unix like
