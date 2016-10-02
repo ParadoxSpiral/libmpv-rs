@@ -85,8 +85,7 @@ fn main() {
 				Repository::clone(url, &path).expect("failed to mpv-build");
 				Command::new("sh")
 							  .arg("-c")
-							  .arg(&format!("cd {} && ./update && echo --enable-libmpv-shared > \
-							   				mpv_options && ./build -j{}",
+							  .arg(&format!("cd {} && {0}/update && echo --enable-libmpv-shared > {0}/mpv_options && {0}/build -j{1}",
 							  				path, num_threads))
 							  .output().expect("libmpv build failed");
 			}
