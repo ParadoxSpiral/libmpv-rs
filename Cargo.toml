@@ -35,4 +35,4 @@ git2 = "0.4"
 
 [features]
 build_libmpv = [] # build libmpv automatically at compile time
-embed_libmpv = ["build_libmpv"] # expose libmpv as mpv::LIBMPV_DLL or _A
+embed_libmpv = ["build_libmpv"] # expose libmpv as mpv::LIBMPV_DLL or _A; aka pseudo-static linking

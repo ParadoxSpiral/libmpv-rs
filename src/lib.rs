@@ -29,6 +29,8 @@
 //!
 //! See the 'examples' directory in the crate root.
 
+// TODO: write docs for build/embed_libmpv
+
 extern crate libc;
 extern crate parking_lot;
 #[macro_use]
@@ -56,26 +58,39 @@ const fn mpv_make_version(major: u32, minor: u32) -> u32 {
     major << 16 | minor
 }
 
-#[all(feature="embed_libmpv", windows)]
+#[cfg(all(feature="embed_libmpv", windows, target_pointer_width = "32"))]
 #[cfg_attr(all(feature="embed_libmpv", windows), allow(missing_docs))]
 // env var set in build script
-pub const LIBMPV_DLL: &'static str = include_str!(env!("LIBMPV_LOCATION"));
+pub const LIBMPV_DLL: &'static [u8; 34033493] = include_bytes!(concat!(env!("OUT_DIR"),
+																	   "/32/mpv-1.dll"));
 
-#[all(feature="embed_libmpv", unix)]
+#[cfg(all(feature="embed_libmpv", windows, target_pointer_width = "64"))]
+#[cfg_attr(all(feature="embed_libmpv", windows), allow(missing_docs))]
+pub const LIBMPV_DLL: &'static [u8; 38363704] = include_bytes!(concat!(env!("OUT_DIR"),
+																	  "/64/mpv-1.dll"));
+
+// FIXME: size of libmpv.a
+#[cfg(all(feature="embed_libmpv", unix, target_pointer_width = "32"))]
 #[cfg_attr(all(feature="embed_libmpv", unix), allow(missing_docs))]
-pub const LIBMPV_A: &'static str = include_str!(env!("LIBMPV_LOCATION"));
+pub const LIBMPV_A: &'static [u8; 0] = include_bytes!(concat!(env!("OUT_DIR"),
+																	 "/libmpv/mpv/build/libmpv.a"));
+
+#[cfg(all(feature="embed_libmpv", unix, target_pointer_width = "64"))]
+#[cfg_attr(all(feature="embed_libmpv", unix), allow(missing_docs))]
+pub const LIBMPV_A: &'static [u8; 12582056] = include_bytes!(concat!(env!("OUT_DIR"),
+																	 "/libmpv/mpv/build/libmpv.a"));
 
 #[cfg(feature="embed_libmpv")]
 /// Note that the file has to be in a format the platform will recognize,
 /// e.g. `mpv-1.dll` on windows and `libmpv.a` on unix.
-pub fn write_libmpv_to_file(path: ::std::path::Path) -> Result<(), ::std::io::Error> {
+pub fn write_libmpv_to_file(path: &::std::path::Path) -> Result<(), ::std::io::Error> {
 	use std::io::prelude::*;
 
-	let file = try!(File::create(path));
-	#[windows] {
+	let mut file = try!(std::fs::File::create(path));
+	#[cfg(windows)] {
 		try!(file.write_all(LIBMPV_DLL));
 	}
-	#[unix] {
+	#[cfg(unix)] {
 		try!(file.write_all(LIBMPV_A));
 	}
 	Ok(())

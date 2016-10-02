@@ -40,7 +40,11 @@ fn main() {
 			let archive = Path::new(&path);
 			
 			if !archive.exists() {
-				let mut buf = Vec::with_capacity(128*100);
+				#[cfg(target_pointer_width = "32")]
+				let mut buf = Vec::with_capacity(34033493);
+				#[cfg(target_pointer_width = "64")]
+				let mut buf = Vec::with_capacity(38363704);
+
 				hyper::Client::new().get("https://mpv.srsfckn.biz/mpv-dev-20160826.7z")
 									.send().expect("retrieving libmpv failed")
 									.read_to_end(&mut buf).unwrap();
@@ -54,43 +58,42 @@ fn main() {
 			Command::new("7z").arg("x").arg(&format!("-o{}", out_dir))
 							  .arg(archive).output().expect("7z execution failed");
 
-			#[cfg(target_pointer_width = "32")] {
-				println!("cargo:rustc-link-search=native={}/32/", out_dir);
-				#[feature="embed_libmpv"] {
-					env::set_var("LIBMPV_LOCATION", format!("{}/32/mpv-1.dll", out_dir))
-				}
-			}
-			#[cfg(target_pointer_width = "64")] {
+			if target.contains("x86_64") {
 				println!("cargo:rustc-link-search=native={}/64/", out_dir);
-				#[feature="embed_libmpv"] {
-					env::set_var("LIBMPV_LOCATION", format!("{}/64/mpv-1.dll", out_dir))
-				}
+			} else {
+				println!("cargo:rustc-link-search=native={}/32/", out_dir);
 			}
 		} else {
 		    // Assume unix like
+
+		    // target doesn't really mean target. It means target(host) of build script, which is
+		    // very confusing because it means the actual --target everywhere else.
+		    #[cfg(target_pointer_width = "64")] {
+		    	if (target.contains("x86") && ! target.contains("x86_64")) ||
+		    	    target.contains("i686") {
+		    		panic!("Cross-compiling to different arch not yet supported");
+		    	}
+		    }
+		    #[cfg(target_pointer_width = "32")] {
+		    	if target.contains("x86_64") {
+		    		panic!("Cross-compiling to different arch not yet supported");
+		    	}
+		    }
 
 		    let url = "https://github.com/mpv-player/mpv-build";
 		    let path = format!("{}/libmpv", out_dir);
 			let num_threads = env::var("NUM_JOBS").unwrap();
 
-			if Path::new(&path).exists() {
-			    Command::new("sh")
-							  .arg("-c")
-							  .arg(&format!("{}/build -j{}", path, num_threads))
-							  .output().expect("libmpv build failed");
-			} else {
+			if !Path::new(&path).exists() {
 				Repository::clone(url, &path).expect("failed to mpv-buikd");
 				Command::new("sh")
 							  .arg("-c")
 							  .arg(&format!("cd {} && ./update && echo --enable-libmpv-shared > \
 							   				mpv_options && ./build -j{}",
-							  				path, config, num_threads))
+							  				path, num_threads))
 							  .output().expect("libmpv build failed");
 			}
 			println!("cargo:rustc-link-search=native={}/mpv/build/", path);
-			#[feature="embed_libmpv"] {
-				env::set_var("LIBMPV_LOCATION", format!("{}/mpv/build/libmpv.a", path))
-			}
 		}
 		
 	    println!("cargo:rustc-link-lib=mpv");
