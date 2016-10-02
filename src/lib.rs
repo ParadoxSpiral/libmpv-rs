@@ -57,9 +57,26 @@ const fn mpv_make_version(major: u32, minor: u32) -> u32 {
 }
 
 #[all(feature="embed_libmpv", windows)]
+#[cfg_attr(all(feature="embed_libmpv", windows), allow(missing_docs))]
 // env var set in build script
 pub const LIBMPV_DLL: &'static str = include_str!(env!("LIBMPV_LOCATION"));
 
 #[all(feature="embed_libmpv", unix)]
-// env var set in build script
+#[cfg_attr(all(feature="embed_libmpv", unix), allow(missing_docs))]
 pub const LIBMPV_A: &'static str = include_str!(env!("LIBMPV_LOCATION"));
+
+#[cfg(feature="embed_libmpv")]
+/// Note that the file has to be in a format the platform will recognize,
+/// e.g. `mpv-1.dll` on windows and `libmpv.a` on unix.
+pub fn write_libmpv_to_file(path: ::std::path::Path) -> Result<(), ::std::io::Error> {
+	use std::io::prelude::*;
+
+	let file = try!(File::create(path));
+	#[windows] {
+		try!(file.write_all(LIBMPV_DLL));
+	}
+	#[unix] {
+		try!(file.write_all(LIBMPV_A));
+	}
+	Ok(())
+}
