@@ -55,3 +55,11 @@ pub const MPV_CLIENT_API_VERSION: u32 = mpv_make_version(MPV_CLIENT_API_MAJOR,
 const fn mpv_make_version(major: u32, minor: u32) -> u32 {
     major << 16 | minor
 }
+
+#[all(feature="embed_libmpv", windows)]
+// env var set in build script
+pub const LIBMPV_DLL: &'static str = include_str!(env!("LIBMPV_LOCATION"));
+
+#[all(feature="embed_libmpv", unix)]
+// env var set in build script
+pub const LIBMPV_A: &'static str = include_str!(env!("LIBMPV_LOCATION"));

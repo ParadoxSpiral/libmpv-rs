@@ -56,9 +56,15 @@ fn main() {
 
 			#[cfg(target_pointer_width = "32")] {
 				println!("cargo:rustc-link-search=native={}/32/", out_dir);
+				#[feature="embed_libmpv"] {
+					env::set_var("LIBMPV_LOCATION", format!("{}/32/mpv-1.dll", out_dir))
+				}
 			}
 			#[cfg(target_pointer_width = "64")] {
 				println!("cargo:rustc-link-search=native={}/64/", out_dir);
+				#[feature="embed_libmpv"] {
+					env::set_var("LIBMPV_LOCATION", format!("{}/64/mpv-1.dll", out_dir))
+				}
 			}
 		} else {
 		    // Assume unix like
@@ -82,6 +88,9 @@ fn main() {
 							  .output().expect("libmpv build failed");
 			}
 			println!("cargo:rustc-link-search=native={}/mpv/build/", path);
+			#[feature="embed_libmpv"] {
+				env::set_var("LIBMPV_LOCATION", format!("{}/mpv/build/libmpv.a", path))
+			}
 		}
 		
 	    println!("cargo:rustc-link-lib=mpv");
