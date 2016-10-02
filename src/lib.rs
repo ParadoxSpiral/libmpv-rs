@@ -31,6 +31,13 @@
 
 // TODO: write docs for build/embed_libmpv
 
+// Procedure for updating to new libmpv:
+// - make any nessecary API change, bump version
+// - update MPV_CLIENT_API consts in lib.rs
+// - update sizes of new mpv binaries (LIBMPV_DLL and LIBMPV_A) in lib.rs
+// - update new archive size in build.rs (windows branch)
+// - run tests and examples to test whether they still work
+
 extern crate libc;
 extern crate parking_lot;
 #[macro_use]

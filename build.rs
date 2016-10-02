@@ -40,10 +40,7 @@ fn main() {
 			let archive = Path::new(&path);
 			
 			if !archive.exists() {
-				#[cfg(target_pointer_width = "32")]
-				let mut buf = Vec::with_capacity(34033493);
-				#[cfg(target_pointer_width = "64")]
-				let mut buf = Vec::with_capacity(38363704);
+				let mut buf = Vec::with_capacity(103063218);
 
 				hyper::Client::new().get("https://mpv.srsfckn.biz/mpv-dev-20160826.7z")
 									.send().expect("retrieving libmpv failed")
@@ -85,7 +82,7 @@ fn main() {
 			let num_threads = env::var("NUM_JOBS").unwrap();
 
 			if !Path::new(&path).exists() {
-				Repository::clone(url, &path).expect("failed to mpv-buikd");
+				Repository::clone(url, &path).expect("failed to mpv-build");
 				Command::new("sh")
 							  .arg("-c")
 							  .arg(&format!("cd {} && ./update && echo --enable-libmpv-shared > \
