@@ -18,7 +18,6 @@
 
 use mpv;
 use mpv::{MpvInstance, Parent, PlaylistOp};
-use mpv::utils;
 use mpv::protocol::*;
 
 use std::env;
@@ -80,8 +79,8 @@ pub fn exec() {
 
     mpv.set_property("volume", 30).unwrap();
 
-    mpv.playlist(&PlaylistOp::Loadfiles(&[utils::File::new(Path::new(&path),
-                                                           utils::FileState::AppendPlay,
+    mpv.playlist(&PlaylistOp::Loadfiles(&[mpv::File::new(Path::new(&path),
+                                                           mpv::FileState::AppendPlay,
                                                            None)]))
        .unwrap();
 
