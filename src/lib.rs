@@ -18,7 +18,7 @@
 
 #![deny(missing_docs)]
 #![allow(unknown_lints)]
-#![feature(pub_restricted, const_fn, stmt_expr_attributes, untagged_unions)]
+#![feature(core_intrinsics, pub_restricted, const_fn, stmt_expr_attributes, untagged_unions)]
 
 //! This crate provides abstractions for (libmpv)[https://github.com/mpv-player/mpv/tree/master/libmpv] of the (mpv media player)[https://github.com/mpv-player/mpv].
 //!
@@ -32,7 +32,7 @@
 // TODO: write docs for build/embed_libmpv
 
 // Procedure for updating to new libmpv:
-// - make any nessecary API change, bump version
+// - make any nessecary API change, bump crate version
 // - update MPV_CLIENT_API consts in lib.rs
 // - update sizes of new mpv binaries (LIBMPV_DLL and LIBMPV_A) in lib.rs
 // - update new archive size in build.rs (windows branch)

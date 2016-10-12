@@ -27,6 +27,7 @@ use super::super::raw::*;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::ffi::{CStr, CString};
+use std::intrinsics;
 
 pub(crate) unsafe extern "C" fn event_callback(d: *mut libc::c_void) {
     (*(d as *mut (Mutex<bool>, Condvar))).1.notify_one();
@@ -226,8 +227,9 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
                     let event = unsafe { &*mpv_wait_event(self.ctx, 0f32 as _) };
                     let ev_id = event.event_id;
 
-                    if ev_id == MpvEventId::QueueOverflow {
+                    if unsafe { intrinsics::unlikely(ev_id == MpvEventId::QueueOverflow) } {
                         // The queue needs to be emptied asap to prevent loss of events
+                        // This happen very rarely, as the queue size is 1k (2016-10-12)
                         break;
                     } else if ev_id == MpvEventId::None {
                         if last {
