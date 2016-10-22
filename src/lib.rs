@@ -41,8 +41,6 @@
 extern crate libc;
 extern crate parking_lot;
 #[macro_use]
-extern crate lazy_static;
-#[macro_use]
 extern crate enum_primitive;
 
 /// Contains bindings to libmpv functions and data structures.

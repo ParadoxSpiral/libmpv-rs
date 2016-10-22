@@ -25,7 +25,6 @@ build = "build.rs"
 
 [dependencies]
 libc = "0.2"
-lazy_static = "0.2"
 parking_lot = {version = "0.2", features = ['nightly']}
 enum_primitive = "0.1"
 

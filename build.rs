@@ -17,7 +17,7 @@
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 #![feature(stmt_expr_attributes)]
-#![allow(unused_imports)]
+#![allow(dead_code, unused_imports)]
 
 extern crate hyper;
 extern crate git2 as git;
@@ -25,8 +25,9 @@ extern crate git2 as git;
 use git::Repository;
 
 use std::env;
-use std::io::{Read, Write};
-use std::fs::File;
+use std::io::{Read, Write, Seek, SeekFrom};
+use std::fs;
+use std::fs::{File, OpenOptions};
 use std::path::Path;
 use std::process::Command;
 
@@ -64,7 +65,7 @@ fn main() {
 		    // Assume unix like
 
 		    // target doesn't really mean target. It means target(host) of build script, which is
-		    // very confusing because it means the actual --target everywhere else.
+		    // a bit confusing because it means the actual --target everywhere else.
 		    #[cfg(target_pointer_width = "64")] {
 		    	if (target.contains("x86") && ! target.contains("x86_64")) ||
 		    	    target.contains("i686") {
@@ -81,12 +82,26 @@ fn main() {
 		    let path = format!("{}/libmpv", out_dir);
 			let num_threads = env::var("NUM_JOBS").unwrap();
 
-			if !Path::new(&path).exists() {
-				Repository::clone(url, &path).expect("failed to mpv-build");
+			if !Path::new(&path).exists() {                
+				Repository::clone(url, &path).expect("failed to clone mpv-build");
+
+                // Check whether update file can be patched
+                let mut update = OpenOptions::new().write(true).open(Path::new(&format!("{}/update", path))).unwrap();
+                update.seek(SeekFrom::Start(89)).unwrap();
+
+                let mut cmp_buf: [u8; 20] = [0; 20];
+                update.read_exact(&mut cmp_buf).unwrap();
+                assert_eq!(&cmp_buf, &*b"git clone \"$2\" \"$1\"\n",
+                           "Build script needs to be updated according to mpv-build changes!");
+
+                update.seek(SeekFrom::Start(89)).unwrap();
+                update.write_all(&*b"git clone --depth 1 \"$2\" \"$1\"\n").unwrap();
+
 				Command::new("sh")
 							  .arg("-c")
-							  .arg(&format!("cd {} && {0}/update && echo --enable-libmpv-shared > {0}/mpv_options && {0}/build -j{1}",
-							  				path, num_threads))
+							  .arg(&format!("cd {} && chmod +x {0}/update && {0}/update && \
+                                            echo \"--enable-libmpv-shared\" > {0}/mpv_options && \
+                                            {0}/build -j{}", path, num_threads))
 							  .output().expect("libmpv build failed");
 			}
 			println!("cargo:rustc-link-search=native={}/mpv/build/", path);

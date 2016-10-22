@@ -98,20 +98,21 @@ pub(crate) fn mpv_err<T>(ret: T, err_val: libc::c_int) -> Result<T, Error> {
     }
 }
 
+#[cfg(unix)]
 pub(crate) fn mpv_cstr_to_string(cstr: &CStr) -> String {
-    let data;
-    #[cfg(windows)] {
-        // Mpv returns all strings on windows in UTF-8.
-        data = cstr.to_str().unwrap().to_owned();
-    }
-    #[cfg(unix)] {
-        data = OsStr::from_bytes(cstr.to_bytes()).to_string_lossy().into_owned();
-    }
-    #[cfg(all(not(unix), not(windows)))] {
-        // Hope that all is well
-        data = String::from_utf8_lossy(cstr.to_bytes()).into_owned();
-    }
-    data
+    // Mpv returns all strings on windows in UTF-8.
+    OsStr::from_bytes(cstr.to_bytes()).to_string_lossy().into_owned()
+}
+
+#[cfg(windows)]
+pub(crate) fn mpv_cstr_to_string(cstr: &CStr) -> String {
+    cstr.to_str().unwrap().to_owned()
+}
+
+#[cfg(all(not(unix), not(windows)))]
+pub(crate) fn mpv_cstr_to_string(cstr: &CStr) -> String {
+    // Hope that all is well
+    String::from_utf8_lossy(cstr.to_bytes()).into_owned()
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -468,7 +469,6 @@ pub enum SubOp<'a> {
 /// An mpv instance from which `Client`s can be spawned.
 pub struct Parent<T, U> {
     ctx: *mut MpvHandle,
-    suspension_count: Mutex<usize>,
     check_events: bool,
     ev_iter_notification: Option<*mut (Mutex<bool>, Condvar)>,
     ev_to_observe: Option<Mutex<Vec<Event>>>,
@@ -745,27 +745,6 @@ impl<T, U> Parent<T, U> {
     }
 
     #[inline]
-    /// Suspend the playback thread. If the core is suspended, only client API calls will be
-    /// accepted, ie. input, redrawing etc. will be suspended.
-    /// For the suspended to resume there has to be one `resume` call for each `suspend` call.
-    pub fn suspend(&self) {
-        *self.suspension_count.lock() += 1;
-        unsafe { mpv_suspend(self.ctx()) }
-    }
-
-    #[inline]
-    /// See `suspend`.
-    pub fn resume(&self) -> Result<(), Error> {
-        let mut guard = self.suspension_count.lock();
-        if *guard == 0 {
-            Err(Error::AlreadyResumed)
-        } else {
-            *guard -= 1;
-            Ok(unsafe { mpv_resume(self.ctx()) })
-        }
-    }
-
-    #[inline]
     /// Register a custom `Protocol`. Once a protocol has been registered, it lives as long as the
     /// `Parent`.
     ///
@@ -846,9 +825,10 @@ impl<'parent, P> MpvInstance<'parent, P> for P
             let mut observe = self.ev_to_observe().as_ref().unwrap().lock();
             let mut properties = self.ev_to_observe_properties().as_ref().unwrap().lock();
 
-            let mut ids = Vec::with_capacity(events.len());
-            let mut evs = Vec::with_capacity(events.len());
-            let mut props = Vec::with_capacity(events.len());
+            let len = events.len();
+            let mut ids = Vec::with_capacity(len);
+            let mut evs = Vec::with_capacity(len);
+            let mut props = Vec::with_capacity(len);
             for elem in events {
                 if let Event::PropertyChange(ref v) = *elem {
                     if properties.contains_key(&v.0) {
@@ -879,7 +859,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                 }
             }
 
-            let mut props_ins = Vec::with_capacity(events.len());
+            let mut props_ins = Vec::with_capacity(len);
             let start_id = properties.len();
             for (i, elem) in props.iter().enumerate() {
                 let name = CString::new(&elem.0[..]).unwrap();
