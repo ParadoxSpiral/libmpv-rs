@@ -66,12 +66,12 @@ const fn mpv_make_version(major: u32, minor: u32) -> u32 {
 #[cfg(all(feature="embed_libmpv", windows, target_pointer_width = "32"))]
 #[cfg_attr(all(feature="embed_libmpv", windows), allow(missing_docs))]
 // env var set in build script
-pub const LIBMPV_DLL: &'static [u8; 34033493] = include_bytes!(concat!(env!("OUT_DIR"),
+pub const LIBMPV_DLL: &'static [u8; 34497221] = include_bytes!(concat!(env!("OUT_DIR"),
 																	   "/32/mpv-1.dll"));
 
 #[cfg(all(feature="embed_libmpv", windows, target_pointer_width = "64"))]
 #[cfg_attr(all(feature="embed_libmpv", windows), allow(missing_docs))]
-pub const LIBMPV_DLL: &'static [u8; 38363704] = include_bytes!(concat!(env!("OUT_DIR"),
+pub const LIBMPV_DLL: &'static [u8; 38851277] = include_bytes!(concat!(env!("OUT_DIR"),
 																	  "/64/mpv-1.dll"));
 
 // FIXME: size of libmpv.a

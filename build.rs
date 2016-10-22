@@ -41,9 +41,9 @@ fn main() {
 			let archive = Path::new(&path);
 			
 			if !archive.exists() {
-				let mut buf = Vec::with_capacity(103063218);
+				let mut buf = Vec::with_capacity(109631953);
 
-				hyper::Client::new().get("https://mpv.srsfckn.biz/mpv-dev-20160826.7z")
+				hyper::Client::new().get("https://mpv.srsfckn.biz/mpv-dev-20161020.7z")
 									.send().expect("retrieving libmpv failed")
 									.read_to_end(&mut buf).unwrap();
 

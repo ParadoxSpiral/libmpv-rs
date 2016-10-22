@@ -649,7 +649,6 @@ impl<T, U> Parent<T, U> {
 
         Ok(Parent {
             ctx: ctx,
-            suspension_count: Mutex::new(0),
             check_events: check_events,
             ev_iter_notification: ev_iter_notification,
             ev_to_observe: ev_to_observe,
