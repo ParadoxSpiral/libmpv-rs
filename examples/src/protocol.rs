@@ -80,8 +80,8 @@ pub fn exec() {
     mpv.set_property("volume", 30).unwrap();
 
     mpv.playlist(&PlaylistOp::Loadfiles(&[mpv::File::new(Path::new(&path),
-                                                           mpv::FileState::AppendPlay,
-                                                           None)]))
+                                                         mpv::FileState::AppendPlay,
+                                                         None)]))
        .unwrap();
 
     thread::sleep(Duration::from_secs(10));

@@ -29,13 +29,15 @@
 //!
 //! See the 'examples' directory in the crate root.
 
+// TODO: write an overview into ^
 // TODO: write docs for build/embed_libmpv
 
 // Procedure for updating to new libmpv:
 // - make any nessecary API change, bump crate version
 // - update MPV_CLIENT_API consts in lib.rs
-// - update sizes of new mpv binaries (LIBMPV_DLL and LIBMPV_A) in lib.rs
-// - update new archive size in build.rs (windows branch)
+// - update sizes of new mpv binaries (LIBMPV_DLL and LIBMPV_SO) in lib.rs
+// - update new archive size in build.rs (windows branch, 2 occurences)
+// - update commit hash in build.rs (unix branch, 3 occurences)
 // - run tests and examples to test whether they still work
 
 extern crate libc;
@@ -65,7 +67,6 @@ const fn mpv_make_version(major: u32, minor: u32) -> u32 {
 
 #[cfg(all(feature="embed_libmpv", windows, target_pointer_width = "32"))]
 #[cfg_attr(all(feature="embed_libmpv", windows), allow(missing_docs))]
-// env var set in build script
 pub const LIBMPV_DLL: &'static [u8; 34497221] = include_bytes!(concat!(env!("OUT_DIR"),
 																	   "/32/mpv-1.dll"));
 
@@ -74,20 +75,20 @@ pub const LIBMPV_DLL: &'static [u8; 34497221] = include_bytes!(concat!(env!("OUT
 pub const LIBMPV_DLL: &'static [u8; 38851277] = include_bytes!(concat!(env!("OUT_DIR"),
 																	  "/64/mpv-1.dll"));
 
-// FIXME: size of libmpv.a
+// FIXME: size of libmpv.so
 #[cfg(all(feature="embed_libmpv", unix, target_pointer_width = "32"))]
 #[cfg_attr(all(feature="embed_libmpv", unix), allow(missing_docs))]
-pub const LIBMPV_A: &'static [u8; 0] = include_bytes!(concat!(env!("OUT_DIR"),
-																	 "/libmpv/mpv/build/libmpv.a"));
+pub const LIBMPV_SO: &'static [u8; 0] = include_bytes!(concat!(env!("OUT_DIR"),
+																	 "/libmpv/mpv/build/libmpv.so"));
 
 #[cfg(all(feature="embed_libmpv", unix, target_pointer_width = "64"))]
 #[cfg_attr(all(feature="embed_libmpv", unix), allow(missing_docs))]
-pub const LIBMPV_A: &'static [u8; 12582056] = include_bytes!(concat!(env!("OUT_DIR"),
-																	 "/libmpv/mpv/build/libmpv.a"));
+pub const LIBMPV_SO: &'static [u8; 28700696] = include_bytes!(concat!(env!("OUT_DIR"),
+																	 "/libmpv/mpv/build/libmpv.so"));
 
 #[cfg(feature="embed_libmpv")]
 /// Note that the file has to be in a format the platform will recognize,
-/// e.g. `mpv-1.dll` on windows and `libmpv.a` on unix.
+/// e.g. `./mpv-1.dll` on windows and `./libmpv.so` on unix.
 pub fn write_libmpv_to_file(path: &::std::path::Path) -> Result<(), ::std::io::Error> {
 	use std::io::prelude::*;
 
@@ -96,7 +97,7 @@ pub fn write_libmpv_to_file(path: &::std::path::Path) -> Result<(), ::std::io::E
 		try!(file.write_all(LIBMPV_DLL));
 	}
 	#[cfg(unix)] {
-		try!(file.write_all(LIBMPV_A));
+		try!(file.write_all(LIBMPV_SO));
 	}
 	Ok(())
 }

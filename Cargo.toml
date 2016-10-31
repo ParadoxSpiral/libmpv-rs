@@ -25,12 +25,12 @@ build = "build.rs"
 
 [dependencies]
 libc = "0.2"
-parking_lot = {version = "0.2", features = ['nightly']}
+parking_lot = {version = "0.3", features = ['nightly']}
 enum_primitive = "0.1"
 
 [build-dependencies]
 hyper = "0.9"
-git2 = "0.4"
+git2 = "0.5"
 
 [features]
 build_libmpv = [] # build libmpv automatically at compile time

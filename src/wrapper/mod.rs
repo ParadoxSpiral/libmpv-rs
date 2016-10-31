@@ -100,12 +100,12 @@ pub(crate) fn mpv_err<T>(ret: T, err_val: libc::c_int) -> Result<T, Error> {
 
 #[cfg(unix)]
 pub(crate) fn mpv_cstr_to_string(cstr: &CStr) -> String {
-    // Mpv returns all strings on windows in UTF-8.
     OsStr::from_bytes(cstr.to_bytes()).to_string_lossy().into_owned()
 }
 
 #[cfg(windows)]
 pub(crate) fn mpv_cstr_to_string(cstr: &CStr) -> String {
+    // Mpv returns all strings on windows in UTF-8.
     cstr.to_str().unwrap().to_owned()
 }
 
@@ -498,7 +498,7 @@ unsafe impl<'parent, T, U> Sync for Client<'parent, T, U> {}
 #[allow(missing_docs)]
 /// Designed for internal use.
 pub unsafe trait MpvMarker {
-    // FIXME: Most of these can go once `Associated Items` lands
+    // FIXME: Most of these can go once `Associated Fields` lands
     fn ctx(&self) -> *mut MpvHandle;
     fn check_events(&self) -> bool;
     fn ev_iter_notification(&self) -> &Option<*mut (Mutex<bool>, Condvar)>;
@@ -907,6 +907,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         let mut args = String::with_capacity(cmd.args.iter()
                                                      .fold(0, |acc, e| acc + e.len() + 1));
         for elem in cmd.args {
+            // This is a bit faster than using format and avoids an additional heap alloc
             args.push_str(" ");
             args.push_str(elem);
         }
@@ -932,8 +933,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
             _ => {
                 let data = data_ptr!(&mut data);
 
-                mpv_err((),
-                        unsafe { mpv_set_property(self.ctx(), name, format, data) })
+                mpv_err((), unsafe { mpv_set_property(self.ctx(), name, format, data) })
             }
         };
         unsafe { CString::from_raw(name) };
