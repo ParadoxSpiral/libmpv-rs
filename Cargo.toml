@@ -33,5 +33,8 @@ hyper = "0.9"
 git2 = "0.5"
 
 [features]
+default = ["events", "custom_protocol"]
+events = [] # enable events
+custom_protocol = [] # enable custom protocols
 build_libmpv = [] # build libmpv automatically at compile time
-embed_libmpv = ["build_libmpv"] # expose libmpv as mpv::LIBMPV_DLL or _A; aka pseudo-static linking
+static_libmpv = ["build_libmpv"] # build & link libmpv statically
