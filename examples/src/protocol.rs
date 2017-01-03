@@ -16,15 +16,13 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-use mpv;
-use mpv::{MpvInstance, Parent, PlaylistOp};
+use mpv::{MpvInstance, Parent, FileState};
 use mpv::protocol::*;
 
 use std::env;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::mem;
-use std::path::Path;
 use std::slice;
 use std::time::Duration;
 use std::thread;
@@ -62,7 +60,7 @@ pub fn exec() {
     let path = format!("filereader://{}",
                        env::args()
                            .nth(1)
-                           .expect("Expected local path, found nil."));
+                           .expect("Expected local path as argument, found nil."));
 
     let protocol = unsafe {
         Protocol::new("filereader".into(),
@@ -74,19 +72,17 @@ pub fn exec() {
                       Some(size))
     };
 
-    let mpv = Parent::new(false).unwrap();
+    let mpv = Parent::new().unwrap();
     mpv.register_protocol(protocol).unwrap();
 
     mpv.set_property("volume", 30).unwrap();
 
-    mpv.playlist(&PlaylistOp::Loadfiles(&[mpv::File::new(Path::new(&path),
-                                                         mpv::FileState::AppendPlay,
-                                                         None)]))
-       .unwrap();
+    mpv.playlist_load_files(&[(&path, FileState::AppendPlay, None)])
+        .unwrap();
 
     thread::sleep(Duration::from_secs(10));
 
-    mpv.seek(&mpv::Seek::RelativeForward(Duration::from_secs(15))).unwrap();
+    mpv.seek_forward(&Duration::from_secs(15)).unwrap();
 
     thread::sleep(Duration::from_secs(5));
 }

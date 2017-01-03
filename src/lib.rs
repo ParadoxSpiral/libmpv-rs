@@ -18,26 +18,30 @@
 
 #![deny(missing_docs)]
 #![allow(unknown_lints)]
-#![feature(core_intrinsics, pub_restricted, const_fn, stmt_expr_attributes, untagged_unions)]
+#![feature(core_intrinsics, pub_restricted, const_fn, untagged_unions)]
 
 //! This crate provides abstractions for (libmpv)[https://github.com/mpv-player/mpv/tree/master/libmpv] of the (mpv media player)[https://github.com/mpv-player/mpv].
 //!
 //! Libmpv requires `LC_NUMERIC` to be `C`. This is set once when the first parent is created.
 //! Do not change this during the usage of this crate.
 //!
+//! Most of the documentation is paraphrased or even copied from the (mpv manual)[https://mpv.io/manual/master/],
+//! if any questions arise it will probably answer them in much more depth than this documentation.
+//!
 //! # Examples
 //!
 //! See the 'examples' directory in the crate root.
 
-// TODO: write an overview into ^
-// TODO: write docs for build/embed_libmpv
+// TODO: write an overview of examples
+// TODO: write docs for build/static_libmpv
+// TODO: clean up docs in general
+// TODO: Once const-dependant type system lands, remove event feature by const bool
+// TODO: Add test for every single function
 
 // Procedure for updating to new libmpv:
 // - make any nessecary API change, bump crate version
 // - update MPV_CLIENT_API consts in lib.rs
-// - update sizes of new mpv binaries (LIBMPV_DLL and LIBMPV_SO) in lib.rs
-// - update new archive size in build.rs (windows branch, 2 occurences)
-// - update commit hash in build.rs (unix branch, 3 occurences)
+// - update constants in build.rs
 // - run tests and examples to test whether they still work
 
 extern crate libc;
@@ -57,47 +61,6 @@ mod tests;
 #[allow(missing_docs)]
 pub const MPV_CLIENT_API_MAJOR: u32 = 1;
 #[allow(missing_docs)]
-pub const MPV_CLIENT_API_MINOR: u32 = 23;
+pub const MPV_CLIENT_API_MINOR: u32 = 24;
 #[allow(missing_docs)]
-pub const MPV_CLIENT_API_VERSION: u32 = mpv_make_version(MPV_CLIENT_API_MAJOR,
-                                                         MPV_CLIENT_API_MINOR);
-const fn mpv_make_version(major: u32, minor: u32) -> u32 {
-    major << 16 | minor
-}
-
-#[cfg(all(feature="embed_libmpv", windows, target_pointer_width = "32"))]
-#[cfg_attr(all(feature="embed_libmpv", windows), allow(missing_docs))]
-pub const LIBMPV_DLL: &'static [u8; 34497221] = include_bytes!(concat!(env!("OUT_DIR"),
-																	   "/32/mpv-1.dll"));
-
-#[cfg(all(feature="embed_libmpv", windows, target_pointer_width = "64"))]
-#[cfg_attr(all(feature="embed_libmpv", windows), allow(missing_docs))]
-pub const LIBMPV_DLL: &'static [u8; 38851277] = include_bytes!(concat!(env!("OUT_DIR"),
-																	  "/64/mpv-1.dll"));
-
-// FIXME: size of libmpv.so
-#[cfg(all(feature="embed_libmpv", unix, target_pointer_width = "32"))]
-#[cfg_attr(all(feature="embed_libmpv", unix), allow(missing_docs))]
-pub const LIBMPV_SO: &'static [u8; 0] = include_bytes!(concat!(env!("OUT_DIR"),
-																	 "/libmpv/mpv/build/libmpv.so"));
-
-#[cfg(all(feature="embed_libmpv", unix, target_pointer_width = "64"))]
-#[cfg_attr(all(feature="embed_libmpv", unix), allow(missing_docs))]
-pub const LIBMPV_SO: &'static [u8; 28700696] = include_bytes!(concat!(env!("OUT_DIR"),
-																	 "/libmpv/mpv/build/libmpv.so"));
-
-#[cfg(feature="embed_libmpv")]
-/// Note that the file has to be in a format the platform will recognize,
-/// e.g. `./mpv-1.dll` on windows and `./libmpv.so` on unix.
-pub fn write_libmpv_to_file(path: &::std::path::Path) -> Result<(), ::std::io::Error> {
-	use std::io::prelude::*;
-
-	let mut file = try!(std::fs::File::create(path));
-	#[cfg(windows)] {
-		try!(file.write_all(LIBMPV_DLL));
-	}
-	#[cfg(unix)] {
-		try!(file.write_all(LIBMPV_SO));
-	}
-	Ok(())
-}
+pub const MPV_CLIENT_API_VERSION: u32 = { MPV_CLIENT_API_MAJOR << 16 | MPV_CLIENT_API_MINOR };

@@ -88,10 +88,10 @@ impl OpenGlState {
     ///
     /// # Unsafety
     /// Mpv relies on correct and initialized opengl state.
-    pub unsafe fn set_draw_target(&self, fbo: libc::c_int, w: libc::c_int, h: libc::c_int)
+    pub unsafe fn set_draw_target(&self, fbo: libc::c_int, w: usize, h: usize)
         -> Result<(), Error>
     {
-        mpv_err((), mpv_opengl_cb_draw(self.api_ctx, fbo, w, h))
+        mpv_err((), mpv_opengl_cb_draw(self.api_ctx, fbo, w as _, h as _))
     }
 }
 

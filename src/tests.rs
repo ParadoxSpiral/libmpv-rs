@@ -18,7 +18,6 @@
 
 use super::*;
 
-use std::path::Path;
 use std::time::Duration;
 use std::thread;
 
@@ -30,17 +29,15 @@ fn version() {
 
 #[test]
 fn properties() {
-    let mpv = Parent::<(), ()>::new(false).unwrap();
+    let mpv = Parent::<(), ()>::new().unwrap();
     mpv.set_property("cache-initial", 1).unwrap();
     mpv.set_property("volume", 0).unwrap();
     mpv.set_property("vo", "null").unwrap();
     mpv.set_property("ytdl", true).unwrap();
 
-    mpv.playlist(&PlaylistOp::Loadfiles(&[File::new(Path::new("https://www.youtube.\
-                                                                   com/watch?v=DLzxrzFCyOs"),
-                                                        FileState::AppendPlay,
-                                                        None)]))
-           .unwrap();
+    mpv.playlist_load_files(&[("https://www.youtube.com/watch?v=DLzxrzFCyOs",
+                               FileState::AppendPlay, None)])
+       .unwrap();
 
     thread::sleep(Duration::from_millis(250));
 

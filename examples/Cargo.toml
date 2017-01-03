@@ -23,6 +23,7 @@ authors = ["ParadoxSpiral <ParadoxSpiral@riseup.net>"]
 
 [features]
 # Decide which examples to show
+deafult = ["all"]
 all = ['events', 'protocol']
 events = []
 protocol = []

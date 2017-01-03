@@ -22,13 +22,12 @@ use mpv::*;
 use mpv::events::*;
 
 use std::process;
-use std::path::Path;
 use std::time::Duration;
 use std::thread;
 
 pub fn exec() {
     // Create a `Parent` (with events enabled) and set some properties.
-    let mpv = Parent::<(), ()>::new(true).unwrap();
+    let mpv = Parent::<(), ()>::new().unwrap();
     mpv.set_property("cache-initial", 1).unwrap();
     mpv.set_property("volume", 10).unwrap();
     mpv.set_property("vo", "null").unwrap();
@@ -39,21 +38,22 @@ pub fn exec() {
         // Spin up 3 threads that observe different sets of `Event`s.
         scope.spawn(|| {
             let iter = mpv.observe_all(&[Event::FileLoaded,
-                                         Event::StartFile,
-                                         Event::Seek,
-                                         Event::PlaybackRestart,
-                                         Event::EndFile(None)])
-                          .unwrap();
+                               Event::StartFile,
+                               Event::Seek,
+                               Event::PlaybackRestart,
+                               Event::EndFile(None)])
+                .unwrap();
 
             for vec in iter {
                 // If any `Event` was an `Endfile`, . . .
-                if let Some(&Event::EndFile(ref v)) = vec.iter().find(|e| {
-                    if let Event::EndFile(_) = **e {
-                        true
-                    } else {
-                        false
-                    }
-                }) {
+                if let Some(&Event::EndFile(ref v)) =
+                    vec.iter().find(|e| {
+                        if let Event::EndFile(_) = **e {
+                            true
+                        } else {
+                            false
+                        }
+                    }) {
                     // . . . print the `EndFile` reason and exit, . . .
                     println!("File ended! Reason: {:?}", v);
                     thread::sleep(Duration::from_secs(1));
@@ -67,8 +67,8 @@ pub fn exec() {
         scope.spawn(|| {
             // Here the value of the property is irrelevant: only the name is used.
             let iter = mpv.observe_all(&[Event::PropertyChange(("volume".into(), 0.into())),
-                                         Event::PropertyChange(("pause".into(), false.into()))])
-                          .unwrap();
+                               Event::PropertyChange(("pause".into(), false.into()))])
+                .unwrap();
 
             for vec in iter {
                 println!("prop_events: {:?}", vec);
@@ -76,7 +76,7 @@ pub fn exec() {
         });
         scope.spawn(|| {
             let iter = mpv.observe_all(&[Event::LogMessage(LogMessage::new(LogLevel::Info))])
-                          .unwrap();
+                .unwrap();
 
             for vec in iter {
                 println!("log_events: {:#?}", vec);
@@ -84,11 +84,10 @@ pub fn exec() {
         });
 
         // Add a file to play, ytdl was set to true for this.
-        mpv.playlist(&PlaylistOp::Loadfiles(&[File::new(Path::new("https://www.youtube.\
-                                                                   com/watch?v=DLzxrzFCyOs"),
-                                                        FileState::AppendPlay,
-                                                        None)]))
-           .unwrap();
+        mpv.playlist_load_files(&[("https://www.youtube.com/watch?v=DLzxrzFCyOs",
+                                    FileState::AppendPlay,
+                                    None)])
+            .unwrap();
 
         thread::sleep(Duration::from_secs(3));
 
@@ -97,6 +96,6 @@ pub fn exec() {
         thread::sleep(Duration::from_secs(30));
 
         // Trigger `Event::EndFile` observed above to quit.
-        mpv.playlist(&PlaylistOp::NextForce).unwrap();
+        mpv.playlist_next_force().unwrap();
     });
 }

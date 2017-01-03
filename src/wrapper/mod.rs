@@ -16,6 +16,7 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
+#[cfg(feature="events")]
 /// Contains event related abstractions
 pub mod events;
 /// Contains abstractions to define custom protocol handlers.
@@ -28,7 +29,9 @@ use libc;
 use parking_lot::{Condvar, Mutex, MutexGuard, Once, ONCE_INIT};
 
 use super::raw::*;
+#[cfg(feature="events")]
 use events::*;
+#[cfg(feature="events")]
 use events::event_callback;
 use protocol::*;
 use opengl_cb::*;
@@ -52,14 +55,10 @@ static SET_LC_NUMERIC: Once = ONCE_INIT;
 // Cast `&mut Data` so that libmpv can use it.
 macro_rules! data_ptr {
     ($data:expr) => (
-        #[allow(match_ref_pats)]
         match $data {
-            &mut Data::Flag(ref mut v) =>
-                v as *mut bool as *mut libc::c_void,
-            &mut Data::Int64(ref mut v) =>
-                v as *mut libc::int64_t as *mut libc::c_void,
-            &mut Data::Double(ref mut v) =>
-                v as *mut libc::c_double as *mut libc::c_void,
+            &mut Data::Flag(ref mut v) => v as *mut bool as *mut libc::c_void,
+            &mut Data::Int64(ref mut v) => v as *mut libc::int64_t as *mut libc::c_void,
+            &mut Data::Double(ref mut v) => v as *mut libc::c_double as *mut libc::c_void,
             _ => unreachable!(),
         }
     )
@@ -126,12 +125,9 @@ pub enum Error {
     ExpectedAbsolute,
     /// If a file was expected, but a directory was given.
     ExpectedFile,
-    /// If an argument (like a percentage > 100) was out of bounds.
-    OutOfBounds,
     /// If a command failed during a `loadfiles` call, contains index of failed command and `Error`.
     Loadfiles((usize, Rc<Error>)),
-    /// Events are not enabled for this mpv instance.
-    EventsDisabled,
+    #[cfg(feature="events")]
     /// This event is already being observed by another `EventIter`.
     AlreadyObserved(Rc<Event>),
     /// Used a `Data::OsdString` while writing.
@@ -304,176 +300,17 @@ impl FileState {
     }
 }
 
-#[derive(Clone, Debug)]
-/// A command that can be executed by `Mpv`.
-pub struct Command<'a> {
-    pub(crate) name: &'a str,
-    pub(crate) args: &'a [&'a str],
-}
-
-impl<'a> Command<'a> {
-    #[inline]
-    /// Create a new `MpvCommand`.
-    pub fn new(name: &'a str, args: &'a [&'a str]) -> Command<'a> {
-        Command {
-            name: name,
-            args: args,
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-/// Data needed for `PlaylistOp::Loadfiles`.
-pub struct File<'a> {
-    pub(crate) path: &'a Path,
-    pub(crate) state: FileState,
-    pub(crate) options: Option<&'a str>,
-}
-
-impl<'a> File<'a> {
-    #[inline]
-    /// Create a new `File`.
-    pub fn new(path: &'a Path, state: FileState, opts: Option<&'a str>) -> File<'a> {
-        File {
-            path: path,
-            state: state,
-            options: opts,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-/// Seek operations supported by `seek`.
-pub enum Seek {
-    /// Seek forward relatively from current position at runtime.
-    /// This is less exact than `seek_abs`, see [mpv manual]
-    /// (https://mpv.io/manual/master/#command-interface-
-    /// [relative|absolute|absolute-percent|relative-percent|exact|keyframes]).
-    RelativeForward(Duration),
-    /// See `RelativeForward`.
-    RelativeBackward(Duration),
-    /// Seek to a given absolute time at runtime.
-    Absolute(Duration),
-    /// Seek to a given relative percent position at runtime.
-    /// If `usize` is bigger than the remaining playtime, the next file is played.
-    RelativePercent(usize),
-    /// Seek to a given absolute percent position at runtime.
-    AbsolutePercent(usize),
-    /// Revert one previous `seek` invocation. If this is called twice, this
-    /// reverts the previous revert seek.
-    Revert,
-    /// Mark the current position. The next `seek_revert` call will revert
-    /// to the marked position.
-    RevertMark,
-    /// Play exactly one frame, and then pause. This does nothing with
-    /// audio-only playback.
-    Frame,
-    /// Play exactly the last frame, and then pause. This does nothing with
-    /// audio-only playback. See [this]
-    /// (https://mpv.io/manual/master/#command-interface-frame-back-step)
-    /// for performance issues.
-    FrameBack,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-/// Screenshot operations supported by `screenshot`.
-pub enum Screenshot<'a> {
-    /// "Save the video image, in its original resolution, and with subtitles.
-    /// Some video outputs may still include the OSD in the output under certain circumstances.".
-    Subtitles,
-    /// "Take a screenshot and save it to a given file. The format of the file will be guessed by
-    /// the extension (and --screenshot-format is ignored - the behaviour when the extension is
-    /// missing or unknown is arbitrary). If the file already exists, it's overwritten. Like all
-    /// input command parameters, the filename is subject to property expansion as described in
-    /// Property Expansion.".
-    SubtitlesFile(&'a Path),
-    /// "Like subtitles, but typically without OSD or subtitles.
-    /// The exact behaviour depends on the selected video output.".
-    Video,
-    /// See `Video`, with the addition of specifying a path.
-    VideoFile(&'a Path),
-    /// "Save the contents of the mpv window. Typically scaled, with OSD
-    /// and subtitles. The exact behaviour depends on the selected video output, and if no support
-    /// is available, this will act like video.".
-    Window,
-    /// See `Window`, with the addition of specifying a path.
-    WindowFile(&'a Path),
-}
-
-#[derive(Clone, Copy, Debug)]
-/// Playlist operations supported by `playlist`.
-pub enum PlaylistOp<'a> {
-    /// Play the next item of the current playlist.
-    /// This does nothing if the current item is the last item.
-    NextWeak,
-    /// Play the next item of the current playlist.
-    /// This terminates playback if the current item is the last item.
-    NextForce,
-    /// Play the previous item of the current playlist.
-    /// This does nothing if the current item is the first item.
-    PreviousWeak,
-    /// Play the next item of the current playlist.
-    /// This terminates playback if the current item is the first item.
-    PreviousForce,
-    /// Load any number of files with any playlist insertion behaviour,
-    /// and any optional options that are set during playback of the specific item.
-    Loadfiles(&'a [File<'a>]),
-    /// Load the given playlist file. Replace current playlist.
-    LoadlistReplace(&'a Path),
-    /// Load the given playlist file. Append to current playlist.
-    LoadlistAppend(&'a Path),
-    /// Clear the current playlist, except the currently played item.
-    Clear,
-    /// Remove the currently selected playlist item.
-    RemoveCurrent,
-    /// Remove the item at position `usize`.
-    RemoveIndex(usize),
-    /// Move item `usize` to the position of item `usize`.
-    Move((usize, usize)),
-    /// Shuffle the playlist.
-    Shuffle,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-/// Operations supported by `subtitle`.
-pub enum SubOp<'a> {
-    /// Add and select the subtitle immediately.
-    /// The second argument is the title, third is the language.
-    AddSelect(&'a Path, Option<&'a str>, Option<&'a str>),
-    ///  See `AddSelect`. "Don't select the subtitle.
-    /// (Or in some special situations, let the default stream selection mechanism decide.)".
-    AddAuto(&'a Path, Option<&'a str>, Option<&'a str>),
-    /// See `AddSelect`. "Select the subtitle. If a subtitle with the same file name was
-    /// already added, that one is selected, instead of loading a duplicate entry.
-    /// (In this case, title/language are ignored, and if the was changed since it was loaded,
-    /// these changes won't be reflected.)".
-    AddCached(&'a Path, Option<&'a str>, Option<&'a str>),
-    /// Remove the given subtitle track. If the id argument is missing, remove the current
-    /// track. (Works on external subtitle files only.)
-    Remove(Option<usize>),
-    /// Reload the given subtitle tracks. If the id argument is missing, reload the current
-    /// track. (Works on external subtitle files only.)
-    Reload(Option<usize>),
-    /// Change subtitle timing such, that the subtitle event after the next `isize` subtitle
-    /// events is displayed. `isize` can be negative to step backwards.
-    Step(isize),
-    /// Seek to the next subtitle. This is similar to sub-step, except that it seeks video and
-    /// audio instead of adjusting the subtitle delay.
-    /// For embedded subtitles (like with matroska), this works only with subtitle events that
-    /// have already been displayed, or are within a short prefetch range.
-    SeekForward,
-    /// See `SeekForward`.
-    SeekBackward,
-}
-
 /// An mpv instance from which `Client`s can be spawned.
 pub struct Parent<T, U> {
     ctx: *mut MpvHandle,
-    check_events: bool,
-    ev_iter_notification: Option<*mut (Mutex<bool>, Condvar)>,
-    ev_to_observe: Option<Mutex<Vec<Event>>>,
-    ev_to_observe_properties: Option<Mutex<HashMap<String, libc::uint64_t>>>,
-    ev_observed: Option<Mutex<Vec<InnerEvent>>>,
+    #[cfg(feature="events")]
+    ev_iter_notification: *mut (Mutex<bool>, Condvar),
+    #[cfg(feature="events")]
+    ev_to_observe: Mutex<Vec<Event>>,
+    #[cfg(feature="events")]
+    ev_to_observe_properties: Mutex<HashMap<String, libc::uint64_t>>,
+    #[cfg(feature="events")]
+    ev_observed: Mutex<Vec<InnerEvent>>,
     custom_protocols: Mutex<Vec<Protocol<T, U>>>,
     opengl_state: Mutex<OpenGlState>,
 }
@@ -481,11 +318,14 @@ pub struct Parent<T, U> {
 /// A client of a `Parent`.
 pub struct Client<'parent, T: 'parent, U: 'parent> {
     ctx: *mut MpvHandle,
-    check_events: bool,
-    ev_iter_notification: Option<*mut (Mutex<bool>, Condvar)>,
-    ev_to_observe: Option<Mutex<Vec<Event>>>,
-    ev_observed: Option<Mutex<Vec<InnerEvent>>>,
-    ev_to_observe_properties: Option<Mutex<HashMap<String, libc::uint64_t>>>,
+    #[cfg(feature="events")]
+    ev_iter_notification: *mut (Mutex<bool>, Condvar),
+    #[cfg(feature="events")]
+    ev_to_observe: Mutex<Vec<Event>>,
+    #[cfg(feature="events")]
+    ev_observed: Mutex<Vec<InnerEvent>>,
+    #[cfg(feature="events")]
+    ev_to_observe_properties: Mutex<HashMap<String, libc::uint64_t>>,
     _does_not_outlive: PhantomData<&'parent Parent<T, U>>,
 }
 
@@ -500,15 +340,17 @@ unsafe impl<'parent, T, U> Sync for Client<'parent, T, U> {}
 pub unsafe trait MpvMarker {
     // FIXME: Most of these can go once `Associated Fields` lands
     fn ctx(&self) -> *mut MpvHandle;
-    fn check_events(&self) -> bool;
-    fn ev_iter_notification(&self) -> &Option<*mut (Mutex<bool>, Condvar)>;
-    fn ev_to_observe(&self) -> &Option<Mutex<Vec<Event>>>;
-    fn ev_to_observe_properties(&self) -> &Option<Mutex<HashMap<String, libc::uint64_t>>>;
-    fn ev_observed(&self) -> &Option<Mutex<Vec<InnerEvent>>>;
+    #[cfg(feature="events")]
+    fn ev_iter_notification(&self) -> *mut (Mutex<bool>, Condvar);
+    #[cfg(feature="events")]
+    fn ev_to_observe(&self) -> &Mutex<Vec<Event>>;
+    #[cfg(feature="events")]
+    fn ev_to_observe_properties(&self) -> &Mutex<HashMap<String, libc::uint64_t>>;
+    #[cfg(feature="events")]
+    fn ev_observed(&self) -> &Mutex<Vec<InnerEvent>>;
+    #[cfg(feature="events")]
     unsafe fn drop_ev_iter_step(&mut self) {
-        if self.check_events() {
-            Box::from_raw(self.ev_iter_notification().unwrap());
-        }
+        Box::from_raw(self.ev_iter_notification());
     }
 }
 
@@ -516,19 +358,20 @@ unsafe impl<T, U> MpvMarker for Parent<T, U> {
     fn ctx(&self) -> *mut MpvHandle {
         self.ctx
     }
-    fn check_events(&self) -> bool {
-        self.check_events
+    #[cfg(feature="events")]
+    fn ev_iter_notification(&self) -> *mut (Mutex<bool>, Condvar) {
+        self.ev_iter_notification
     }
-    fn ev_iter_notification(&self) -> &Option<*mut (Mutex<bool>, Condvar)> {
-        &self.ev_iter_notification
-    }
-    fn ev_to_observe(&self) -> &Option<Mutex<Vec<Event>>> {
+    #[cfg(feature="events")]
+    fn ev_to_observe(&self) -> &Mutex<Vec<Event>> {
         &self.ev_to_observe
     }
-    fn ev_to_observe_properties(&self) -> &Option<Mutex<HashMap<String, libc::uint64_t>>> {
+    #[cfg(feature="events")]
+    fn ev_to_observe_properties(&self) -> &Mutex<HashMap<String, libc::uint64_t>> {
         &self.ev_to_observe_properties
     }
-    fn ev_observed(&self) -> &Option<Mutex<Vec<InnerEvent>>> {
+    #[cfg(feature="events")]
+    fn ev_observed(&self) -> &Mutex<Vec<InnerEvent>> {
         &self.ev_observed
     }
 }
@@ -537,19 +380,20 @@ unsafe impl<'parent, T, U> MpvMarker for Client<'parent, T, U> {
     fn ctx(&self) -> *mut MpvHandle {
         self.ctx
     }
-    fn check_events(&self) -> bool {
-        self.check_events
+    #[cfg(feature="events")]
+    fn ev_iter_notification(&self) -> *mut (Mutex<bool>, Condvar) {
+        self.ev_iter_notification
     }
-    fn ev_iter_notification(&self) -> &Option<*mut (Mutex<bool>, Condvar)> {
-        &self.ev_iter_notification
-    }
-    fn ev_to_observe(&self) -> &Option<Mutex<Vec<Event>>> {
+    #[cfg(feature="events")]
+    fn ev_to_observe(&self) -> &Mutex<Vec<Event>> {
         &self.ev_to_observe
     }
-    fn ev_to_observe_properties(&self) -> &Option<Mutex<HashMap<String, libc::uint64_t>>> {
+    #[cfg(feature="events")]
+    fn ev_to_observe_properties(&self) -> &Mutex<HashMap<String, libc::uint64_t>> {
         &self.ev_to_observe_properties
     }
-    fn ev_observed(&self) -> &Option<Mutex<Vec<InnerEvent>>> {
+    #[cfg(feature="events")]
+    fn ev_observed(&self) -> &Mutex<Vec<InnerEvent>> {
         &self.ev_observed
     }
 }
@@ -558,8 +402,10 @@ impl<T, U> Drop for Parent<T, U> {
     #[inline]
     fn drop(&mut self) {
         unsafe {
+            #[cfg(feature="events")]
             self.drop_ev_iter_step();
             // FIXME: Ugly hack: Force drop call by replacing data
+            // drop(self.opengl_state); <- does not work
             self.opengl_state = Mutex::new(OpenGlState::empty());
             mpv_terminate_destroy(self.ctx());
         }
@@ -570,6 +416,7 @@ impl<'parent, T, U> Drop for Client<'parent, T, U> {
     #[inline]
     fn drop(&mut self) {
         unsafe {
+            #[cfg(feature="events")]
             self.drop_ev_iter_step();
             mpv_detach_destroy(self.ctx());
         }
@@ -580,7 +427,7 @@ impl<T, U> Parent<T, U> {
     #[inline]
     /// Create a new `Parent`.
     /// The default settings can be probed by running: `$ mpv --show-profile=libmpv`
-    pub fn new(check_events: bool) -> Result<Parent<T, U>, Error> {
+    pub fn new() -> Result<Parent<T, U>, Error> {
         SET_LC_NUMERIC.call_once(|| {
             let c = CString::new("C").unwrap();
             unsafe { libc::setlocale(libc::LC_NUMERIC, c.as_ptr()) };
@@ -608,8 +455,9 @@ impl<T, U> Parent<T, U> {
             destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::ChapterChange, 0));
         }
 
+        #[cfg(feature="events")]
         let (ev_iter_notification, ev_to_observe, ev_to_observe_properties, ev_observed) =
-            if check_events {
+         {
                 let ev_iter_notification = Box::into_raw(Box::new((Mutex::new(false),
                                                                    Condvar::new())));
                 unsafe {
@@ -618,11 +466,13 @@ impl<T, U> Parent<T, U> {
                                             ev_iter_notification as *mut _);
                 }
 
-                (Some(ev_iter_notification),
-                 Some(Mutex::new(Vec::with_capacity(15))),
-                 Some(Mutex::new(HashMap::with_capacity(10))),
-                 Some(Mutex::new(Vec::with_capacity(22))))
-            } else {
+                (ev_iter_notification,
+                 Mutex::new(Vec::with_capacity(15)),
+                 Mutex::new(HashMap::with_capacity(10)),
+                 Mutex::new(Vec::with_capacity(22)))
+            };
+            #[cfg(not(feature="events"))]
+             {
                 unsafe {
                     // Disable remaining events
                     destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::LogMessage, 0));
@@ -641,28 +491,37 @@ impl<T, U> Parent<T, U> {
                     destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::PropertyChange, 0));
                     destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::QueueOverflow, 0));
                 }
-
-                (None, None, None, None)
-            };
+            }
 
         unsafe { destroy_on_err!(ctx, mpv_initialize(ctx)) }
 
-        Ok(Parent {
-            ctx: ctx,
-            check_events: check_events,
-            ev_iter_notification: ev_iter_notification,
-            ev_to_observe: ev_to_observe,
-            ev_to_observe_properties: ev_to_observe_properties,
-            ev_observed: ev_observed,
-            custom_protocols: Mutex::new(Vec::new()),
-            opengl_state: Mutex::new(OpenGlState::empty()),
-        })
+        let ret;
+        #[cfg(not(feature="events"))] {
+            ret = Ok(Parent {
+                ctx: ctx,
+                custom_protocols: Mutex::new(Vec::new()),
+                opengl_state: Mutex::new(OpenGlState::empty()),
+            });
+        }
+
+        #[cfg(feature="events")] {
+            ret = Ok(Parent {
+                ctx: ctx,
+                ev_iter_notification: ev_iter_notification,
+                ev_to_observe: ev_to_observe,
+                ev_to_observe_properties: ev_to_observe_properties,
+                ev_observed: ev_observed,
+                custom_protocols: Mutex::new(Vec::new()),
+                opengl_state: Mutex::new(OpenGlState::empty()),
+            });
+        }
+        ret
     }
 
     #[inline]
-    /// Create a client with `name`, that is connected to the core of `self`, but has an own queue
+    /// Create a client with `name`, that is connected to the core of `self`, but has its own queue
     /// for API events and such.
-    pub fn new_client(&self, name: &str, check_events: bool) -> Result<Client<T, U>, Error> {
+    pub fn new_client(&self, name: &str) -> Result<Client<T, U>, Error> {
         let ctx = unsafe {
             let name = CString::new(name).unwrap();
             mpv_create_client(self.ctx(), name.as_ptr())
@@ -678,8 +537,9 @@ impl<T, U> Parent<T, U> {
             detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::MetadataUpdate, 0));
             detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::ChapterChange, 0));
         }
+        #[cfg(feature="events")]
         let (ev_iter_notification, ev_to_observe, ev_to_observe_properties, ev_observed) =
-            if check_events {
+            {
                 let ev_iter_notification = Box::into_raw(Box::new((Mutex::new(false),
                                                                    Condvar::new())));
                 unsafe {
@@ -688,11 +548,13 @@ impl<T, U> Parent<T, U> {
                                             ev_iter_notification as *mut _);
                 }
 
-                (Some(ev_iter_notification),
-                 Some(Mutex::new(Vec::with_capacity(15))),
-                 Some(Mutex::new(HashMap::with_capacity(10))),
-                 Some(Mutex::new(Vec::with_capacity(22))))
-            } else {
+                (ev_iter_notification,
+                 Mutex::new(Vec::with_capacity(15)),
+                 Mutex::new(HashMap::with_capacity(10)),
+                 Mutex::new(Vec::with_capacity(22)))
+            };
+
+            #[cfg(not(feature="events"))] {
                 unsafe {
                     // Disable remaining events
                     detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::LogMessage, 0));
@@ -711,20 +573,28 @@ impl<T, U> Parent<T, U> {
                     detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::PropertyChange, 0));
                     detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::QueueOverflow, 0));
                 }
+            }
 
-                (None, None, None, None)
-            };
-
-        let instance = Client {
-            ctx: ctx,
-            check_events: check_events,
-            ev_iter_notification: ev_iter_notification,
-            ev_to_observe: ev_to_observe,
-            ev_to_observe_properties: ev_to_observe_properties,
-            ev_observed: ev_observed,
-            _does_not_outlive: PhantomData::<&Self>,
-        };
-        Ok(instance)
+        let ret;
+        #[cfg(not(feature="events"))]
+        {
+            ret = Ok(Client {
+                ctx: ctx,
+                _does_not_outlive: PhantomData::<&Self>,
+            });
+        }
+        #[cfg(feature="events")]
+        {
+            ret = Ok(Client {
+                ctx: ctx,
+                ev_iter_notification: ev_iter_notification,
+                ev_to_observe: ev_to_observe,
+                ev_to_observe_properties: ev_to_observe_properties,
+                ev_observed: ev_observed,
+                _does_not_outlive: PhantomData::<&Self>,
+            });
+        }
+        ret
     }
 
     #[inline]
@@ -738,7 +608,7 @@ impl<T, U> Parent<T, U> {
             Err(Error::CallbackExists)
         } else {
             let mut guard = guard.unwrap();
-            *guard = try!(OpenGlState::new(self.ctx, procaddr));
+            *guard = OpenGlState::new(self.ctx, procaddr)?;
             Ok(guard)
         }
     }
@@ -751,7 +621,7 @@ impl<T, U> Parent<T, U> {
     /// already been registered.
     pub fn register_protocol(&self, protocol: Protocol<T, U>) -> Result<(), Error> {
         let mut protocols = self.custom_protocols.lock();
-        try!(protocol.register(self.ctx));
+        protocol.register(self.ctx)?;
         protocols.push(protocol);
         Ok(())
     }
@@ -765,28 +635,24 @@ impl<'parent, T, U> Client<'parent, T, U> {
     }
 }
 
+#[doc(hidden)]
+#[allow(missing_docs)]
 /// Core functionality that is supported by both `Client` and `Parent`.
 pub trait MpvInstance<'parent, P>
     where P: MpvMarker + 'parent
 {
     /// Load a configuration file.
     fn load_config(&self, path: &Path) -> Result<(), Error>;
+    #[cfg(feature="events")]
     /// Observe all given `Event`s by means of an `EventIter`.
     fn observe_all(&self, events: &[Event]) -> Result<EventIter<P>, Error>;
     /// Execute any mpv command. See implementation for information about safety.
-    unsafe fn command(&self, cmd: &Command) -> Result<(), Error>;
+    unsafe fn command(&self, name: &str, args: &[&str]) -> Result<(), Error>;
     /// Set a given property.
-    fn set_property<D: Into<Data>>(&self, name: &str, mut data: D) -> Result<(), Error>;
+    fn set_property<D: Into<Data>>(&self, name: &str, data: D) -> Result<(), Error>;
     /// Get the `Data` of a given property.
     fn get_property(&self, name: &str, format: &Format) -> Result<Data, Error>;
-    /// Seek in a way defined by `Seek`.
-    fn seek(&self, seek: &Seek) -> Result<(), Error>;
-    /// Take a screenshot in a way defined by `Screenshot`.
-    fn screenshot(&self, st: &Screenshot) -> Result<(), Error>;
-    /// Operate on the playlist in a way defined by `PlaylistOp`.
-    fn playlist(&self, op: &PlaylistOp) -> Result<(), Error>;
-    /// Operate on the subtitles in a way defined by `SubOp`.
-    fn subtitle(&self, op: &SubOp) -> Result<(), Error>;
+
     /// Add -or subtract- any value from a property. Over/underflow clamps to max/min.
     fn add_property(&self, property: &str, value: isize) -> Result<(), Error>;
     /// Cycle a given named property, either up or down.
@@ -797,6 +663,40 @@ pub trait MpvInstance<'parent, P>
     fn pause(&self) -> Result<(), Error>;
     /// Unpause playback.
     fn unpause(&self) -> Result<(), Error>;
+
+    fn seek_forward(&self, time: &Duration) -> Result<(), Error>;
+    fn seek_backward(&self, time: &Duration) -> Result<(), Error>;
+    fn seek_absolute(&self, time: &Duration) -> Result<(), Error>;
+    fn seek_percent(&self, percent: isize) -> Result<(), Error>;
+    fn seek_percent_absolute(&self, percent: usize) -> Result<(), Error>;
+    fn seek_revert(&self) -> Result<(), Error>;
+    fn seek_revert_mark(&self) -> Result<(), Error>;
+    fn seek_frame(&self) -> Result<(), Error>;
+    fn seek_frame_backward(&self) -> Result<(), Error>;
+    fn screenshot_subtitles<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<(), Error>;
+    fn screenshot_video<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<(), Error>;
+    fn screenshot_window<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<(), Error>;
+
+    fn playlist_next_weak(&self) -> Result<(), Error>;
+    fn playlist_next_force(&self) -> Result<(), Error>;
+    fn playlist_previous_weak(&self) -> Result<(), Error>;
+    fn playlist_previous_force(&self) -> Result<(), Error>;
+    fn playlist_load_files<'a, A>(&self, files: &[(&str, FileState, A)]) -> Result<(), (usize, Error)> where A: Into<Option<&'a str>> + Clone;
+    fn playlist_load_list(&self, path: &str, replace: bool) -> Result<(), Error>;
+    fn playlist_clear(&self) -> Result<(), Error>;
+    fn playlist_remove_current(&self) -> Result<(), Error>;
+    fn playlist_remove_index(&self, position: usize) -> Result<(), Error>;
+    fn playlist_move(&self, old: usize, new: usize) -> Result<(), Error>;
+    fn playlist_shuffle(&self) -> Result<(), Error>;
+
+    fn subtitle_add_select<'a, A: Into<Option<&'a str>>>(&self, path: &str, title: A, lang: A) -> Result<(), Error>;
+    fn subtitle_add_auto<'a, A: Into<Option<&'a str>>>(&self, path: &str, title: A, lang: A) -> Result<(), Error>;
+    fn subtitle_add_cached(&self, path: &str) -> Result<(), Error>;
+    fn subtitle_remove<A: Into<Option<usize>>>(&self, index: A) -> Result<(), Error>;
+    fn subtitle_reload<A: Into<Option<usize>>>(&self, index: A) -> Result<(), Error>;
+    fn subtitle_step(&self, skip: isize) -> Result<(), Error>;
+    fn subtitle_seek_forward(&self) -> Result<(), Error>;
+    fn subtitle_seek_backward(&self) -> Result<(), Error>;
 }
 
 impl<'parent, P> MpvInstance<'parent, P> for P
@@ -818,11 +718,11 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     }
 
     #[inline]
+    #[cfg(feature="events")]
     /// Observe given `Event`s via an `EventIter`.
     fn observe_all(&self, events: &[Event]) -> Result<EventIter<P>, Error> {
-        if self.check_events() {
-            let mut observe = self.ev_to_observe().as_ref().unwrap().lock();
-            let mut properties = self.ev_to_observe_properties().as_ref().unwrap().lock();
+            let mut observe = self.ev_to_observe().lock();
+            let mut properties = self.ev_to_observe_properties().lock();
 
             let len = events.len();
             let mut ids = Vec::with_capacity(len);
@@ -833,7 +733,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
                     if properties.contains_key(&v.0) {
                         return Err(Error::AlreadyObserved(Rc::new(elem.clone())));
                     } else {
-                        try!(mpv_err((), unsafe { mpv_request_event(self.ctx(), elem.as_id(), 1) }));
+                        mpv_err((), unsafe { mpv_request_event(self.ctx(), elem.as_id(), 1) })?;
                         props.push(v);
                         ids.push(elem.as_id());
                         evs.push(elem.clone());
@@ -847,12 +747,12 @@ impl<'parent, P> MpvInstance<'parent, P> for P
 
                     if let Event::LogMessage(ref v) = *elem {
                         let min_level = CString::new(v.log_level.as_string()).unwrap();
-                        try!(mpv_err((), unsafe {
+                        mpv_err((), unsafe {
                             mpv_request_log_messages(self.ctx(), min_level.as_ptr())
-                        }));
+                        })?;
                     }
 
-                    try!(mpv_err((), unsafe { mpv_request_event(self.ctx(), elem.as_id(), 1) }));
+                    mpv_err((), unsafe { mpv_request_event(self.ctx(), elem.as_id(), 1) })?;
                     ids.push(elem.as_id());
                     evs.push(elem.clone());
                 }
@@ -884,16 +784,13 @@ impl<'parent, P> MpvInstance<'parent, P> for P
             Ok(EventIter {
                 ctx: self.ctx(),
                 first_iteration: true,
-                notification: self.ev_iter_notification().unwrap(),
-                all_to_observe: self.ev_to_observe().as_ref().unwrap(),
-                all_to_observe_properties: self.ev_to_observe_properties().as_ref().unwrap(),
+                notification: self.ev_iter_notification(),
+                all_to_observe: self.ev_to_observe(),
+                all_to_observe_properties: self.ev_to_observe_properties(),
                 local_to_observe: evs,
-                all_observed: self.ev_observed().as_ref().unwrap(),
+                all_observed: self.ev_observed(),
                 _does_not_outlive: PhantomData::<&Self>,
             })
-        } else {
-            Err(Error::EventsDisabled)
-        }
     }
 
     #[inline]
@@ -903,17 +800,18 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     ///
     /// # Safety
     /// This method is unsafe because arbitrary code may be executed resulting in UB and more.
-    unsafe fn command(&self, cmd: &Command) -> Result<(), Error> {
-        let mut args = String::with_capacity(cmd.args.iter()
-                                                     .fold(0, |acc, e| acc + e.len() + 1));
-        for elem in cmd.args {
-            // This is a bit faster than using format and avoids an additional heap alloc
-            args.push_str(" ");
-            args.push_str(elem);
-        }
-        let args = CString::new(format!("{}{}", cmd.name, args)).unwrap();
+    unsafe fn command(&self, name: &str, args: &[&str]) -> Result<(), Error> {
+        let mut cmd = String::with_capacity(name.len() + args.iter()
+                                                             .fold(0, |acc, e| acc + e.len() + 1));
+        cmd.push_str(name);
 
-        mpv_err((), mpv_command_string(self.ctx(), args.as_ptr()))
+        for elem in args {
+            cmd.push_str(" ");
+            cmd.push_str(elem);
+        }
+        let raw = CString::new(cmd).unwrap();
+
+        mpv_err((), mpv_command_string(self.ctx(), raw.as_ptr()))
     }
 
     #[inline]
@@ -985,235 +883,6 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         }
     }
 
-    // --- Convenience command functions ---
-    //
-
-
-    #[inline]
-    /// Seek as defined by `Seek`.
-    fn seek(&self, seek: &Seek) -> Result<(), Error> {
-        match *seek {
-            Seek::RelativeForward(d) => unsafe {
-                self.command(&Command::new("seek",
-                                           &[&format!("{}", d.as_secs()), "relative"]))
-
-            },
-            Seek::RelativeBackward(d) => unsafe {
-                self.command(&Command::new("seek",
-                                           &[&format!("-{}", d.as_secs()), "relative"]))
-            },
-            Seek::Absolute(d) => unsafe {
-                self.command(&Command::new("seek",
-                                           &[&format!("{}", d.as_secs()), "absolute"]))
-            },
-            Seek::RelativePercent(p) => {
-                if p > 100 {
-                    // This is actually allowed in libmpv (seek to end),
-                    // but it's confusing and may be an indicator of bugs.
-                    Err(Error::OutOfBounds)
-                } else {
-                    unsafe {
-                        self.command(&Command::new("seek",
-                                                   &[&format!("{}", p), "relative-percent"]))
-                    }
-                }
-
-            }
-            Seek::AbsolutePercent(p) => {
-                if p > 100 {
-                    // See `Seek::RelativePercent` above.
-                    Err(Error::OutOfBounds)
-                } else {
-                    unsafe {
-                        self.command(&Command::new("seek",
-                                                   &[&format!("{}", p), "absolute-percent"]))
-                    }
-                }
-            }
-            Seek::Revert => unsafe { self.command(&Command::new("revert-seek", &[])) },
-            Seek::RevertMark => unsafe {
-                self.command(&Command::new("revert-seek", &["mark"]))
-            },
-            Seek::Frame => unsafe { self.command(&Command::new("frame-step", &[])) },
-            Seek::FrameBack => unsafe { self.command(&Command::new("frame-back-step", &[])) },
-        }
-    }
-
-
-    #[inline]
-    /// Take a screenshot as defined by `Screenshot`.
-    fn screenshot(&self, st: &Screenshot) -> Result<(), Error> {
-        match *st {
-            Screenshot::Subtitles => unsafe {
-                self.command(&Command::new("screenshot", &["subtitles"]))
-            },
-            Screenshot::SubtitlesFile(p) => unsafe {
-                self.command(&Command::new("screenshot",
-                                           &[p.to_str().unwrap(), "subtitles"]))
-            },
-            Screenshot::Video => unsafe {
-                self.command(&Command::new("screenshot", &["video"]))
-            },
-            Screenshot::VideoFile(p) => unsafe {
-                self.command(&Command::new("screenshot",
-                                           &[p.to_str().unwrap().into(), "video"]))
-            },
-            Screenshot::Window => unsafe {
-                self.command(&Command::new("screenshot", &["window"]))
-            },
-            Screenshot::WindowFile(p) => unsafe {
-                self.command(&Command::new("screenshot",
-                                           &[p.to_str().unwrap(), "window"]))
-            },
-        }
-    }
-
-    #[inline]
-    /// Execute an operation on the playlist as defined by `PlaylistOp`
-    fn playlist(&self, op: &PlaylistOp) -> Result<(), Error> {
-        match *op {
-            PlaylistOp::NextWeak => unsafe {
-                self.command(&Command::new("playlist-next", &["weak"]))
-            },
-            PlaylistOp::NextForce => unsafe {
-                self.command(&Command::new("playlist-next", &["force"]))
-            },
-            PlaylistOp::PreviousWeak => unsafe {
-                self.command(&Command::new("playlist-previous", &["weak"]))
-            },
-            PlaylistOp::PreviousForce => unsafe {
-                self.command(&Command::new("playlist-previous", &["force"]))
-            },
-            PlaylistOp::LoadlistReplace(p) => unsafe {
-                self.command(&Command::new("loadlist",
-                                           &[&format!("\"{}\"", p.to_str().unwrap()),
-                                             "replace"]))
-            },
-            PlaylistOp::LoadlistAppend(p) => unsafe {
-                self.command(&Command::new("loadlist",
-                                           &[&format!("\"{}\"", p.to_str().unwrap()),
-                                             "append"]))
-            },
-            PlaylistOp::Clear => unsafe { self.command(&Command::new("playlist-clear", &[])) },
-            PlaylistOp::RemoveCurrent => unsafe {
-                self.command(&Command::new("playlist-remove", &["current"]))
-            },
-            PlaylistOp::RemoveIndex(i) => unsafe {
-                self.command(&Command::new("playlist-remove", &[&format!("{}", i)]))
-            },
-            PlaylistOp::Move((old, new)) => unsafe {
-                self.command(&Command::new("playlist-move",
-                                           &[&format!("{}", new), &format!("{}", old)]))
-            },
-            PlaylistOp::Shuffle => unsafe { self.command(&Command::new("playlist-shuffle", &[])) },
-            PlaylistOp::Loadfiles(lfiles) => {
-                for (i, elem) in lfiles.iter().enumerate() {
-                    let args = match elem.options {
-                            Some(v) => {
-                                [format!("\"{}\"",
-                                         elem.path
-                                             .to_str()
-                                             .unwrap()),
-                                 elem.state.val().into(),
-                                 v.into()]
-                            }
-                            None => {
-                                [format!("\"{}\"",
-                                         elem.path
-                                             .to_str()
-                                             .unwrap()),
-                                 elem.state.val().into(),
-                                 "".into()]
-                            }};
-                    let ret = unsafe {
-                        self.command(&Command {
-                                name: "loadfile",
-                                args: &[&args[0], &args[1], &args[2]],
-                    })};
-                    if ret.is_err() {
-                        return Err(Error::Loadfiles((i, Rc::new(ret.unwrap_err()))));
-                    }
-                }
-                Ok(())
-            }
-        }
-    }
-
-    #[inline]
-    /// Execute an operation as defined by `SubOp`.
-    fn subtitle(&self, op: &SubOp) -> Result<(), Error> {
-        match *op {
-            SubOp::AddSelect(p, t, l) => unsafe {
-                self.command(&Command::new("sub-add",
-                                           &[&format!("\"{}\"", p.to_str().unwrap()),
-                                             &format!("select{}{}",
-                                                     if t.is_some() {
-                                                         format!(" {}", t.unwrap())
-                                                     } else {
-                                                         "".into()
-                                                     },
-                                                     if l.is_some() {
-                                                         format!(" {}", l.unwrap())
-                                                     } else {
-                                                         "".into()
-                                                     })]))
-            },
-            SubOp::AddAuto(p, t, l) => unsafe {
-                self.command(&Command::new("sub-add",
-                                           &[&format!("\"{}\"", p.to_str().unwrap()),
-                                             &format!("auto{}{}",
-                                                     if t.is_some() {
-                                                         format!(" {}", t.unwrap())
-                                                     } else {
-                                                         "".into()
-                                                     },
-                                                     if l.is_some() {
-                                                         format!(" {}", l.unwrap())
-                                                     } else {
-                                                         "".into()
-                                                     })]))
-            },
-            SubOp::AddCached(p, t, l) => {
-                let t = if t.is_some() {
-                            format!(" {}", t.unwrap())
-                        } else {
-                            "".into()
-                        };
-                let l = if l.is_some() {
-                            format!(" {}", l.unwrap())
-                        } else {
-                            "".into()
-                        };
-                unsafe {self.command(&Command::new("sub-add",
-                                                   &[&format!("\"{}\"", p.to_str().unwrap()),
-                                                   &format!("cached{}{}", t, l)]))}
-            },
-            SubOp::Remove(i) => {
-                let i = if i.is_some() {
-                            format!("{}", i.unwrap())
-                        } else {
-                            "".into()
-                        };
-                unsafe{self.command(&Command::new("sub-remove", &[&i]))}
-            },
-            SubOp::Reload(i) => {
-                let i = if i.is_some() {
-                            format!("{}", i.unwrap())
-                        } else {
-                            "".into()
-                        };
-                unsafe{self.command(&Command::new("sub-reload", &[&i]))}
-            },
-            SubOp::Step(i) => unsafe {
-                self.command(&Command::new("sub-step", &[&format!("{}", i)]))
-            },
-            SubOp::SeekForward => unsafe { self.command(&Command::new("sub-seek", &["1"])) },
-            SubOp::SeekBackward => unsafe {
-                self.command(&Command::new("sub-seek", &["-1"]))
-            },
-        }
-    }
-
     // --- Convenience property functions ---
     //
     
@@ -1221,7 +890,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     #[inline]
     /// Add -or subtract- any value from a property. Over/underflow clamps to max/min.
     fn add_property(&self, property: &str, value: isize) -> Result<(), Error> {
-        unsafe { self.command(&Command::new("add", &[property, &format!("{}", value)])) }
+        unsafe { self.command("add", &[property, &format!("{}", value)]) }
     }
 
     #[inline]
@@ -1229,13 +898,13 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     /// overflow, set the property back to the minimum, on underflow set it to the maximum.
     fn cycle_property(&self, property: &str, up: &bool) -> Result<(), Error> {
         unsafe {
-            self.command(&Command::new("cycle",
+            self.command(&"cycle",
                                        &[property,
                                          if *up {
                                              "up"
                                          } else {
                                              "down"
-                                         }]))
+                                         }])
         }
     }
 
@@ -1243,7 +912,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     /// Multiply any property with any positive factor.
     fn multiply_property(&self, property: &str, factor: &usize) -> Result<(), Error> {
         unsafe {
-            self.command(&Command::new("multiply", &[property, &format!("{}", factor)]))
+            self.command(&"multiply", &[property, &format!("{}", factor)])
         }
     }
 
@@ -1257,5 +926,369 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     /// Unpause playback at runtime.
     fn unpause(&self) -> Result<(), Error> {
         self.set_property("pause", false)
+    }
+
+    // --- Convenience command functions ---
+    //
+
+    #[inline]
+    /// Seek forward relatively from current position at runtime.
+    /// This is less exact than `seek_absolute`, see [mpv manual]
+    /// (https://mpv.io/manual/master/#command-interface-
+    /// [relative|absolute|absolute-percent|relative-percent|exact|keyframes]).
+    fn seek_forward(&self, time: &Duration) -> Result<(), Error> {
+        unsafe {
+            self.command(&"seek", &[&format!("{}", time.as_secs()), "relative"])
+        }
+    }
+
+    #[inline]
+    /// See `seek_forward`.
+    fn seek_backward(&self, time: &Duration) -> Result<(), Error> {
+        unsafe {
+            self.command(&"seek", &[&format!("-{}", time.as_secs()), "relative"])
+        }
+    }
+
+    #[inline]
+    /// Seek to a given absolute time.
+    fn seek_absolute(&self, time: &Duration) -> Result<(), Error> {
+        unsafe {
+            self.command(&"seek", &[&format!("{}", time.as_secs()), "absolute"])
+        }
+    }
+
+    #[inline]
+    /// Seek to a given relative percent position (may be negative).
+    /// If `percent` of the playtime is bigger than the remaining playtime, the next file is played.
+    /// out of bounds values are clamped to either 0 or 100.
+    fn seek_percent(&self, percent: isize) -> Result<(), Error> {
+        unsafe {
+            self.command(&"seek", &[&format!("{}", percent), "relative-percent"])
+        }
+    }
+
+    #[inline]
+    /// Seek to the given percentage of the playtime.
+    fn seek_percent_absolute(&self, percent: usize) -> Result<(), Error> {
+        unsafe {
+            self.command(&"seek", &[&format!("{}", percent), "relative-percent"])
+        }
+    }
+
+    #[inline]
+    /// Revert the previous `seek_` call, can also revert itself.
+    fn seek_revert(&self) -> Result<(), Error> {
+        unsafe { self.command(&"revert-seek", &[]) }
+    }
+
+    #[inline]
+    /// Mark the current position as the position that will be seeked to by `seek_revert`.
+    fn seek_revert_mark(&self) -> Result<(), Error> {
+        unsafe { self.command(&"revert-seek", &["mark"]) }
+    }
+
+    #[inline]
+    /// Seek exactly one frame, and pause.
+    /// Noop on audio only streams.
+    fn seek_frame(&self) -> Result<(), Error> {
+        unsafe { self.command(&"frame-step", &[]) }
+    }
+
+    #[inline]
+    /// See `seek_frame`.
+    /// [Note performance considerations.](https://mpv.io/manual/master/#command-interface-frame-back-step)
+    fn seek_frame_backward(&self) -> Result<(), Error> {
+        unsafe { self.command(&"frame-back-step", &[]) }
+    }
+
+    #[inline]
+    /// "Save the video image, in its original resolution, and with subtitles.
+    /// Some video outputs may still include the OSD in the output under certain circumstances.".
+    ///
+    /// "[O]ptionally save it to a given file. The format of the file will be
+    /// guessed by the extension (and --screenshot-format is ignored - the behaviour when the
+    /// extension is missing or unknown is arbitrary). If the file already exists, it's overwritten.
+    /// Like all input command parameters, the filename is subject to property expansion as
+    /// described in [Property Expansion](https://mpv.io/manual/master/#property-expansion)."
+    fn screenshot_subtitles<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<(), Error> {
+        let path = path.into();
+        if path.is_none() {
+            unsafe { self.command(&"screenshot", &["subtitles"]) }
+        } else {
+            unsafe { self.command(&"screenshot", &[path.unwrap(), "subtitles"]) }
+        }        
+    }
+
+    #[inline]
+    /// "Like subtitles, but typically without OSD or subtitles. The exact behavior depends on the selected
+    /// video output."
+    fn screenshot_video<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<(), Error> {
+        let path = path.into();
+        if path.is_none() {
+            unsafe { self.command(&"screenshot", &["video"]) }
+        } else {
+            unsafe { self.command(&"screenshot", &[path.unwrap(), "video"]) }
+        }  
+    }
+
+    #[inline]
+    /// "Save the contents of the mpv window. Typically scaled, with OSD and subtitles. The exact
+    /// behaviour depends on the selected video output, and if no support is available,
+    /// this will act like video.".
+    fn screenshot_window<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<(), Error> {
+        let path = path.into();
+        if path.is_none() {
+            unsafe { self.command(&"screenshot", &["window"]) }
+        } else {
+            unsafe { self.command(&"screenshot", &[path.unwrap(), "window"]) }
+        }  
+    }
+
+    #[inline]
+    /// Play the next item of the current playlist.
+    /// Does nothing if the current item is the last item.
+    fn playlist_next_weak(&self) -> Result<(), Error> {
+        unsafe {
+            self.command(&"playlist-next", &["weak"])
+        }
+    }
+
+    #[inline]
+    /// Play the next item of the current playlist.
+    /// Terminates playback if the current item is the last item.
+    fn playlist_next_force(&self) -> Result<(), Error> {
+        unsafe {
+            self.command(&"playlist-next", &["force"])
+        }
+    }
+
+    #[inline]
+    /// See `playlist_next_weak`.
+    fn playlist_previous_weak(&self) -> Result<(), Error> {
+        unsafe {
+            self.command(&"playlist-previous", &["weak"])
+        }
+    }
+
+    #[inline]
+    /// See `playlist_next_force`.
+    fn playlist_previous_force(&self) -> Result<(), Error> {
+        unsafe {
+            self.command(&"playlist-previous", &["force"])
+        }
+    }
+
+    #[inline]
+    /// The given files are loaded sequentially, returning the index of the current file
+    /// and the error in case of an error. [More information.](https://mpv.io/manual/master/#command-interface-[replace|append|append-play)
+    fn playlist_load_files<'a, A>(&self, files: &[(&str, FileState, A)])
+        -> Result<(), (usize, Error)> where A: Into<Option<&'a str>> + Clone
+    {
+        for (i, elem) in files.iter().cloned().enumerate() {
+            let opts = elem.2.into();
+            let args = if opts.is_some() {
+                opts.unwrap()
+            } else {
+                ""
+            };
+
+            let ret = unsafe {
+                self.command("loadfile", &[elem.0, elem.1.val(), args])
+            };
+
+            if ret.is_err() {
+                return Err((i, ret.unwrap_err()))
+            }
+        }
+        Ok(())
+    }
+
+    #[inline]
+    /// Load the given playlist file, that either replaces the current playlist, or appends to it.
+    fn playlist_load_list(&self, path: &str, replace: bool) -> Result<(), Error> {
+        if replace {
+            unsafe {
+                self.command(&"loadlist", &[&format!("\"{}\"", path), "replace"])
+            }
+        } else {
+            unsafe {
+                self.command(&"loadlist", &[&format!("\"{}\"", path), "append"])
+            }
+        }
+    }
+
+    #[inline]
+    /// Remove every, except the current, item from the playlist.
+    fn playlist_clear(&self) -> Result<(), Error> {
+        unsafe {
+            self.command(&"playlist-clear", &[])
+        }
+    }
+
+    #[inline]
+    /// Remove the currently selected item from the playlist.
+    fn playlist_remove_current(&self) -> Result<(), Error> {
+        unsafe {
+            self.command(&"playlist-remove", &["current"])
+        }
+    }
+
+    #[inline]
+    /// Remove item at `position` from the playlist.
+    fn playlist_remove_index(&self, position: usize) -> Result<(), Error> {
+        unsafe {
+            self.command(&"playlist-remove", &[&format!("{}", position)])
+        }
+    }
+
+    #[inline]
+    /// Move item `old` to the position of item `new`.
+    fn playlist_move(&self, old: usize, new: usize) -> Result<(), Error> {
+        unsafe {
+            self.command(&"playlist-move", &[&format!("{}", new), &format!("{}", old)])
+        }
+    }
+
+    #[inline]
+    /// Shuffle the playlist.
+    fn playlist_shuffle(&self) -> Result<(), Error> {
+        unsafe {
+            self.command(&"playlist-shuffle", &[])
+        }
+    }
+
+    #[inline]
+    /// Add and select the subtitle immediately.
+    fn subtitle_add_select<'a, A: Into<Option<&'a str>>>(&self, path: &str, title: A, lang: A)
+         -> Result<(), Error>
+    {
+        let title = title.into();
+        let lang = lang.into();
+        match (title, lang) {
+            (None, None) => {
+                unsafe {
+                    self.command("sub-add", &[path, "select"])
+                }
+            }
+            (Some(t @ _), None) => {
+                unsafe {
+                    self.command("sub-add", &[path, "select", t])
+                }   
+            }
+            (None, Some(l @ _)) => {
+                unsafe {
+                    self.command("sub-add", &[path, "select", "", l])
+                }   
+            }
+            (Some(t @ _), Some(l @ _)) => {
+                unsafe {
+                    self.command("sub-add", &[path, "select", t, l])
+                }   
+            }
+        }
+    }
+
+    #[inline]
+    /// See `AddSelect`. "Don't select the subtitle.
+    /// (Or in some special situations, let the default stream selection mechanism decide.)".
+    fn subtitle_add_auto<'a, A: Into<Option<&'a str>>>(&self, path: &str, title: A, lang: A)
+        -> Result<(), Error>
+    {
+        let title = title.into();
+        let lang = lang.into();
+        match (title, lang) {
+            (None, None) => {
+                unsafe {
+                    self.command("sub-add", &[path, "auto"])
+                }
+            }
+            (Some(t @ _), None) => {
+                unsafe {
+                    self.command("sub-add", &[path, "auto", t])
+                }   
+            }
+            (None, Some(l @ _)) => {
+                unsafe {
+                    self.command("sub-add", &[path, "auto", "", l])
+                }   
+            }
+            (Some(t @ _), Some(l @ _)) => {
+                unsafe {
+                    self.command("sub-add", &[path, "auto", t, l])
+                }   
+            }
+        }
+    }
+
+    #[inline]
+    /// See `AddSelect`. "Select the subtitle. If a subtitle with the same file name was
+    /// already added, that one is selected, instead of loading a duplicate entry.
+    /// (In this case, title/language are ignored, and if the [sub] was changed since it was loaded,
+    /// these changes won't be reflected.)".
+    fn subtitle_add_cached(&self, path: &str) -> Result<(), Error> {
+        unsafe {
+            self.command("sub-add", &[path, "cached"])
+        }
+    }
+
+    #[inline]
+    /// "Remove the given subtitle track. If the id argument is missing, remove the current
+    /// track. (Works on external subtitle files only.)"
+    fn subtitle_remove<A: Into<Option<usize>>>(&self, index: A) -> Result<(), Error> {
+        let index = index.into();
+        if index.is_some() {
+            unsafe {
+                self.command("sub-remove", &[&format!("{}", index.unwrap())])
+            }
+        } else {
+            unsafe {
+                self.command("sub-remove", &[])
+            }
+        }
+    }
+
+    #[inline]
+    /// "Reload the given subtitle track. If the id argument is missing, reload the current
+    /// track. (Works on external subtitle files only.)"
+    fn subtitle_reload<A: Into<Option<usize>>>(&self, index: A) -> Result<(), Error> {
+        let index = index.into();
+        if index.is_some() {
+            unsafe {
+                self.command("sub-reload", &[&format!("{}", index.unwrap())])
+            }
+        } else {
+            unsafe {
+                self.command("sub-reload", &[])
+            }
+        }
+    }
+
+    #[inline]
+    /// "Change subtitle timing such, that the subtitle event after the next `isize` subtitle
+    /// events is displayed. `isize` can be negative to step backwards."
+    fn subtitle_step(&self, skip: isize) -> Result<(), Error> {
+        unsafe {
+            self.command("sub-step", &[&format!("{}", skip)])
+        }
+    }
+
+    #[inline]
+    /// "Seek to the next subtitle. This is similar to sub-step, except that it seeks video and
+    /// audio instead of adjusting the subtitle delay.
+    /// For embedded subtitles (like with matroska), this works only with subtitle events that
+    /// have already been displayed, or are within a short prefetch range."
+    fn subtitle_seek_forward(&self) -> Result<(), Error> {
+        unsafe {
+            self.command("sub-seek", &["1"])
+        }
+    }
+
+    #[inline]
+    /// See `SeekForward`.
+    fn subtitle_seek_backward(&self) -> Result<(), Error> {
+        unsafe {
+            self.command("sub-seek", &["-1"])
+        }
     }
 }

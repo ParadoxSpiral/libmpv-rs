@@ -211,6 +211,7 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
     type Item = Vec<Event>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        // Loop until some events can be returned
         'no_events_anchor: loop {
             let mut observed = self.all_observed.lock();
             if observed.is_empty() && !self.first_iteration {
@@ -225,13 +226,13 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
                 let mut last = false;
                 'events: loop {
                     let event = unsafe { &*mpv_wait_event(self.ctx, 0f32 as _) };
-                    let ev_id = event.event_id;
+                    let ev_id = &event.event_id;
 
-                    if unsafe { intrinsics::unlikely(ev_id == MpvEventId::QueueOverflow) } {
+                    if unsafe { intrinsics::unlikely(ev_id == &MpvEventId::QueueOverflow) } {
                         // The queue needs to be emptied asap to prevent loss of events
-                        // This happen very rarely, as the queue size is 1k (2016-10-12)
+                        // This should happen very rarely, as the queue size is 1k (2016-10-12)
                         break;
-                    } else if ev_id == MpvEventId::None {
+                    } else if ev_id == &MpvEventId::None {
                         if last {
                             break;
                         } else {
@@ -240,13 +241,13 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
                         }
                     }
                     for local_ob_ev in &self.local_to_observe {
-                        if ev_id == local_ob_ev.as_id() {
+                        if ev_id == &local_ob_ev.as_id() {
                             ret_events.push(event.as_event());
                             continue 'events;
                         }
                     }
                     for all_ob_ev in &*all_to_observe {
-                        if ev_id == all_ob_ev.as_id() {
+                        if ev_id == &all_ob_ev.as_id() {
                             observed.push(event.as_inner_event());
                             continue 'events;
                         }
