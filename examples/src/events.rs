@@ -37,11 +37,11 @@ pub fn exec() {
     crossbeam::scope(|scope| {
         // Spin up 3 threads that observe different sets of `Event`s.
         scope.spawn(|| {
-            let iter = mpv.observe_all(&[Event::FileLoaded,
-                               Event::StartFile,
-                               Event::Seek,
-                               Event::PlaybackRestart,
-                               Event::EndFile(None)])
+            let iter = mpv.observe_events(&[Event::FileLoaded,
+                                  Event::StartFile,
+                                  Event::Seek,
+                                  Event::PlaybackRestart,
+                                  Event::EndFile(None)])
                 .unwrap();
 
             for vec in iter {
@@ -66,8 +66,8 @@ pub fn exec() {
         });
         scope.spawn(|| {
             // Here the value of the property is irrelevant: only the name is used.
-            let iter = mpv.observe_all(&[Event::PropertyChange(("volume".into(), 0.into())),
-                               Event::PropertyChange(("pause".into(), false.into()))])
+            let iter = mpv.observe_events(&[Event::PropertyChange(("volume".into(), 0.into())),
+                                  Event::PropertyChange(("pause".into(), false.into()))])
                 .unwrap();
 
             for vec in iter {
@@ -75,7 +75,7 @@ pub fn exec() {
             }
         });
         scope.spawn(|| {
-            let iter = mpv.observe_all(&[Event::LogMessage(LogMessage::new(LogLevel::Info))])
+            let iter = mpv.observe_events(&[Event::LogMessage(LogMessage::new(LogLevel::Info))])
                 .unwrap();
 
             for vec in iter {
