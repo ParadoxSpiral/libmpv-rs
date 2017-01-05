@@ -646,11 +646,11 @@ pub trait MpvInstance<'parent, P>
     fn observe_events(&self, events: &[Event]) -> Result<EventIter<P>, Error>;
     unsafe fn command(&self, name: &str, args: &[&str]) -> Result<(), Error>;
     fn set_property<D: Into<Data>>(&self, name: &str, data: D) -> Result<(), Error>;
-    fn get_property(&self, name: &str, format: &Format) -> Result<Data, Error>;
+    fn get_property(&self, name: &str, format: Format) -> Result<Data, Error>;
 
     fn add_property(&self, property: &str, value: isize) -> Result<(), Error>;
-    fn cycle_property(&self, property: &str, up: &bool) -> Result<(), Error>;
-    fn multiply_property(&self, property: &str, factor: &usize) -> Result<(), Error>;
+    fn cycle_property(&self, property: &str, up: bool) -> Result<(), Error>;
+    fn multiply_property(&self, property: &str, factor: usize) -> Result<(), Error>;
     fn pause(&self) -> Result<(), Error>;
     fn unpause(&self) -> Result<(), Error>;
 
@@ -831,9 +831,9 @@ impl<'parent, P> MpvInstance<'parent, P> for P
 
     #[inline]
     /// Get the value of a property.
-    fn get_property(&self, name: &str, format: &Format) -> Result<Data, Error> {
+    fn get_property(&self, name: &str, format: Format) -> Result<Data, Error> {
         let name = CString::new(name).unwrap();
-        match *format {
+        match format {
             Format::String | Format::OsdString => {
                 let mut ptr = &mut ptr::null();
 
@@ -853,7 +853,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
 
                         unsafe{mpv_free(*ptr as *mut _)}
 
-                        Ok(match *format {
+                        Ok(match format {
                             Format::String => Data::String(data),
                             Format::OsdString => Data::OsdString(data),
                             _ => unreachable!(),
@@ -887,11 +887,11 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     #[inline]
     /// Cycle through a given property. `up` specifies direction. On
     /// overflow, set the property back to the minimum, on underflow set it to the maximum.
-    fn cycle_property(&self, property: &str, up: &bool) -> Result<(), Error> {
+    fn cycle_property(&self, property: &str, up: bool) -> Result<(), Error> {
         unsafe {
             self.command("cycle",
                                        &[property,
-                                         if *up {
+                                         if up {
                                              "up"
                                          } else {
                                              "down"
@@ -901,7 +901,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
 
     #[inline]
     /// Multiply any property with any positive factor.
-    fn multiply_property(&self, property: &str, factor: &usize) -> Result<(), Error> {
+    fn multiply_property(&self, property: &str, factor: usize) -> Result<(), Error> {
         unsafe {
             self.command("multiply", &[property, &format!("{}", factor)])
         }
