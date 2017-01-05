@@ -1076,8 +1076,8 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     fn playlist_load_files<'a, A>(&self, files: &[(&str, FileState, A)])
         -> Result<(), (usize, Error)> where A: Into<Option<&'a str>> + Clone
     {
-        for (i, elem) in files.iter().cloned().enumerate() {
-            let opts = elem.2.into();
+        for (i, elem) in files.iter().enumerate() {
+            let opts = elem.2.clone().into();
             let args = if opts.is_some() {
                 opts.unwrap()
             } else {
