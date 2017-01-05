@@ -680,8 +680,8 @@ pub trait MpvInstance<'parent, P>
     fn playlist_move(&self, old: usize, new: usize) -> Result<(), Error>;
     fn playlist_shuffle(&self) -> Result<(), Error>;
 
-    fn subtitle_add_select<'a, A: Into<Option<&'a str>>>(&self, path: &str, title: A, lang: A) -> Result<(), Error>;
-    fn subtitle_add_auto<'a, A: Into<Option<&'a str>>>(&self, path: &str, title: A, lang: A) -> Result<(), Error>;
+    fn subtitle_add_select<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'a str>>>(&self, path: &str, title: A, lang: B) -> Result<(), Error>;
+    fn subtitle_add_auto<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'a str>>>(&self, path: &str, title: A, lang: B) -> Result<(), Error>;
     fn subtitle_add_cached(&self, path: &str) -> Result<(), Error>;
     fn subtitle_remove<A: Into<Option<usize>>>(&self, index: A) -> Result<(), Error>;
     fn subtitle_reload<A: Into<Option<usize>>>(&self, index: A) -> Result<(), Error>;
@@ -1151,7 +1151,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
 
     #[inline]
     /// Add and select the subtitle immediately.
-    fn subtitle_add_select<'a, A: Into<Option<&'a str>>>(&self, path: &str, title: A, lang: A)
+    fn subtitle_add_select<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'a str>>>(&self, path: &str, title: A, lang: B)
          -> Result<(), Error>
     {
         match (title.into(), lang.into()) {
@@ -1182,7 +1182,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     #[inline]
     /// See `AddSelect`. "Don't select the subtitle.
     /// (Or in some special situations, let the default stream selection mechanism decide.)".
-    fn subtitle_add_auto<'a, A: Into<Option<&'a str>>>(&self, path: &str, title: A, lang: A)
+    fn subtitle_add_auto<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'a str>>>(&self, path: &str, title: A, lang: B)
         -> Result<(), Error>
     {
         match (title.into(), lang.into()) {
