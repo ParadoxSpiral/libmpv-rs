@@ -643,7 +643,7 @@ pub trait MpvInstance<'parent, P>
 {
     fn load_config(&self, path: &Path) -> Result<(), Error>;
     #[cfg(feature="events")]
-    fn observe_all(&self, events: &[Event]) -> Result<EventIter<P>, Error>;
+    fn observe_events(&self, events: &[Event]) -> Result<EventIter<P>, Error>;
     unsafe fn command(&self, name: &str, args: &[&str]) -> Result<(), Error>;
     fn set_property<D: Into<Data>>(&self, name: &str, data: D) -> Result<(), Error>;
     fn get_property(&self, name: &str, format: &Format) -> Result<Data, Error>;
@@ -711,7 +711,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     #[inline]
     #[cfg(feature="events")]
     /// Observe given `Event`s via an `EventIter`.
-    fn observe_all(&self, events: &[Event]) -> Result<EventIter<P>, Error> {
+    fn observe_events(&self, events: &[Event]) -> Result<EventIter<P>, Error> {
             let mut observe = self.ev_to_observe().lock();
             let mut properties = self.ev_to_observe_properties().lock();
 
