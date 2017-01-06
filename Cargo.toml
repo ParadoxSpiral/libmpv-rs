@@ -22,6 +22,9 @@ version = "0.0.1"
 authors = ["ParadoxSpiral <paradoxspiral@riseup.net>"]
 license = "LGPLv2.1"
 build = "build.rs"
+readme = "README.md"
+description = "Libmpv abstraction that's easy to use and can play next to all codecs and containers"
+keywords = ["media", "playback", "mpv", "libmpv"]
 
 [dependencies]
 libc = "0.2"

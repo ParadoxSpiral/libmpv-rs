@@ -56,7 +56,8 @@ fn main() {
 			if archive.is_err() || legacy {
 				let mut buf = Vec::with_capacity(WIN_MPV_ARCHIVE_SIZE);
 
-				hyper::Client::new().get(WIN_MPV_ARCHIVE_URL).send().expect("retrieving libmpv failed")
+				hyper::Client::new().get(WIN_MPV_ARCHIVE_URL).send()
+									.expect("retrieving libmpv failed")
 									.read_to_end(&mut buf).unwrap();
 
 				if legacy {

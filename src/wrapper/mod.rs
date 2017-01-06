@@ -349,7 +349,7 @@ pub unsafe trait MpvMarker {
     #[cfg(feature="events")]
     fn ev_observed(&self) -> &Mutex<Vec<InnerEvent>>;
     #[cfg(feature="events")]
-    unsafe fn drop_ev_iter_step(&mut self) {
+    unsafe fn drop_ev_iter(&mut self) {
         Box::from_raw(self.ev_iter_notification());
     }
 }
@@ -403,10 +403,11 @@ impl<T, U> Drop for Parent<T, U> {
     fn drop(&mut self) {
         unsafe {
             #[cfg(feature="events")]
-            self.drop_ev_iter_step();
-            // FIXME: Ugly hack: Force `drop` call by replacing data
-            // drop(self.opengl_state); <- does not work
-            self.opengl_state = Mutex::new(OpenGlState::empty());
+            self.drop_ev_iter();
+            let opengl_ctx = self.opengl_state.lock().api_ctx;
+            if !opengl_ctx.is_null() {
+                mpv_opengl_cb_uninit_gl(opengl_ctx);
+            }
             mpv_terminate_destroy(self.ctx());
         }
     }
@@ -417,7 +418,7 @@ impl<'parent, T, U> Drop for Client<'parent, T, U> {
     fn drop(&mut self) {
         unsafe {
             #[cfg(feature="events")]
-            self.drop_ev_iter_step();
+            self.drop_ev_iter();
             mpv_detach_destroy(self.ctx());
         }
     }
