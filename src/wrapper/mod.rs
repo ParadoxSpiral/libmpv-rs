@@ -429,6 +429,20 @@ impl<T, U> Parent<T, U> {
     /// Create a new `Parent`.
     /// The default settings can be probed by running: `$ mpv --show-profile=libmpv`
     pub fn new() -> Result<Parent<T, U>, Error> {
+        Parent::internal_new::<&str>(&[])
+    }
+
+    #[inline]
+    /// Create a new `Parent`, with the given settings set before initialization.
+    pub fn with_options<A>(opts: &[(&str, &A)]) -> Result<Parent<T, U>, Error>
+        where A: Into<Data> + Clone
+    {
+        Parent::internal_new(opts)
+    }
+
+    fn internal_new<A>(opts: &[(&str, &A)]) -> Result<Parent<T, U>, Error>
+        where A: Into<Data> + Clone
+    {
         SET_LC_NUMERIC.call_once(|| {
             let c = CString::new("C").unwrap();
             unsafe { libc::setlocale(libc::LC_NUMERIC, c.as_ptr()) };
@@ -494,6 +508,17 @@ impl<T, U> Parent<T, U> {
                 }
             }
 
+        for opt in opts {
+            // At this point ret can only be Ok
+            let err = internal_set_property(ctx, opt.0, opt.1.clone());
+            if err.is_err() {
+                unsafe {
+                    destroy_on_err!(ctx, -20);    
+                }
+                return Err(err.unwrap_err());
+            }
+        }
+        
         unsafe { destroy_on_err!(ctx, mpv_initialize(ctx)) }
 
         let ret;
@@ -533,8 +558,7 @@ impl<T, U> Parent<T, U> {
             detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::TrackSwitched, 0));
             detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::Pause, 0));
             detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::Unpause, 0));
-            detach_on_err!(ctx,
-                           mpv_request_event(ctx, MpvEventId::ScriptInputDispatch, 0));
+            detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::ScriptInputDispatch, 0));
             detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::MetadataUpdate, 0));
             detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::ChapterChange, 0));
         }
@@ -809,25 +833,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     #[inline]
     /// Set the value of a property.
     fn set_property<T: Into<Data>>(&self, name: &str, data: T) -> Result<(), Error> {
-        let name = CString::new(name).unwrap().into_raw();
-        let mut data = data.into();
-        let format = data.format().as_val();
-        let ret = match data {
-            Data::OsdString(_) => Err(Error::OsdStringWrite),
-            Data::String(ref v) => {
-                let data = CString::new(v.as_bytes()).unwrap();
-                let ptr: *mut _ = &mut data.as_ptr();
-
-                mpv_err((), unsafe { mpv_set_option(self.ctx(), name, format, ptr as *mut _) })
-            }
-            _ => {
-                let data = data_ptr!(&mut data);
-
-                mpv_err((), unsafe { mpv_set_property(self.ctx(), name, format, data) })
-            }
-        };
-        unsafe { CString::from_raw(name) };
-        ret
+        internal_set_property(self.ctx(), name, data)
     }
 
     #[inline]
@@ -1280,4 +1286,28 @@ impl<'parent, P> MpvInstance<'parent, P> for P
             self.command("sub-seek", &["-1"])
         }
     }
+}
+
+fn internal_set_property<T: Into<Data>>(ctx: *mut MpvHandle, name: &str, data: T) 
+    -> Result<(), Error>
+{
+    let name = CString::new(name).unwrap().into_raw();
+    let mut data = data.into();
+    let format = data.format().as_val();
+    let ret = match data {
+        Data::OsdString(_) => Err(Error::OsdStringWrite),
+        Data::String(ref v) => {
+            let data = CString::new(v.as_bytes()).unwrap();
+            let ptr: *mut _ = &mut data.as_ptr();
+
+            mpv_err((), unsafe { mpv_set_property(ctx, name, format, ptr as *mut _) })
+        }
+        _ => {
+            let data = data_ptr!(&mut data);
+
+            mpv_err((), unsafe { mpv_set_property(ctx, name, format, data) })
+        }
+    };
+    unsafe { CString::from_raw(name) };
+    ret
 }
