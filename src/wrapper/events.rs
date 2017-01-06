@@ -343,6 +343,7 @@ impl MpvLogLevel {
         }
     }
 
+    #[allow(should_implement_trait)]
     fn from_str(name: &str) -> MpvLogLevel {
         match name {
             "no" => MpvLogLevel::None,

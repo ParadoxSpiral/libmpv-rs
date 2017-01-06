@@ -88,7 +88,7 @@ macro_rules! detach_on_err {
     )
 }
 
-pub(crate) fn mpv_err<T>(ret: T, err_val: libc::c_int) -> Result<T, Error> {
+fn mpv_err<T>(ret: T, err_val: libc::c_int) -> Result<T, Error> {
     debug_assert!(err_val <= 0);
     if err_val == 0 {
         Ok(ret)
@@ -98,18 +98,18 @@ pub(crate) fn mpv_err<T>(ret: T, err_val: libc::c_int) -> Result<T, Error> {
 }
 
 #[cfg(unix)]
-pub(crate) fn mpv_cstr_to_string(cstr: &CStr) -> String {
+fn mpv_cstr_to_string(cstr: &CStr) -> String {
     OsStr::from_bytes(cstr.to_bytes()).to_string_lossy().into_owned()
 }
 
 #[cfg(windows)]
-pub(crate) fn mpv_cstr_to_string(cstr: &CStr) -> String {
+fn mpv_cstr_to_string(cstr: &CStr) -> String {
     // Mpv returns all strings on windows in UTF-8.
     cstr.to_str().unwrap().to_owned()
 }
 
 #[cfg(all(not(unix), not(windows)))]
-pub(crate) fn mpv_cstr_to_string(cstr: &CStr) -> String {
+fn mpv_cstr_to_string(cstr: &CStr) -> String {
     // Hope that all is well
     String::from_utf8_lossy(cstr.to_bytes()).into_owned()
 }
@@ -249,7 +249,7 @@ pub enum Format {
 }
 
 impl Format {
-    pub(crate) fn as_mpv_format(&self) -> MpvFormat {
+    fn as_mpv_format(&self) -> MpvFormat {
         match *self {
             Format::String => MpvFormat::String,
             Format::OsdString => MpvFormat::OsdString,
@@ -261,7 +261,7 @@ impl Format {
 }
 
 impl MpvError {
-    pub(crate) fn as_val(&self) -> libc::c_int {
+    fn as_val(&self) -> libc::c_int {
         *self as libc::c_int
     }
 
@@ -274,7 +274,7 @@ impl MpvError {
 }
 
 impl MpvFormat {
-    pub(crate) fn as_val(self) -> libc::c_int {
+    fn as_val(self) -> libc::c_int {
         self as _
     }
 }
@@ -291,7 +291,7 @@ pub enum FileState {
 }
 
 impl FileState {
-    pub(crate) fn val(&self) -> &str {
+    fn val(&self) -> &str {
         match *self {
             FileState::Replace => "replace",
             FileState::Append => "append",
@@ -680,8 +680,8 @@ pub trait MpvInstance<'parent, P>
     fn playlist_move(&self, old: usize, new: usize) -> Result<(), Error>;
     fn playlist_shuffle(&self) -> Result<(), Error>;
 
-    fn subtitle_add_select<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'a str>>>(&self, path: &str, title: A, lang: B) -> Result<(), Error>;
-    fn subtitle_add_auto<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'a str>>>(&self, path: &str, title: A, lang: B) -> Result<(), Error>;
+    fn subtitle_add_select<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'b str>>>(&self, path: &str, title: A, lang: B) -> Result<(), Error>;
+    fn subtitle_add_auto<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'b str>>>(&self, path: &str, title: A, lang: B) -> Result<(), Error>;
     fn subtitle_add_cached(&self, path: &str) -> Result<(), Error>;
     fn subtitle_remove<A: Into<Option<usize>>>(&self, index: A) -> Result<(), Error>;
     fn subtitle_reload<A: Into<Option<usize>>>(&self, index: A) -> Result<(), Error>;
@@ -1151,7 +1151,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
 
     #[inline]
     /// Add and select the subtitle immediately.
-    fn subtitle_add_select<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'a str>>>(&self, path: &str, title: A, lang: B)
+    fn subtitle_add_select<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'b str>>>(&self, path: &str, title: A, lang: B)
          -> Result<(), Error>
     {
         match (title.into(), lang.into()) {
@@ -1182,7 +1182,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     #[inline]
     /// See `AddSelect`. "Don't select the subtitle.
     /// (Or in some special situations, let the default stream selection mechanism decide.)".
-    fn subtitle_add_auto<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'a str>>>(&self, path: &str, title: A, lang: B)
+    fn subtitle_add_auto<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'b str>>>(&self, path: &str, title: A, lang: B)
         -> Result<(), Error>
     {
         match (title.into(), lang.into()) {
