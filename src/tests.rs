@@ -29,11 +29,11 @@ fn version() {
 
 #[test]
 fn properties() {
-    let mpv = Parent::<(), ()>::new().unwrap();
-    mpv.set_property("cache-initial", 1).unwrap();
-    mpv.set_property("volume", 0).unwrap();
-    mpv.set_property("vo", "null").unwrap();
-    mpv.set_property("ytdl", true).unwrap();
+    let mpv = Parent::<(), ()>::with_options(&[("cache-initial", 1.into()),
+                                               ("volume", 10.into()),
+                                               ("vo", "null".into()),
+                                               ("ytdl", true.into())])
+        .unwrap();
 
     mpv.playlist_load_files(&[("https://www.youtube.com/watch?v=DLzxrzFCyOs",
                                FileState::AppendPlay, None)])

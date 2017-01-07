@@ -25,10 +25,10 @@ mod protocol;
 extern crate mpv;
 
 fn main() {
-    if cfg!(any(feature = "all", feature = "events")) {
+    if cfg!(feature = "events") {
         events::exec();
     }
-    if cfg!(any(feature = "all", feature = "protocol")) {
+    if cfg!(feature = "protocol") {
         protocol::exec();
     }
 }

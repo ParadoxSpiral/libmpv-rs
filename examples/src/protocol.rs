@@ -72,10 +72,8 @@ pub fn exec() {
                       Some(size))
     };
 
-    let mpv = Parent::new().unwrap();
+    let mpv = Parent::with_options(&[("volume", 30.into())]).unwrap();
     mpv.register_protocol(protocol).unwrap();
-
-    mpv.set_property("volume", 30).unwrap();
 
     mpv.playlist_load_files(&[(&path, FileState::AppendPlay, None)])
         .unwrap();

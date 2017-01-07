@@ -29,5 +29,5 @@ events = []
 protocol = []
 
 [dependencies]
-mpv = {path = "../", features = ["static_libmpv"]}
+mpv = {path = "../"}
 crossbeam = "0.2"

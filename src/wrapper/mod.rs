@@ -429,20 +429,16 @@ impl<T, U> Parent<T, U> {
     /// Create a new `Parent`.
     /// The default settings can be probed by running: `$ mpv --show-profile=libmpv`
     pub fn new() -> Result<Parent<T, U>, Error> {
-        Parent::internal_new::<&str>(&[])
+        Parent::internal_new(&[])
     }
 
     #[inline]
     /// Create a new `Parent`, with the given settings set before initialization.
-    pub fn with_options<A>(opts: &[(&str, &A)]) -> Result<Parent<T, U>, Error>
-        where A: Into<Data> + Clone
-    {
+    pub fn with_options(opts: &[(&str, Data)]) -> Result<Parent<T, U>, Error> {
         Parent::internal_new(opts)
     }
 
-    fn internal_new<A>(opts: &[(&str, &A)]) -> Result<Parent<T, U>, Error>
-        where A: Into<Data> + Clone
-    {
+    fn internal_new(opts: &[(&str, Data)]) -> Result<Parent<T, U>, Error> {
         SET_LC_NUMERIC.call_once(|| {
             let c = CString::new("C").unwrap();
             unsafe { libc::setlocale(libc::LC_NUMERIC, c.as_ptr()) };

@@ -27,11 +27,11 @@ use std::thread;
 
 pub fn exec() {
     // Create a `Parent` (with events enabled) and set some properties.
-    let mpv = Parent::<(), ()>::new().unwrap();
-    mpv.set_property("cache-initial", 1).unwrap();
-    mpv.set_property("volume", 10).unwrap();
-    mpv.set_property("vo", "null").unwrap();
-    mpv.set_property("ytdl", true).unwrap();
+    let mpv = Parent::<(), ()>::with_options(&[("cache-initial", 1.into()),
+                                               ("volume", 10.into()),
+                                               ("vo", "null".into()),
+                                               ("ytdl", true.into())])
+        .unwrap();
 
     // Create a crossbeam scope for convenience to use mpv in multiple threads.
     crossbeam::scope(|scope| {
