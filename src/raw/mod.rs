@@ -246,15 +246,6 @@ extern "C" {
                                 filename: *const libc::c_char)
                                 -> libc::c_int;
     pub fn mpv_free_node_contents(node: *mut MpvNode);
-    pub fn mpv_set_option(ctx: *mut MpvHandle,
-                          name: *const libc::c_char,
-                          format: libc::c_int,
-                          data: *mut libc::c_void)
-                          -> libc::c_int;
-    pub fn mpv_set_option_string(ctx: *mut MpvHandle,
-                                 name: *const libc::c_char,
-                                 data: *const libc::c_char)
-                                 -> libc::c_int;
     pub fn mpv_command(ctx: *mut MpvHandle,
                        args: *mut *const libc::c_char)
                        -> libc::c_int;

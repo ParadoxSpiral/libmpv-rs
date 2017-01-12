@@ -84,7 +84,7 @@ impl OpenGlState {
     /// Passing `0` as `w` or `h` will choose the size of the fbo.
     ///
     /// # Unsafety
-    /// Mpv relies on correct and initialized opengl state.
+    /// Mpv relies on correct and initialized OpenGL state.
     pub unsafe fn set_draw_target(&self, fbo: libc::c_int, w: usize, h: usize)
         -> Result<(), Error>
     {

@@ -150,7 +150,7 @@ impl MpvEvent {
 /// Once the `EventIter` is dropped, it's `Event`s are removed from
 /// the "to be observed" queue, therefore new `Event` invocations won't be observed.
 pub struct EventIter<'parent, P>
-    where P: MpvMarker + 'parent
+    where P: MpvInstance + 'parent
 {
     pub(crate) ctx: *mut MpvHandle,
     pub(crate) first_iteration: bool,
@@ -163,7 +163,7 @@ pub struct EventIter<'parent, P>
 }
 
 impl<'parent, P> Drop for EventIter<'parent, P>
-    where P: MpvMarker + 'parent
+    where P: MpvInstance + 'parent
 {
     fn drop(&mut self) {
         let mut all_to_observe = self.all_to_observe.lock();
@@ -206,7 +206,7 @@ impl<'parent, P> Drop for EventIter<'parent, P>
 }
 
 impl<'parent, P> Iterator for EventIter<'parent, P>
-    where P: MpvMarker + 'parent
+    where P: MpvInstance + 'parent
 {
     type Item = Vec<Event>;
 

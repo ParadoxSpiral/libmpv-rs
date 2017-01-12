@@ -52,18 +52,6 @@ use std::os::unix::ffi::OsStrExt;
 
 static SET_LC_NUMERIC: Once = ONCE_INIT;
 
-// Cast `&mut Data` so that libmpv can use it.
-macro_rules! data_ptr {
-    ($data:expr) => (
-        match $data {
-            &mut Data::Flag(ref mut v) => v as *mut bool as *mut libc::c_void,
-            &mut Data::Int64(ref mut v) => v as *mut libc::int64_t as *mut libc::c_void,
-            &mut Data::Double(ref mut v) => v as *mut libc::c_double as *mut libc::c_void,
-            _ => unreachable!(),
-        }
-    )
-}
-
 macro_rules! destroy_on_err {
     ($ctx:expr, $exec:expr) => (
         {
@@ -89,7 +77,6 @@ macro_rules! detach_on_err {
 }
 
 fn mpv_err<T>(ret: T, err_val: libc::c_int) -> Result<T, Error> {
-    debug_assert!(err_val <= 0);
     if err_val == 0 {
         Ok(ret)
     } else {
@@ -119,19 +106,13 @@ fn mpv_cstr_to_string(cstr: &CStr) -> String {
 pub enum Error {
     /// An API call did not execute successfully.
     Mpv(MpvError),
-    /// All `suspend` calls have already been undone.
-    AlreadyResumed,
-    /// Some functions only accept absolute paths.
-    ExpectedAbsolute,
-    /// If a file was expected, but a directory was given.
-    ExpectedFile,
     /// If a command failed during a `loadfiles` call, contains index of failed command and `Error`.
     Loadfiles((usize, Rc<Error>)),
     #[cfg(feature="events")]
     /// This event is already being observed by another `EventIter`.
     AlreadyObserved(Rc<Event>),
-    /// Used a `Data::OsdString` while writing.
-    OsdStringWrite,
+    /// Read implementation where this was returned for specifics.
+    InvalidArgument,
     /// The library was compiled against a different mpv version than what is present on the system.
     /// First value is compiled version, second value is loaded version.
     VersionMismatch(u32, u32),
@@ -334,70 +315,6 @@ unsafe impl<T, U> Sync for Parent<T, U> {}
 unsafe impl<'parent, T, U> Send for Client<'parent, T, U> {}
 unsafe impl<'parent, T, U> Sync for Client<'parent, T, U> {}
 
-#[doc(hidden)]
-#[allow(missing_docs)]
-/// Designed for internal use.
-pub unsafe trait MpvMarker {
-    // FIXME: Most of these can go once `Associated Fields` lands
-    fn ctx(&self) -> *mut MpvHandle;
-    #[cfg(feature="events")]
-    fn ev_iter_notification(&self) -> *mut (Mutex<bool>, Condvar);
-    #[cfg(feature="events")]
-    fn ev_to_observe(&self) -> &Mutex<Vec<Event>>;
-    #[cfg(feature="events")]
-    fn ev_to_observe_properties(&self) -> &Mutex<HashMap<String, libc::uint64_t>>;
-    #[cfg(feature="events")]
-    fn ev_observed(&self) -> &Mutex<Vec<InnerEvent>>;
-    #[cfg(feature="events")]
-    unsafe fn drop_ev_iter(&mut self) {
-        Box::from_raw(self.ev_iter_notification());
-    }
-}
-
-unsafe impl<T, U> MpvMarker for Parent<T, U> {
-    fn ctx(&self) -> *mut MpvHandle {
-        self.ctx
-    }
-    #[cfg(feature="events")]
-    fn ev_iter_notification(&self) -> *mut (Mutex<bool>, Condvar) {
-        self.ev_iter_notification
-    }
-    #[cfg(feature="events")]
-    fn ev_to_observe(&self) -> &Mutex<Vec<Event>> {
-        &self.ev_to_observe
-    }
-    #[cfg(feature="events")]
-    fn ev_to_observe_properties(&self) -> &Mutex<HashMap<String, libc::uint64_t>> {
-        &self.ev_to_observe_properties
-    }
-    #[cfg(feature="events")]
-    fn ev_observed(&self) -> &Mutex<Vec<InnerEvent>> {
-        &self.ev_observed
-    }
-}
-
-unsafe impl<'parent, T, U> MpvMarker for Client<'parent, T, U> {
-    fn ctx(&self) -> *mut MpvHandle {
-        self.ctx
-    }
-    #[cfg(feature="events")]
-    fn ev_iter_notification(&self) -> *mut (Mutex<bool>, Condvar) {
-        self.ev_iter_notification
-    }
-    #[cfg(feature="events")]
-    fn ev_to_observe(&self) -> &Mutex<Vec<Event>> {
-        &self.ev_to_observe
-    }
-    #[cfg(feature="events")]
-    fn ev_to_observe_properties(&self) -> &Mutex<HashMap<String, libc::uint64_t>> {
-        &self.ev_to_observe_properties
-    }
-    #[cfg(feature="events")]
-    fn ev_observed(&self) -> &Mutex<Vec<InnerEvent>> {
-        &self.ev_observed
-    }
-}
-
 impl<T, U> Drop for Parent<T, U> {
     #[inline]
     fn drop(&mut self) {
@@ -467,54 +384,45 @@ impl<T, U> Parent<T, U> {
         }
 
         #[cfg(feature="events")]
-        let (ev_iter_notification, ev_to_observe, ev_to_observe_properties, ev_observed) =
-         {
-                let ev_iter_notification = Box::into_raw(Box::new((Mutex::new(false),
-                                                                   Condvar::new())));
-                unsafe {
-                    mpv_set_wakeup_callback(ctx,
-                                            event_callback,
-                                            ev_iter_notification as *mut _);
-                }
-
-                (ev_iter_notification,
-                 Mutex::new(Vec::with_capacity(15)),
-                 Mutex::new(HashMap::with_capacity(10)),
-                 Mutex::new(Vec::with_capacity(22)))
-            };
-            #[cfg(not(feature="events"))]
-             {
-                unsafe {
-                    // Disable remaining events
-                    destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::LogMessage, 0));
-                    destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::GetPropertyReply, 0));
-                    destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::SetPropertyReply, 0));
-                    destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::CommandReply, 0));
-                    destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::StartFile, 0));
-                    destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::EndFile, 0));
-                    destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::FileLoaded, 0));
-                    destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::Idle, 0));
-                    destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::ClientMessage, 0));
-                    destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::VideoReconfig, 0));
-                    destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::AudioReconfig, 0));
-                    destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::Seek, 0));
-                    destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::PlaybackRestart, 0));
-                    destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::PropertyChange, 0));
-                    destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::QueueOverflow, 0));
-                }
+        let (ev_iter_notification, ev_to_observe, ev_to_observe_properties, ev_observed) = {
+            let ev_iter_notification = Box::into_raw(Box::new((Mutex::new(false),
+                                                               Condvar::new())));
+            unsafe {
+                mpv_set_wakeup_callback(ctx,
+                                        event_callback,
+                                        ev_iter_notification as *mut _);
             }
+
+            (ev_iter_notification,
+             Mutex::new(Vec::with_capacity(15)),
+             Mutex::new(HashMap::with_capacity(10)),
+             Mutex::new(Vec::with_capacity(22)))
+        };
+
+        #[cfg(not(feature="events"))]
+        unsafe {
+            // Disable remaining events
+            destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::LogMessage, 0));
+            destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::GetPropertyReply, 0));
+            destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::SetPropertyReply, 0));
+            destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::CommandReply, 0));
+            destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::StartFile, 0));
+            destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::EndFile, 0));
+            destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::FileLoaded, 0));
+            destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::Idle, 0));
+            destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::ClientMessage, 0));
+            destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::VideoReconfig, 0));
+            destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::AudioReconfig, 0));
+            destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::Seek, 0));
+            destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::PlaybackRestart, 0));
+            destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::PropertyChange, 0));
+            destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::QueueOverflow, 0));
+        }
 
         for opt in opts {
-            // At this point ret can only be Ok
-            let err = internal_set_property(ctx, opt.0, opt.1.clone());
-            if err.is_err() {
-                unsafe {
-                    destroy_on_err!(ctx, -20);    
-                }
-                return Err(err.unwrap_err());
-            }
+            unsafe { destroy_on_err!(ctx, internal_set_property(ctx, opt.0, opt.1.clone())) }
         }
-        
+
         unsafe { destroy_on_err!(ctx, mpv_initialize(ctx)) }
 
         let ret;
@@ -659,156 +567,115 @@ impl<'parent, T, U> Client<'parent, T, U> {
 #[allow(missing_docs)]
 /// Core functionality that is supported by both `Client` and `Parent`.
 /// See trait implementation for documentation.
-pub trait MpvInstance<'parent, P>
-    where P: MpvMarker + 'parent
-{
-    fn load_config(&self, path: &Path) -> Result<(), Error>;
+pub trait MpvInstance {
+    // FIXME: These can go once `Associated Fields` lands
+    fn ctx(&self) -> *mut MpvHandle;
     #[cfg(feature="events")]
-    fn observe_events(&self, events: &[Event]) -> Result<EventIter<P>, Error>;
-    unsafe fn command(&self, name: &str, args: &[&str]) -> Result<(), Error>;
-    fn set_property<D: Into<Data>>(&self, name: &str, data: D) -> Result<(), Error>;
-    fn get_property(&self, name: &str, format: Format) -> Result<Data, Error>;
+    fn ev_iter_notification(&self) -> *mut (Mutex<bool>, Condvar);
+    #[cfg(feature="events")]
+    fn ev_to_observe(&self) -> &Mutex<Vec<Event>>;
+    #[cfg(feature="events")]
+    fn ev_to_observe_properties(&self) -> &Mutex<HashMap<String, libc::uint64_t>>;
+    #[cfg(feature="events")]
+    fn ev_observed(&self) -> &Mutex<Vec<InnerEvent>>;
+    #[cfg(feature="events")]
+    unsafe fn drop_ev_iter(&mut self) {
+        Box::from_raw(self.ev_iter_notification());
+    }
 
-    fn add_property(&self, property: &str, value: isize) -> Result<(), Error>;
-    fn cycle_property(&self, property: &str, up: bool) -> Result<(), Error>;
-    fn multiply_property(&self, property: &str, factor: usize) -> Result<(), Error>;
-    fn pause(&self) -> Result<(), Error>;
-    fn unpause(&self) -> Result<(), Error>;
 
-    fn seek_forward(&self, time: &Duration) -> Result<(), Error>;
-    fn seek_backward(&self, time: &Duration) -> Result<(), Error>;
-    fn seek_absolute(&self, time: &Duration) -> Result<(), Error>;
-    fn seek_percent(&self, percent: isize) -> Result<(), Error>;
-    fn seek_percent_absolute(&self, percent: usize) -> Result<(), Error>;
-    fn seek_revert(&self) -> Result<(), Error>;
-    fn seek_revert_mark(&self) -> Result<(), Error>;
-    fn seek_frame(&self) -> Result<(), Error>;
-    fn seek_frame_backward(&self) -> Result<(), Error>;
-
-    fn screenshot_subtitles<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<(), Error>;
-    fn screenshot_video<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<(), Error>;
-    fn screenshot_window<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<(), Error>;
-
-    fn playlist_next_weak(&self) -> Result<(), Error>;
-    fn playlist_next_force(&self) -> Result<(), Error>;
-    fn playlist_previous_weak(&self) -> Result<(), Error>;
-    fn playlist_previous_force(&self) -> Result<(), Error>;
-    fn playlist_load_files<'a, A>(&self, files: &[(&str, FileState, A)]) -> Result<(), (usize, Error)> where A: Into<Option<&'a str>> + Clone;
-    fn playlist_load_list(&self, path: &str, replace: bool) -> Result<(), Error>;
-    fn playlist_clear(&self) -> Result<(), Error>;
-    fn playlist_remove_current(&self) -> Result<(), Error>;
-    fn playlist_remove_index(&self, position: usize) -> Result<(), Error>;
-    fn playlist_move(&self, old: usize, new: usize) -> Result<(), Error>;
-    fn playlist_shuffle(&self) -> Result<(), Error>;
-
-    fn subtitle_add_select<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'b str>>>(&self, path: &str, title: A, lang: B) -> Result<(), Error>;
-    fn subtitle_add_auto<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'b str>>>(&self, path: &str, title: A, lang: B) -> Result<(), Error>;
-    fn subtitle_add_cached(&self, path: &str) -> Result<(), Error>;
-    fn subtitle_remove<A: Into<Option<usize>>>(&self, index: A) -> Result<(), Error>;
-    fn subtitle_reload<A: Into<Option<usize>>>(&self, index: A) -> Result<(), Error>;
-    fn subtitle_step(&self, skip: isize) -> Result<(), Error>;
-    fn subtitle_seek_forward(&self) -> Result<(), Error>;
-    fn subtitle_seek_backward(&self) -> Result<(), Error>;
-}
-
-impl<'parent, P> MpvInstance<'parent, P> for P
-    where P: MpvMarker + 'parent
-{
     #[inline]
     /// Load a configuration file. The path has to be absolute, and a file.
     fn load_config(&self, path: &Path) -> Result<(), Error> {
-        if path.is_relative() {
-            Err(Error::ExpectedAbsolute)
-        } else if !path.is_file() {
-            Err(Error::ExpectedFile)
-        } else {
-            let file = CString::new(path.to_str().unwrap()).unwrap().into_raw();
-            let ret = mpv_err((), unsafe { mpv_load_config_file(self.ctx(), file) });
-            unsafe { CString::from_raw(file) };
-            ret
-        }
+        let file = CString::new(path.to_str().unwrap()).unwrap().into_raw();
+        let ret = mpv_err((), unsafe { mpv_load_config_file(self.ctx(), file) });
+        unsafe { CString::from_raw(file) };
+        ret
     }
 
     #[inline]
     #[cfg(feature="events")]
     /// Observe given `Event`s via an `EventIter`.
-    fn observe_events(&self, events: &[Event]) -> Result<EventIter<P>, Error> {
-            let mut observe = self.ev_to_observe().lock();
-            let mut properties = self.ev_to_observe_properties().lock();
+    fn observe_events(&self, events: &[Event]) -> Result<EventIter<Self>, Error> where Self: Sized {
+        let mut observe = self.ev_to_observe().lock();
+        let mut properties = self.ev_to_observe_properties().lock();
 
-            let len = events.len();
-            let mut ids = Vec::with_capacity(len);
-            let mut evs = Vec::with_capacity(len);
-            let mut props = Vec::with_capacity(len);
-            for elem in events {
-                if let Event::PropertyChange(ref v) = *elem {
-                    if properties.contains_key(&v.0) {
-                        return Err(Error::AlreadyObserved(Rc::new(elem.clone())));
-                    } else {
-                        mpv_err((), unsafe { mpv_request_event(self.ctx(), elem.as_id(), 1) })?;
-                        props.push(v);
-                        ids.push(elem.as_id());
-                        evs.push(elem.clone());
-                    }
+        let len = events.len();
+        // FIXME: This can be alloca'ed once the RFC is implemented
+        let mut ids = Vec::with_capacity(len);
+        let mut evs = Vec::with_capacity(len);
+        let mut props = Vec::with_capacity(len);
+        for elem in events {
+            if let Event::PropertyChange(ref v) = *elem {
+                if properties.contains_key(&v.0) {
+                    return Err(Error::AlreadyObserved(Rc::new(elem.clone())));
                 } else {
-                    for id in &*observe {
-                        if elem.as_id() == id.as_id() {
-                            return Err(Error::AlreadyObserved(Rc::new(elem.clone())));
-                        }
-                    }
-
-                    if let Event::LogMessage(ref v) = *elem {
-                        let min_level = CString::new(v.log_level.as_string()).unwrap();
-                        mpv_err((), unsafe {
-                            mpv_request_log_messages(self.ctx(), min_level.as_ptr())
-                        })?;
-                    }
-
                     mpv_err((), unsafe { mpv_request_event(self.ctx(), elem.as_id(), 1) })?;
+                    props.push(v);
                     ids.push(elem.as_id());
                     evs.push(elem.clone());
                 }
-            }
-
-            let mut props_ins = Vec::with_capacity(len);
-            let start_id = properties.len();
-            for (i, elem) in props.iter().enumerate() {
-                let name = CString::new(&elem.0[..]).unwrap();
-                let err = mpv_err((),
-                                  unsafe {
-                                    mpv_observe_property(self.ctx(),
-                                                         (start_id + i) as _,
-                                                         name.as_ptr(),
-                                                         elem.1.format() as _)
-                                  });
-                if err.is_err() {
-                    for (_, id) in props_ins {
-                        // Ignore errors.
-                        unsafe { mpv_unobserve_property(self.ctx(), id) };
+            } else {
+                for id in &*observe {
+                    if elem.as_id() == id.as_id() {
+                        return Err(Error::AlreadyObserved(Rc::new(elem.clone())));
                     }
-                    return Err(err.unwrap_err());
                 }
-                props_ins.push((elem.0.clone(), (start_id + i) as _));
-            }
-            observe.extend(evs.clone());
-            properties.extend(props_ins);
 
-            Ok(EventIter {
-                ctx: self.ctx(),
-                first_iteration: true,
-                notification: self.ev_iter_notification(),
-                all_to_observe: self.ev_to_observe(),
-                all_to_observe_properties: self.ev_to_observe_properties(),
-                local_to_observe: evs,
-                all_observed: self.ev_observed(),
-                _does_not_outlive: PhantomData::<&Self>,
-            })
+                if let Event::LogMessage(ref v) = *elem {
+                    let min_level = CString::new(v.log_level.as_string()).unwrap();
+                    mpv_err((), unsafe {
+                        mpv_request_log_messages(self.ctx(), min_level.as_ptr())
+                    })?;
+                }
+
+                mpv_err((), unsafe { mpv_request_event(self.ctx(), elem.as_id(), 1) })?;
+                ids.push(elem.as_id());
+                evs.push(elem.clone());
+            }
+        }
+
+        let mut props_ins = Vec::with_capacity(len);
+        let start_id = properties.len();
+        for (i, elem) in props.iter().enumerate() {
+            let name = CString::new(&elem.0[..]).unwrap();
+            let err = mpv_err((),
+                              unsafe {
+                                mpv_observe_property(self.ctx(),
+                                                     (start_id + i) as _,
+                                                     name.as_ptr(),
+                                                     elem.1.format() as _)
+                              });
+            if err.is_err() {
+                for (_, id) in props_ins {
+                    // Ignore errors.
+                    unsafe { mpv_unobserve_property(self.ctx(), id) };
+                }
+                return Err(err.unwrap_err());
+            }
+            props_ins.push((elem.0.clone(), (start_id + i) as _));
+        }
+        observe.extend(evs.clone());
+        properties.extend(props_ins);
+
+        Ok(EventIter {
+            ctx: self.ctx(),
+            first_iteration: true,
+            notification: self.ev_iter_notification(),
+            all_to_observe: self.ev_to_observe(),
+            all_to_observe_properties: self.ev_to_observe_properties(),
+            local_to_observe: evs,
+            all_observed: self.ev_observed(),
+            _does_not_outlive: PhantomData::<&Self>,
+        })
     }
 
     #[inline]
     /// Send a command to the `Mpv` instance. This uses `mpv_command_string` internally,
     /// so that the syntax is the same as described in the [manual for the input.conf]
     /// (https://mpv.io/manual/master/#list-of-input-commands).
+    ///
+    /// Note that you may have to escape strings with `""` when they contain spaces.
     ///
     /// # Safety
     /// This method is unsafe because arbitrary code may be executed resulting in UB and more.
@@ -829,7 +696,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     #[inline]
     /// Set the value of a property.
     fn set_property<T: Into<Data>>(&self, name: &str, data: T) -> Result<(), Error> {
-        internal_set_property(self.ctx(), name, data)
+        mpv_err((), internal_set_property(self.ctx(), name, data))
     }
 
     #[inline]
@@ -891,23 +758,13 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     /// Cycle through a given property. `up` specifies direction. On
     /// overflow, set the property back to the minimum, on underflow set it to the maximum.
     fn cycle_property(&self, property: &str, up: bool) -> Result<(), Error> {
-        unsafe {
-            self.command("cycle",
-                                       &[property,
-                                         if up {
-                                             "up"
-                                         } else {
-                                             "down"
-                                         }])
-        }
+        unsafe { self.command("cycle", &[property, if up { "up" } else { "down" }]) }
     }
 
     #[inline]
     /// Multiply any property with any positive factor.
     fn multiply_property(&self, property: &str, factor: usize) -> Result<(), Error> {
-        unsafe {
-            self.command("multiply", &[property, &format!("{}", factor)])
-        }
+        unsafe { self.command("multiply", &[property, &format!("{}", factor)]) }
     }
 
     #[inline]
@@ -923,6 +780,9 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     }
 
     // --- Convenience command functions ---
+    //
+
+    // --- Seek functions ---
     //
 
     #[inline]
@@ -996,6 +856,9 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         unsafe { self.command("frame-back-step", &[]) }
     }
 
+    // --- Screenshot functions ---
+    //
+
     #[inline]
     /// "Save the video image, in its original resolution, and with subtitles.
     /// Some video outputs may still include the OSD in the output under certain circumstances.".
@@ -1010,7 +873,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         if path.is_none() {
             unsafe { self.command("screenshot", &["subtitles"]) }
         } else {
-            unsafe { self.command("screenshot", &[path.unwrap(), "subtitles"]) }
+            unsafe { self.command("screenshot", &[&format!("\"{}\"", path.unwrap()), "subtitles"]) }
         }        
     }
 
@@ -1022,7 +885,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         if path.is_none() {
             unsafe { self.command("screenshot", &["video"]) }
         } else {
-            unsafe { self.command("screenshot", &[path.unwrap(), "video"]) }
+            unsafe { self.command("screenshot", &[&format!("\"{}\"", path.unwrap()), "video"]) }
         }  
     }
 
@@ -1035,9 +898,12 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         if path.is_none() {
             unsafe { self.command("screenshot", &["window"]) }
         } else {
-            unsafe { self.command("screenshot", &[path.unwrap(), "window"]) }
+            unsafe { self.command("screenshot", &[&format!("\"{}\"", path.unwrap()), "window"]) }
         }  
     }
+
+    // --- Playlist functions ---
+    //
 
     #[inline]
     /// Play the next item of the current playlist.
@@ -1088,7 +954,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
             };
 
             let ret = unsafe {
-                self.command("loadfile", &[elem.0, elem.1.val(), args])
+                self.command("loadfile", &[&format!("\"{}\"", elem.0), elem.1.val(), args])
             };
 
             if ret.is_err() {
@@ -1152,6 +1018,9 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         }
     }
 
+    // --- Subtitle functions ---
+    //
+
     #[inline]
     /// Add and select the subtitle immediately.
     fn subtitle_add_select<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'b str>>>(&self, path: &str, title: A, lang: B)
@@ -1160,23 +1029,23 @@ impl<'parent, P> MpvInstance<'parent, P> for P
         match (title.into(), lang.into()) {
             (None, None) => {
                 unsafe {
-                    self.command("sub-add", &[path, "select"])
+                    self.command("sub-add", &[&format!("\"{}\"", path), "select"])
                 }
             }
             (Some(t), None) => {
                 unsafe {
-                    self.command("sub-add", &[path, "select", t])
+                    self.command("sub-add", &[&format!("\"{}\"", path), "select", t])
                 }
             }
             (None, Some(l)) => {
                 // TODO: This version is probably not supported (lang depends on title) -> throw err
                 unsafe {
-                    self.command("sub-add", &[path, "select", "", l])
+                    self.command("sub-add", &[&format!("\"{}\"", path), "select", "", l])
                 }   
             }
             (Some(t), Some(l)) => {
                 unsafe {
-                    self.command("sub-add", &[path, "select", t, l])
+                    self.command("sub-add", &[&format!("\"{}\"", path), "select", t, l])
                 }   
             }
         }
@@ -1185,29 +1054,29 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     #[inline]
     /// See `AddSelect`. "Don't select the subtitle.
     /// (Or in some special situations, let the default stream selection mechanism decide.)".
+    ///
+    /// Returns an `Error::InvalidArgument` if a language, but not a title, was provided.
     fn subtitle_add_auto<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'b str>>>(&self, path: &str, title: A, lang: B)
         -> Result<(), Error>
     {
         match (title.into(), lang.into()) {
             (None, None) => {
                 unsafe {
-                    self.command("sub-add", &[path, "auto"])
+                    self.command("sub-add", &[&format!("\"{}\"", path), "auto"])
                 }
             }
             (Some(t), None) => {
                 unsafe {
-                    self.command("sub-add", &[path, "auto", t])
+                    self.command("sub-add", &[&format!("\"{}\"", path), "auto", t])
                 }
-            }
-            (None, Some(l)) => {
-                unsafe {
-                    self.command("sub-add", &[path, "auto", "", l])
-                }   
             }
             (Some(t), Some(l)) => {
                 unsafe {
-                    self.command("sub-add", &[path, "auto", t, l])
-                }   
+                    self.command("sub-add", &[&format!("\"{}\"", path), "auto", t, l])
+                }
+            }
+            (None, Some(_)) => {
+                Err(Error::InvalidArgument)
             }
         }
     }
@@ -1219,7 +1088,7 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     /// these changes won't be reflected.)".
     fn subtitle_add_cached(&self, path: &str) -> Result<(), Error> {
         unsafe {
-            self.command("sub-add", &[path, "cached"])
+            self.command("sub-add", &[&format!("\"{}\"", path), "cached"])
         }
     }
 
@@ -1284,24 +1153,74 @@ impl<'parent, P> MpvInstance<'parent, P> for P
     }
 }
 
-fn internal_set_property<T: Into<Data>>(ctx: *mut MpvHandle, name: &str, data: T) 
-    -> Result<(), Error>
+impl<T, U> MpvInstance for Parent<T, U> {
+    fn ctx(&self) -> *mut MpvHandle {
+        self.ctx
+    }
+    #[cfg(feature="events")]
+    fn ev_iter_notification(&self) -> *mut (Mutex<bool>, Condvar) {
+        self.ev_iter_notification
+    }
+    #[cfg(feature="events")]
+    fn ev_to_observe(&self) -> &Mutex<Vec<Event>> {
+        &self.ev_to_observe
+    }
+    #[cfg(feature="events")]
+    fn ev_to_observe_properties(&self) -> &Mutex<HashMap<String, libc::uint64_t>> {
+        &self.ev_to_observe_properties
+    }
+    #[cfg(feature="events")]
+    fn ev_observed(&self) -> &Mutex<Vec<InnerEvent>> {
+        &self.ev_observed
+    }
+}
+
+impl<'parent, T, U> MpvInstance for Client<'parent, T, U> {
+    fn ctx(&self) -> *mut MpvHandle {
+        self.ctx
+    }
+    #[cfg(feature="events")]
+    fn ev_iter_notification(&self) -> *mut (Mutex<bool>, Condvar) {
+        self.ev_iter_notification
+    }
+    #[cfg(feature="events")]
+    fn ev_to_observe(&self) -> &Mutex<Vec<Event>> {
+        &self.ev_to_observe
+    }
+    #[cfg(feature="events")]
+    fn ev_to_observe_properties(&self) -> &Mutex<HashMap<String, libc::uint64_t>> {
+        &self.ev_to_observe_properties
+    }
+    #[cfg(feature="events")]
+    fn ev_observed(&self) -> &Mutex<Vec<InnerEvent>> {
+        &self.ev_observed
+    }
+}
+
+#[inline]
+/// Only relevant to potential implementors of MpvInstance.
+fn internal_set_property<A: Into<Data>>(ctx: *mut MpvHandle, name: &str, data: A) 
+    -> libc::c_int
 {
     let name = CString::new(name).unwrap().into_raw();
     let mut data = data.into();
     let format = data.format().as_val();
     let ret = match data {
-        Data::OsdString(_) => Err(Error::OsdStringWrite),
-        Data::String(ref v) => {
+        Data::String(ref v) | Data::OsdString(ref v) => {
             let data = CString::new(v.as_bytes()).unwrap();
             let ptr: *mut _ = &mut data.as_ptr();
 
-            mpv_err((), unsafe { mpv_set_property(ctx, name, format, ptr as *mut _) })
+            unsafe { mpv_set_property(ctx, name, format, ptr as *mut _) }
         }
         _ => {
-            let data = data_ptr!(&mut data);
+        let data = match data {
+            Data::Flag(ref mut v) => v as *mut bool as *mut libc::c_void,
+            Data::Int64(ref mut v) => v as *mut libc::int64_t as *mut libc::c_void,
+            Data::Double(ref mut v) => v as *mut libc::c_double as *mut libc::c_void,
+            _ => unreachable!(),
+        };
 
-            mpv_err((), unsafe { mpv_set_property(ctx, name, format, data) })
+            unsafe { mpv_set_property(ctx, name, format, data) }
         }
     };
     unsafe { CString::from_raw(name) };
