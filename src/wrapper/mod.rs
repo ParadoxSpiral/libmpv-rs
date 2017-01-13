@@ -568,17 +568,23 @@ impl<'parent, T, U> Client<'parent, T, U> {
 /// Core functionality that is supported by both `Client` and `Parent`.
 /// See trait implementation for documentation.
 pub trait MpvInstance {
+    #[doc(hidden)]
     // FIXME: These can go once `Associated Fields` lands
     fn ctx(&self) -> *mut MpvHandle;
     #[cfg(feature="events")]
+    #[cfg_attr(feature="events", doc(hidden))]
     fn ev_iter_notification(&self) -> *mut (Mutex<bool>, Condvar);
     #[cfg(feature="events")]
+    #[cfg_attr(feature="events", doc(hidden))]
     fn ev_to_observe(&self) -> &Mutex<Vec<Event>>;
     #[cfg(feature="events")]
+    #[cfg_attr(feature="events", doc(hidden))]
     fn ev_to_observe_properties(&self) -> &Mutex<HashMap<String, libc::uint64_t>>;
     #[cfg(feature="events")]
+    #[cfg_attr(feature="events", doc(hidden))]
     fn ev_observed(&self) -> &Mutex<Vec<InnerEvent>>;
     #[cfg(feature="events")]
+    #[cfg_attr(feature="events", doc(hidden))]
     unsafe fn drop_ev_iter(&mut self) {
         Box::from_raw(self.ev_iter_notification());
     }
@@ -1198,7 +1204,6 @@ impl<'parent, T, U> MpvInstance for Client<'parent, T, U> {
 }
 
 #[inline]
-/// Only relevant to potential implementors of MpvInstance.
 fn internal_set_property<A: Into<Data>>(ctx: *mut MpvHandle, name: &str, data: A) 
     -> libc::c_int
 {
