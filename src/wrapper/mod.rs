@@ -357,8 +357,8 @@ impl<T, U> Parent<T, U> {
 
     fn internal_new(opts: &[(&str, Data)]) -> Result<Parent<T, U>, Error> {
         SET_LC_NUMERIC.call_once(|| {
-            let c = CString::new("C").unwrap();
-            unsafe { libc::setlocale(libc::LC_NUMERIC, c.as_ptr()) };
+            let c = &*b"c0";
+            unsafe { libc::setlocale(libc::LC_NUMERIC, c.as_ptr() as _) };
         });
 
         let api_version = unsafe { mpv_client_api_version() };
@@ -875,24 +875,22 @@ pub trait MpvInstance {
     /// Like all input command parameters, the filename is subject to property expansion as
     /// described in [Property Expansion](https://mpv.io/manual/master/#property-expansion)."
     fn screenshot_subtitles<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<(), Error> {
-        let path = path.into();
-        if path.is_none() {
-            unsafe { self.command("screenshot", &["subtitles"]) }
+        if let Some(path) = path.into() {
+            unsafe { self.command("screenshot", &[&format!("\"{}\"", path), "subtitles"]) }
         } else {
-            unsafe { self.command("screenshot", &[&format!("\"{}\"", path.unwrap()), "subtitles"]) }
-        }        
+            unsafe { self.command("screenshot", &["subtitles"]) }
+        }
     }
 
     #[inline]
     /// "Like subtitles, but typically without OSD or subtitles. The exact behavior depends on the selected
     /// video output."
     fn screenshot_video<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<(), Error> {
-        let path = path.into();
-        if path.is_none() {
-            unsafe { self.command("screenshot", &["video"]) }
+        if let Some(path) = path.into() {
+            unsafe { self.command("screenshot", &[&format!("\"{}\"", path), "video"]) }
         } else {
-            unsafe { self.command("screenshot", &[&format!("\"{}\"", path.unwrap()), "video"]) }
-        }  
+            unsafe { self.command("screenshot", &["video"]) }
+        }
     }
 
     #[inline]
@@ -900,12 +898,11 @@ pub trait MpvInstance {
     /// behaviour depends on the selected video output, and if no support is available,
     /// this will act like video.".
     fn screenshot_window<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<(), Error> {
-        let path = path.into();
-        if path.is_none() {
-            unsafe { self.command("screenshot", &["window"]) }
+        if let Some(path) = path.into() {
+            unsafe { self.command("screenshot", &[&format!("\"{}\"", path), "window"]) }
         } else {
-            unsafe { self.command("screenshot", &[&format!("\"{}\"", path.unwrap()), "window"]) }
-        }  
+            unsafe { self.command("screenshot", &["window"]) }
+        }
     }
 
     // --- Playlist functions ---
@@ -953,11 +950,7 @@ pub trait MpvInstance {
     {
         for (i, elem) in files.iter().enumerate() {
             let opts = elem.2.clone().into();
-            let args = if opts.is_some() {
-                opts.unwrap()
-            } else {
-                ""
-            };
+            let args = opts.unwrap_or("");
 
             let ret = unsafe {
                 self.command("loadfile", &[&format!("\"{}\"", elem.0), elem.1.val(), args])
@@ -1102,10 +1095,9 @@ pub trait MpvInstance {
     /// "Remove the given subtitle track. If the id argument is missing, remove the current
     /// track. (Works on external subtitle files only.)"
     fn subtitle_remove<A: Into<Option<usize>>>(&self, index: A) -> Result<(), Error> {
-        let index = index.into();
-        if index.is_some() {
+        if let Some(idx) = index.into() {
             unsafe {
-                self.command("sub-remove", &[&format!("{}", index.unwrap())])
+                self.command("sub-remove", &[&format!("{}", idx)])
             }
         } else {
             unsafe {
@@ -1118,10 +1110,9 @@ pub trait MpvInstance {
     /// "Reload the given subtitle track. If the id argument is missing, reload the current
     /// track. (Works on external subtitle files only.)"
     fn subtitle_reload<A: Into<Option<usize>>>(&self, index: A) -> Result<(), Error> {
-        let index = index.into();
-        if index.is_some() {
+        if let Some(idx) = index.into() {
             unsafe {
-                self.command("sub-reload", &[&format!("{}", index.unwrap())])
+                self.command("sub-reload", &[&format!("{}", idx)])
             }
         } else {
             unsafe {
