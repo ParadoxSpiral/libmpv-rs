@@ -26,7 +26,7 @@ use super::super::raw::*;
 
 use std::collections::HashMap;
 use std::marker::PhantomData;
-use std::ffi::{CStr, CString};
+use std::ffi::CStr;
 use std::intrinsics;
 
 pub(crate) unsafe extern "C" fn event_callback(d: *mut libc::c_void) {
@@ -170,11 +170,11 @@ impl<'parent, P> Drop for EventIter<'parent, P>
         let mut all_observed = self.all_observed.lock();
         let mut all_to_observe_properties = self.all_to_observe_properties.lock();
 
-        // Returns true if outer and inner event match, in the case of the event
-        // being a property unobserve it.
+        // Returns true if outer and inner event match, if so, the event is unobserved.
         let mut compare_ev_unobserve = |outer_ev: &Event, inner_ev: &Event| {
             if let Event::PropertyChange(ref outer_prop) = *outer_ev {
                 if let Event::PropertyChange(ref inner_prop) = *inner_ev {
+                    // `.0` is the name of the property.
                     if outer_prop.0 == inner_prop.0 {
                         unsafe {
                             mpv_unobserve_property(self.ctx, all_to_observe_properties.remove(
@@ -184,9 +184,10 @@ impl<'parent, P> Drop for EventIter<'parent, P>
                     }
                 } else if MpvEventId::LogMessage == outer_ev.as_id() &&
                    outer_ev.as_id() == inner_ev.as_id() {
-                    let min_level = CString::new(MpvLogLevel::None.as_string()).unwrap();
+                    debug_assert!(MpvLogLevel::None.as_str() == "no");
+                    let min_level = &*b"no0";
                     mpv_err((),
-                            unsafe { mpv_request_log_messages(self.ctx, min_level.as_ptr()) })
+                            unsafe { mpv_request_log_messages(self.ctx, min_level.as_ptr() as _) })
                         .unwrap();
                         return true;
                 }
@@ -330,7 +331,7 @@ impl LogMessage {
 }
 
 impl MpvLogLevel {
-    pub(crate) fn as_string(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         match *self {
             MpvLogLevel::None => "no",
             MpvLogLevel::Fatal => "fatal",

@@ -44,7 +44,6 @@ use std::path::Path;
 use std::ptr;
 use std::rc::Rc;
 use std::time::Duration;
-
 #[cfg(unix)]
 use std::ffi::OsStr;
 #[cfg(unix)]
@@ -377,16 +376,14 @@ impl<T, U> Parent<T, U> {
             destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::TrackSwitched, 0));
             destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::Pause, 0));
             destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::Unpause, 0));
-            destroy_on_err!(ctx,
-                            mpv_request_event(ctx, MpvEventId::ScriptInputDispatch, 0));
+            destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::ScriptInputDispatch, 0));
             destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::MetadataUpdate, 0));
             destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::ChapterChange, 0));
         }
 
         #[cfg(feature="events")]
         let (ev_iter_notification, ev_to_observe, ev_to_observe_properties, ev_observed) = {
-            let ev_iter_notification = Box::into_raw(Box::new((Mutex::new(false),
-                                                               Condvar::new())));
+            let ev_iter_notification = Box::into_raw(Box::new((Mutex::new(false), Condvar::new())));
             unsafe {
                 mpv_set_wakeup_callback(ctx,
                                         event_callback,
@@ -629,7 +626,7 @@ pub trait MpvInstance {
                 }
 
                 if let Event::LogMessage(ref v) = *elem {
-                    let min_level = CString::new(v.log_level.as_string()).unwrap();
+                    let min_level = CString::new(v.log_level.as_str()).unwrap();
                     mpv_err((), unsafe {
                         mpv_request_log_messages(self.ctx(), min_level.as_ptr())
                     })?;
@@ -753,6 +750,7 @@ pub trait MpvInstance {
     // --- Convenience property functions ---
     //
     
+    // TODO: All these format!s should be alloca!ed in the future
 
     #[inline]
     /// Add -or subtract- any value from a property. Over/underflow clamps to max/min.

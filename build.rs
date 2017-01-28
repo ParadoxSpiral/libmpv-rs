@@ -83,7 +83,7 @@ fn main() {
 			// `target` (in cfg) doesn't really mean target. It means target(host) of build script,
 			// which is a bit confusing because it means the actual `--target` everywhere else.
 			#[cfg(target_pointer_width = "64")] {
-				if (target.contains("x86") && ! target.contains("x86_64")) || target.contains("i686") {
+				if !target.contains("x86_64") {
 					panic!("Cross-compiling to different arch not yet supported");
 				}
 			}
@@ -127,7 +127,7 @@ fn main() {
 
 				mpv_repo.reset(&mpv_repo.find_object(Oid::from_str(MPV_COMMIT).unwrap(),
 													 Some(ObjectType::Commit)).unwrap(),
-													 ResetType::Soft,
+													 ResetType::Hard,
 													 None).unwrap();
 			}
 
