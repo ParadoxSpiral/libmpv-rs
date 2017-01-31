@@ -564,7 +564,7 @@ impl<'parent, T, U> Client<'parent, T, U> {
 #[allow(missing_docs)]
 /// Core functionality that is supported by both `Client` and `Parent`.
 /// See trait implementation for documentation.
-pub trait MpvInstance {
+pub trait MpvInstance: Sized {
     #[doc(hidden)]
     // FIXME: These can go once `Associated Fields` lands
     fn ctx(&self) -> *mut MpvHandle;
@@ -599,7 +599,7 @@ pub trait MpvInstance {
     #[inline]
     #[cfg(feature="events")]
     /// Observe given `Event`s via an `EventIter`.
-    fn observe_events(&self, events: &[Event]) -> Result<EventIter<Self>, Error> where Self: Sized {
+    fn observe_events(&self, events: &[Event]) -> Result<EventIter<Self>, Error> {
         let mut observe = self.ev_to_observe().lock();
         let mut properties = self.ev_to_observe_properties().lock();
 
@@ -943,6 +943,15 @@ pub trait MpvInstance {
     #[inline]
     /// The given files are loaded sequentially, returning the index of the current file
     /// and the error in case of an error. [More information.](https://mpv.io/manual/master/#command-interface-[replace|append|append-play)
+    ///
+    /// # Arguments
+    /// The tuple consists of:
+    ///     * a string slice - the path
+    ///     * a `FileState` - how the file will be opened
+    ///     * an optional string slice - any additional options that will be set for this file
+    ///
+    /// # Peculiarities
+    /// `loadfile` is kind of asynchronous, any additional option is set during loading, [specifics](https://github.com/mpv-player/mpv/issues/4089).
     fn playlist_load_files<'a, A>(&self, files: &[(&str, FileState, A)])
         -> Result<(), (usize, Error)> where A: Into<Option<&'a str>> + Clone
     {

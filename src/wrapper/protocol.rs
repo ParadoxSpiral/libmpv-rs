@@ -19,6 +19,7 @@
 //! This abstraction allows registering custom protocols, which then can be used via 
 //! `PlaylistOp::Loadfiles`.
 
+use alloc::heap;
 use libc;
 
 use super::*;
@@ -170,7 +171,7 @@ impl<T, U> Protocol<T, U> {
 					  -> Protocol<T, U>
 	{
 		let data = Box::into_raw(Box::new(ProtocolData {
-								cookie: libc::malloc(mem::size_of::<T>()) as *mut T,
+								cookie:  heap::allocate(mem::size_of::<T>(), mem::align_of::<T>())  as *mut T,
 								user_data: user_data,
 
 								open_fn: open_fn,

@@ -96,7 +96,7 @@ impl Event {
 
 impl MpvEvent {
     // WARNING: This ignores the error value, as it is only used for asynchronous calls
-    fn as_event(&self) -> Event {
+    fn as_owned(&self) -> Event {
         debug_assert!(mpv_err((), self.error).is_ok());
         match self.event_id {
             MpvEventId::LogMessage => Event::LogMessage(LogMessage::from_raw(self.data)),
@@ -243,7 +243,7 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
                     }
                     for local_ob_ev in &self.local_to_observe {
                         if ev_id == &local_ob_ev.as_id() {
-                            ret_events.push(event.as_event());
+                            ret_events.push(event.as_owned());
                             continue 'events;
                         }
                     }
