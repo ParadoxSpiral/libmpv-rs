@@ -162,59 +162,59 @@ impl Data {
     }
 }
 
-impl Into<Data> for String {
+impl From<String> for Data {
     #[inline]
-    fn into(self) -> Data {
-        Data::String(self)
+    fn from(other: String) -> Data {
+        Data::String(other)
     }
 }
 
-impl<'a> Into<Data> for &'a str {
+impl<'a> From<&'a str> for Data {
     #[inline]
-    fn into(self) -> Data {
-        Data::String(self.to_owned())
+    fn from(other: &'a str) -> Data {
+        Data::String(other.to_owned())
     }
 }
 
-impl Into<Data> for bool {
+impl From<bool> for Data {
     #[inline]
-    fn into(self) -> Data {
-        Data::Flag(self)
+    fn from(other: bool) -> Data {
+        Data::Flag(other)
     }
 }
 
-impl Into<Data> for i32 {
+impl From<i32> for Data {
     #[inline]
-    fn into(self) -> Data {
-        Data::Int64(self as _)
+    fn from(other: i32) -> Data {
+        Data::Int64(other as _)
     }
 }
 
-impl Into<Data> for i64 {
+impl From<i64> for Data {
     #[inline]
-    fn into(self) -> Data {
-        Data::Int64(self as _)
+    fn from(other: i64) -> Data {
+        Data::Int64(other)
     }
 }
 
-impl Into<Data> for u32 {
+impl From<u32> for Data {
     #[inline]
-    fn into(self) -> Data {
-        Data::Int64(self as _)
+    fn from(other: u32) -> Data {
+        Data::Int64(other as _)
     }
 }
 
-impl Into<Data> for f32 {
+impl From<f32> for Data {
     #[inline]
-    fn into(self) -> Data {
-        Data::Double(self as _)
+    fn from(other: f32) -> Data {
+        Data::Double(other as _)
     }
 }
 
-impl Into<Data> for f64 {
+impl From<f64> for Data {
     #[inline]
-    fn into(self) -> Data {
-        Data::Double(self as _)
+    fn from(other: f64) -> Data {
+        Data::Double(other)
     }
 }
 
