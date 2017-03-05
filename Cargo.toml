@@ -32,8 +32,8 @@ parking_lot = {version = "0.3", features = ['nightly']}
 enum_primitive = "0.1"
 
 [build-dependencies]
-hyper = "0.9"
-git2 = "0.5"
+hyper = "0.10"
+git2 = "0.6"
 
 [features]
 default = ["events", "custom_protocol"]

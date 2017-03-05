@@ -40,7 +40,6 @@ use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
 use std::mem;
-use std::path::Path;
 use std::ptr;
 use std::rc::Rc;
 use std::time::Duration;
@@ -448,6 +447,9 @@ impl<T, U> Parent<T, U> {
     #[inline]
     /// Create a client with `name`, that is connected to the core of `self`, but has its own queue
     /// for API events and such.
+    ///
+    /// # Panics
+    /// Panics if `name` contains a 0 byte.
     pub fn new_client(&self, name: &str) -> Result<Client<T, U>, Error> {
         let ctx = unsafe {
             let name = CString::new(name).unwrap();
@@ -589,8 +591,11 @@ pub trait MpvInstance: Sized {
 
     #[inline]
     /// Load a configuration file. The path has to be absolute, and a file.
-    fn load_config(&self, path: &Path) -> Result<(), Error> {
-        let file = CString::new(path.to_str().unwrap()).unwrap().into_raw();
+    ///
+    /// # Panics
+    /// Panics if `path` contains a 0 byte.
+    fn load_config(&self, path: &str) -> Result<(), Error> {
+        let file = CString::new(path).unwrap().into_raw();
         let ret = mpv_err((), unsafe { mpv_load_config_file(self.ctx(), file) });
         unsafe { CString::from_raw(file) };
         ret
@@ -682,6 +687,9 @@ pub trait MpvInstance: Sized {
     ///
     /// # Safety
     /// This method is unsafe because arbitrary code may be executed resulting in UB and more.
+    ///
+    /// # Panics
+    /// Panics if any arg contains a NUL byte.
     unsafe fn command(&self, name: &str, args: &[&str]) -> Result<(), Error> {
         let mut cmd = String::with_capacity(name.len() + args.iter()
                                                              .fold(0, |acc, e| acc + e.len() + 1));
@@ -698,12 +706,18 @@ pub trait MpvInstance: Sized {
 
     #[inline]
     /// Set the value of a property.
+    ///
+    /// # Panics
+    /// Panics if `name` contains a 0 byte.
     fn set_property<T: Into<Data>>(&self, name: &str, data: T) -> Result<(), Error> {
         mpv_err((), internal_set_property(self.ctx(), name, data))
     }
 
     #[inline]
     /// Get the value of a property.
+    ///
+    /// # Panics
+    /// Panics if `name` contains a 0 byte.
     fn get_property(&self, name: &str, format: Format) -> Result<Data, Error> {
         let name = CString::new(name).unwrap();
         match format {
