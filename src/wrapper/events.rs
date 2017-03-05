@@ -47,7 +47,7 @@ fn property_from_raw(raw: *mut libc::c_void) -> (String, Data) {
 /// Designed for internal use.
 pub struct InnerEvent {
     event: Event,
-    err: Option<Error>,
+    err: Option<MpvError>,
 }
 
 impl InnerEvent {
@@ -134,9 +134,9 @@ impl MpvEvent {
                 _ => unreachable!(),
             },
             err: {
-                let err = mpv_err((), self.error);
-                if err.is_err() {
-                    Some(err.unwrap_err())
+                let err = MpvError::from_i32(self.error).unwrap();
+                if err != MpvError::Success {
+                    Some(err)
                 } else {
                     None
                 }
@@ -186,10 +186,8 @@ impl<'parent, P> Drop for EventIter<'parent, P>
                    outer_ev.as_id() == inner_ev.as_id() {
                     debug_assert!(MpvLogLevel::None.as_str() == "no");
                     let min_level = &*b"no0";
-                    mpv_err((),
-                            unsafe { mpv_request_log_messages(self.ctx, min_level.as_ptr() as _) })
-                        .unwrap();
-                        return true;
+                    unsafe { mpv_request_log_messages(self.ctx, min_level.as_ptr() as _) };
+                    return true;
                 }
             } else if outer_ev.as_id() == inner_ev.as_id() {
                 unsafe { mpv_request_event(self.ctx, inner_ev.as_id(), 0) };
@@ -382,12 +380,12 @@ pub enum EndFileReason {
     Redirect = 5,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 #[allow(missing_docs)]
 /// The data of an `Event::EndFile`. `error` is `Some` if `EndFileReason` is `Error`.
 pub struct EndFile {
     pub reason: EndFileReason,
-    pub error: Option<Error>,
+    pub error: Option<MpvError>,
 }
 
 impl EndFile {
@@ -403,11 +401,11 @@ impl EndFile {
 
             },
             error: {
-                let err = mpv_err((), raw.error);
-                if err.is_ok() {
-                    None
+                let err = MpvError::from_i32(raw.error).unwrap();
+                if err != MpvError::Success {
+                    Some(err)
                 } else {
-                    Some(err.unwrap_err())
+                    None
                 }
             },
         }

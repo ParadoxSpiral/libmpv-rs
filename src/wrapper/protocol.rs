@@ -187,8 +187,8 @@ impl<T, U> Protocol<T, U> {
 		}
 	}
 
-	pub(crate) fn register(&self, ctx: *mut MpvHandle) -> Result<(), Error> {
-		let name = CString::new(&self.name[..]).unwrap();
+	pub(crate) fn register(&self, ctx: *mut MpvHandle) -> Result<()> {
+		let name = CString::new(&self.name[..])?;
 		unsafe {
 			mpv_err((), mpv_stream_cb_add_ro(ctx,
 											 name.as_ptr(),

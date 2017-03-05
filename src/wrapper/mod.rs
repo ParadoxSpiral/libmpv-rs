@@ -24,10 +24,47 @@ pub mod protocol;
 /// Contains abstractions to use the opengl callback interface.
 pub mod opengl_cb;
 
+mod errors {
+    #![allow(missing_docs)]
+    use super::events::Event;
+    use super::super::raw::MpvError;
+    use std::ffi::NulError;
+
+    error_chain!{
+        foreign_links {
+            Nul(NulError);
+            Native(MpvError);
+        }
+
+        errors {
+            Loadfiles(index: usize, error: Box<Error>) {
+                description("Command failed during a `loadfiles` call")
+            }
+            #[cfg(feature="events")]
+            AlreadyObserved(e: Box<Event>) {
+                description("This event is already being observed by another `EventIter`.")
+            }
+            InvalidArgument {
+                description("An invalid argument was passed to an mpv API")
+            }
+            VersionMismatch(linked: u32, loaded: u32) {
+                description("The library was compiled against a different mpv version than what is present on the system.")
+            }
+            CallbackExists {
+                description("An opengl callback has already been registered.")
+            }
+            Null {
+                description("Mpv returned null while creating the core.")
+            }
+        }
+    }
+}
+
 use enum_primitive::FromPrimitive;
 use libc;
 use parking_lot::{Condvar, Mutex, MutexGuard, Once, ONCE_INIT};
 
+pub use self::errors::*;
 use super::raw::*;
 #[cfg(feature="events")]
 use events::*;
@@ -41,7 +78,6 @@ use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
 use std::mem;
 use std::ptr;
-use std::rc::Rc;
 use std::time::Duration;
 #[cfg(unix)]
 use std::ffi::OsStr;
@@ -74,11 +110,11 @@ macro_rules! detach_on_err {
     )
 }
 
-fn mpv_err<T>(ret: T, err_val: libc::c_int) -> Result<T, Error> {
+fn mpv_err<T>(ret: T, err_val: libc::c_int) -> Result<T> {
     if err_val == 0 {
         Ok(ret)
     } else {
-        Err(Error::Mpv(MpvError::from_i32(err_val).unwrap()))
+        Err(ErrorKind::Native(MpvError::from_i32(err_val).unwrap()).into())
     }
 }
 
@@ -97,27 +133,6 @@ fn mpv_cstr_to_string(cstr: &CStr) -> String {
 fn mpv_cstr_to_string(cstr: &CStr) -> String {
     // Hope that all is well
     String::from_utf8_lossy(cstr.to_bytes()).into_owned()
-}
-
-#[derive(Clone, Debug, PartialEq)]
-/// All possible error values returned by this crate.
-pub enum Error {
-    /// An API call did not execute successfully.
-    Mpv(MpvError),
-    /// If a command failed during a `loadfiles` call, contains index of failed command and `Error`.
-    Loadfiles((usize, Rc<Error>)),
-    #[cfg(feature="events")]
-    /// This event is already being observed by another `EventIter`.
-    AlreadyObserved(Rc<Event>),
-    /// Read implementation where this was returned for specifics.
-    InvalidArgument,
-    /// The library was compiled against a different mpv version than what is present on the system.
-    /// First value is compiled version, second value is loaded version.
-    VersionMismatch(u32, u32),
-    /// An opengl callback has already been registered.
-    CallbackExists,
-    /// Mpv returned null while creating the core.
-    Null,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -343,17 +358,17 @@ impl<T, U> Parent<T, U> {
     #[inline]
     /// Create a new `Parent`.
     /// The default settings can be probed by running: `$ mpv --show-profile=libmpv`
-    pub fn new() -> Result<Parent<T, U>, Error> {
+    pub fn new() -> Result<Parent<T, U>> {
         Parent::internal_new(&[])
     }
 
     #[inline]
     /// Create a new `Parent`, with the given settings set before initialization.
-    pub fn with_options(opts: &[(&str, Data)]) -> Result<Parent<T, U>, Error> {
+    pub fn with_options(opts: &[(&str, Data)]) -> Result<Parent<T, U>> {
         Parent::internal_new(opts)
     }
 
-    fn internal_new(opts: &[(&str, Data)]) -> Result<Parent<T, U>, Error> {
+    fn internal_new(opts: &[(&str, Data)]) -> Result<Parent<T, U>> {
         SET_LC_NUMERIC.call_once(|| {
             let c = &*b"c0";
             unsafe { libc::setlocale(libc::LC_NUMERIC, c.as_ptr() as _) };
@@ -361,12 +376,12 @@ impl<T, U> Parent<T, U> {
 
         let api_version = unsafe { mpv_client_api_version() };
         if super::MPV_CLIENT_API_VERSION != api_version {
-            return Err(Error::VersionMismatch(super::MPV_CLIENT_API_VERSION, api_version));
+            return Err(ErrorKind::VersionMismatch(super::MPV_CLIENT_API_VERSION, api_version).into());
         }
 
         let ctx = unsafe { mpv_create() };
         if ctx.is_null() {
-            return Err(Error::Null);
+            return Err(ErrorKind::Null.into());
         }
 
         unsafe {
@@ -416,7 +431,12 @@ impl<T, U> Parent<T, U> {
         }
 
         for opt in opts {
-            unsafe { destroy_on_err!(ctx, internal_set_property(ctx, opt.0, opt.1.clone())) }
+            if let Err(err) = internal_set_property(ctx, opt.0, opt.1.clone()) {
+                unsafe { 
+                    mpv_terminate_destroy(ctx);
+                }
+                return Err(err);
+            }
         }
 
         unsafe { destroy_on_err!(ctx, mpv_initialize(ctx)) }
@@ -447,12 +467,9 @@ impl<T, U> Parent<T, U> {
     #[inline]
     /// Create a client with `name`, that is connected to the core of `self`, but has its own queue
     /// for API events and such.
-    ///
-    /// # Panics
-    /// Panics if `name` contains a 0 byte.
-    pub fn new_client(&self, name: &str) -> Result<Client<T, U>, Error> {
+    pub fn new_client(&self, name: &str) -> Result<Client<T, U>> {
         let ctx = unsafe {
-            let name = CString::new(name).unwrap();
+            let name = CString::new(name)?;
             mpv_create_client(self.ctx(), name.as_ptr())
         };
         unsafe {
@@ -527,13 +544,13 @@ impl<T, U> Parent<T, U> {
 
     #[inline]
     /// Enable opengl callback for this `Parent`.
-    pub fn init_opengl_callback<F>(&self, procaddr: F) -> Result<MutexGuard<OpenGlState>, Error>
+    pub fn init_opengl_callback<F>(&self, procaddr: F) -> Result<MutexGuard<OpenGlState>>
         where F: for<'a> Fn(&'a str) -> *const () + 'static
     {
         let guard = self.opengl_state.try_lock();
 
         if guard.is_none() {
-            Err(Error::CallbackExists)
+            Err(ErrorKind::CallbackExists.into())
         } else {
             let mut guard = guard.unwrap();
             *guard = OpenGlState::new(self.ctx, procaddr)?;
@@ -547,7 +564,7 @@ impl<T, U> Parent<T, U> {
     ///
     /// Returns `Error::Mpv(MpvError::InvalidParameter)` if a protocol with the same name has
     /// already been registered.
-    pub fn register_protocol(&self, protocol: Protocol<T, U>) -> Result<(), Error> {
+    pub fn register_protocol(&self, protocol: Protocol<T, U>) -> Result<()> {
         let mut protocols = self.custom_protocols.lock();
         protocol.register(self.ctx)?;
         protocols.push(protocol);
@@ -591,11 +608,8 @@ pub trait MpvInstance: Sized {
 
     #[inline]
     /// Load a configuration file. The path has to be absolute, and a file.
-    ///
-    /// # Panics
-    /// Panics if `path` contains a 0 byte.
-    fn load_config(&self, path: &str) -> Result<(), Error> {
-        let file = CString::new(path).unwrap().into_raw();
+    fn load_config(&self, path: &str) -> Result<()> {
+        let file = CString::new(path)?.into_raw();
         let ret = mpv_err((), unsafe { mpv_load_config_file(self.ctx(), file) });
         unsafe { CString::from_raw(file) };
         ret
@@ -604,7 +618,7 @@ pub trait MpvInstance: Sized {
     #[inline]
     #[cfg(feature="events")]
     /// Observe given `Event`s via an `EventIter`.
-    fn observe_events(&self, events: &[Event]) -> Result<EventIter<Self>, Error> {
+    fn observe_events(&self, events: &[Event]) -> Result<EventIter<Self>> {
         let mut observe = self.ev_to_observe().lock();
         let mut properties = self.ev_to_observe_properties().lock();
 
@@ -616,7 +630,7 @@ pub trait MpvInstance: Sized {
         for elem in events {
             if let Event::PropertyChange(ref v) = *elem {
                 if properties.contains_key(&v.0) {
-                    return Err(Error::AlreadyObserved(Rc::new(elem.clone())));
+                    return Err(ErrorKind::AlreadyObserved(Box::new(elem.clone())).into());
                 } else {
                     mpv_err((), unsafe { mpv_request_event(self.ctx(), elem.as_id(), 1) })?;
                     props.push(v);
@@ -626,12 +640,12 @@ pub trait MpvInstance: Sized {
             } else {
                 for id in &*observe {
                     if elem.as_id() == id.as_id() {
-                        return Err(Error::AlreadyObserved(Rc::new(elem.clone())));
+                        return Err(ErrorKind::AlreadyObserved(Box::new(elem.clone())).into());
                     }
                 }
 
                 if let Event::LogMessage(ref v) = *elem {
-                    let min_level = CString::new(v.log_level.as_str()).unwrap();
+                    let min_level = CString::new(v.log_level.as_str())?;
                     mpv_err((), unsafe {
                         mpv_request_log_messages(self.ctx(), min_level.as_ptr())
                     })?;
@@ -646,7 +660,7 @@ pub trait MpvInstance: Sized {
         let mut props_ins = Vec::with_capacity(len);
         let start_id = properties.len();
         for (i, elem) in props.iter().enumerate() {
-            let name = CString::new(&elem.0[..]).unwrap();
+            let name = CString::new(&elem.0[..])?;
             let err = mpv_err((),
                               unsafe {
                                 mpv_observe_property(self.ctx(),
@@ -687,10 +701,7 @@ pub trait MpvInstance: Sized {
     ///
     /// # Safety
     /// This method is unsafe because arbitrary code may be executed resulting in UB and more.
-    ///
-    /// # Panics
-    /// Panics if any arg contains a NUL byte.
-    unsafe fn command(&self, name: &str, args: &[&str]) -> Result<(), Error> {
+    unsafe fn command(&self, name: &str, args: &[&str]) -> Result<()> {
         let mut cmd = String::with_capacity(name.len() + args.iter()
                                                              .fold(0, |acc, e| acc + e.len() + 1));
         cmd.push_str(name);
@@ -699,27 +710,21 @@ pub trait MpvInstance: Sized {
             cmd.push_str(" ");
             cmd.push_str(elem);
         }
-        let raw = CString::new(cmd).unwrap();
+        let raw = CString::new(cmd)?;
 
         mpv_err((), mpv_command_string(self.ctx(), raw.as_ptr()))
     }
 
     #[inline]
     /// Set the value of a property.
-    ///
-    /// # Panics
-    /// Panics if `name` contains a 0 byte.
-    fn set_property<T: Into<Data>>(&self, name: &str, data: T) -> Result<(), Error> {
-        mpv_err((), internal_set_property(self.ctx(), name, data))
+    fn set_property<T: Into<Data>>(&self, name: &str, data: T) -> Result<()> {
+        internal_set_property(self.ctx(), name, data)
     }
 
     #[inline]
     /// Get the value of a property.
-    ///
-    /// # Panics
-    /// Panics if `name` contains a 0 byte.
-    fn get_property(&self, name: &str, format: Format) -> Result<Data, Error> {
-        let name = CString::new(name).unwrap();
+    fn get_property(&self, name: &str, format: Format) -> Result<Data> {
+        let name = CString::new(name)?;
         match format {
             Format::String | Format::OsdString => {
                 let mut ptr = &mut ptr::null();
@@ -730,7 +735,6 @@ pub trait MpvInstance: Sized {
                                      format.as_mpv_format().as_val(),
                                      ptr as *mut *const libc::c_char as *mut _)
                 });
-                debug_assert!(!ptr.is_null());
 
                 err.or_else(Err)
                     .and_then(|_| {
@@ -768,32 +772,32 @@ pub trait MpvInstance: Sized {
 
     #[inline]
     /// Add -or subtract- any value from a property. Over/underflow clamps to max/min.
-    fn add_property(&self, property: &str, value: isize) -> Result<(), Error> {
+    fn add_property(&self, property: &str, value: isize) -> Result<()> {
         unsafe { self.command("add", &[property, &format!("{}", value)]) }
     }
 
     #[inline]
     /// Cycle through a given property. `up` specifies direction. On
     /// overflow, set the property back to the minimum, on underflow set it to the maximum.
-    fn cycle_property(&self, property: &str, up: bool) -> Result<(), Error> {
+    fn cycle_property(&self, property: &str, up: bool) -> Result<()> {
         unsafe { self.command("cycle", &[property, if up { "up" } else { "down" }]) }
     }
 
     #[inline]
     /// Multiply any property with any positive factor.
-    fn multiply_property(&self, property: &str, factor: usize) -> Result<(), Error> {
+    fn multiply_property(&self, property: &str, factor: usize) -> Result<()> {
         unsafe { self.command("multiply", &[property, &format!("{}", factor)]) }
     }
 
     #[inline]
     /// Pause playback at runtime.
-    fn pause(&self) -> Result<(), Error> {
+    fn pause(&self) -> Result<()> {
         self.set_property("pause", true)
     }
 
     #[inline]
     /// Unpause playback at runtime.
-    fn unpause(&self) -> Result<(), Error> {
+    fn unpause(&self) -> Result<()> {
         self.set_property("pause", false)
     }
 
@@ -808,7 +812,7 @@ pub trait MpvInstance: Sized {
     /// This is less exact than `seek_absolute`, see [mpv manual]
     /// (https://mpv.io/manual/master/#command-interface-
     /// [relative|absolute|absolute-percent|relative-percent|exact|keyframes]).
-    fn seek_forward(&self, time: &Duration) -> Result<(), Error> {
+    fn seek_forward(&self, time: &Duration) -> Result<()> {
         unsafe {
             self.command("seek", &[&format!("{}", time.as_secs()), "relative"])
         }
@@ -816,7 +820,7 @@ pub trait MpvInstance: Sized {
 
     #[inline]
     /// See `seek_forward`.
-    fn seek_backward(&self, time: &Duration) -> Result<(), Error> {
+    fn seek_backward(&self, time: &Duration) -> Result<()> {
         unsafe {
             self.command("seek", &[&format!("-{}", time.as_secs()), "relative"])
         }
@@ -824,7 +828,7 @@ pub trait MpvInstance: Sized {
 
     #[inline]
     /// Seek to a given absolute time.
-    fn seek_absolute(&self, time: &Duration) -> Result<(), Error> {
+    fn seek_absolute(&self, time: &Duration) -> Result<()> {
         unsafe {
             self.command("seek", &[&format!("{}", time.as_secs()), "absolute"])
         }
@@ -834,7 +838,7 @@ pub trait MpvInstance: Sized {
     /// Seek to a given relative percent position (may be negative).
     /// If `percent` of the playtime is bigger than the remaining playtime, the next file is played.
     /// out of bounds values are clamped to either 0 or 100.
-    fn seek_percent(&self, percent: isize) -> Result<(), Error> {
+    fn seek_percent(&self, percent: isize) -> Result<()> {
         unsafe {
             self.command("seek", &[&format!("{}", percent), "relative-percent"])
         }
@@ -842,7 +846,7 @@ pub trait MpvInstance: Sized {
 
     #[inline]
     /// Seek to the given percentage of the playtime.
-    fn seek_percent_absolute(&self, percent: usize) -> Result<(), Error> {
+    fn seek_percent_absolute(&self, percent: usize) -> Result<()> {
         unsafe {
             self.command("seek", &[&format!("{}", percent), "relative-percent"])
         }
@@ -850,27 +854,27 @@ pub trait MpvInstance: Sized {
 
     #[inline]
     /// Revert the previous `seek_` call, can also revert itself.
-    fn seek_revert(&self) -> Result<(), Error> {
+    fn seek_revert(&self) -> Result<()> {
         unsafe { self.command("revert-seek", &[]) }
     }
 
     #[inline]
     /// Mark the current position as the position that will be seeked to by `seek_revert`.
-    fn seek_revert_mark(&self) -> Result<(), Error> {
+    fn seek_revert_mark(&self) -> Result<()> {
         unsafe { self.command("revert-seek", &["mark"]) }
     }
 
     #[inline]
     /// Seek exactly one frame, and pause.
     /// Noop on audio only streams.
-    fn seek_frame(&self) -> Result<(), Error> {
+    fn seek_frame(&self) -> Result<()> {
         unsafe { self.command("frame-step", &[]) }
     }
 
     #[inline]
     /// See `seek_frame`.
     /// [Note performance considerations.](https://mpv.io/manual/master/#command-interface-frame-back-step)
-    fn seek_frame_backward(&self) -> Result<(), Error> {
+    fn seek_frame_backward(&self) -> Result<()> {
         unsafe { self.command("frame-back-step", &[]) }
     }
 
@@ -886,7 +890,7 @@ pub trait MpvInstance: Sized {
     /// extension is missing or unknown is arbitrary). If the file already exists, it's overwritten.
     /// Like all input command parameters, the filename is subject to property expansion as
     /// described in [Property Expansion](https://mpv.io/manual/master/#property-expansion)."
-    fn screenshot_subtitles<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<(), Error> {
+    fn screenshot_subtitles<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<()> {
         if let Some(path) = path.into() {
             unsafe { self.command("screenshot", &[&format!("\"{}\"", path), "subtitles"]) }
         } else {
@@ -897,7 +901,7 @@ pub trait MpvInstance: Sized {
     #[inline]
     /// "Like subtitles, but typically without OSD or subtitles. The exact behavior depends on the selected
     /// video output."
-    fn screenshot_video<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<(), Error> {
+    fn screenshot_video<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<()> {
         if let Some(path) = path.into() {
             unsafe { self.command("screenshot", &[&format!("\"{}\"", path), "video"]) }
         } else {
@@ -909,7 +913,7 @@ pub trait MpvInstance: Sized {
     /// "Save the contents of the mpv window. Typically scaled, with OSD and subtitles. The exact
     /// behaviour depends on the selected video output, and if no support is available,
     /// this will act like video.".
-    fn screenshot_window<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<(), Error> {
+    fn screenshot_window<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<()> {
         if let Some(path) = path.into() {
             unsafe { self.command("screenshot", &[&format!("\"{}\"", path), "window"]) }
         } else {
@@ -923,7 +927,7 @@ pub trait MpvInstance: Sized {
     #[inline]
     /// Play the next item of the current playlist.
     /// Does nothing if the current item is the last item.
-    fn playlist_next_weak(&self) -> Result<(), Error> {
+    fn playlist_next_weak(&self) -> Result<()> {
         unsafe {
             self.command("playlist-next", &["weak"])
         }
@@ -932,7 +936,7 @@ pub trait MpvInstance: Sized {
     #[inline]
     /// Play the next item of the current playlist.
     /// Terminates playback if the current item is the last item.
-    fn playlist_next_force(&self) -> Result<(), Error> {
+    fn playlist_next_force(&self) -> Result<()> {
         unsafe {
             self.command("playlist-next", &["force"])
         }
@@ -940,7 +944,7 @@ pub trait MpvInstance: Sized {
 
     #[inline]
     /// See `playlist_next_weak`.
-    fn playlist_previous_weak(&self) -> Result<(), Error> {
+    fn playlist_previous_weak(&self) -> Result<()> {
         unsafe {
             self.command("playlist-previous", &["weak"])
         }
@@ -948,7 +952,7 @@ pub trait MpvInstance: Sized {
 
     #[inline]
     /// See `playlist_next_force`.
-    fn playlist_previous_force(&self) -> Result<(), Error> {
+    fn playlist_previous_force(&self) -> Result<()> {
         unsafe {
             self.command("playlist-previous", &["force"])
         }
@@ -967,7 +971,7 @@ pub trait MpvInstance: Sized {
     /// # Peculiarities
     /// `loadfile` is kind of asynchronous, any additional option is set during loading, [specifics](https://github.com/mpv-player/mpv/issues/4089).
     fn playlist_load_files<'a, A>(&self, files: &[(&str, FileState, A)])
-        -> Result<(), (usize, Error)> where A: Into<Option<&'a str>> + Clone
+        -> Result<()> where A: Into<Option<&'a str>> + Clone
     {
         for (i, elem) in files.iter().enumerate() {
             let opts = elem.2.clone().into();
@@ -978,7 +982,7 @@ pub trait MpvInstance: Sized {
             };
 
             if ret.is_err() {
-                return Err((i, ret.unwrap_err()))
+                return Err(ErrorKind::Loadfiles(i, Box::new(ret.unwrap_err())).into())
             }
         }
         Ok(())
@@ -986,7 +990,7 @@ pub trait MpvInstance: Sized {
 
     #[inline]
     /// Load the given playlist file, that either replaces the current playlist, or appends to it.
-    fn playlist_load_list(&self, path: &str, replace: bool) -> Result<(), Error> {
+    fn playlist_load_list(&self, path: &str, replace: bool) -> Result<()> {
         if replace {
             unsafe {
                 self.command("loadlist", &[&format!("\"{}\"", path), "replace"])
@@ -1000,7 +1004,7 @@ pub trait MpvInstance: Sized {
 
     #[inline]
     /// Remove every, except the current, item from the playlist.
-    fn playlist_clear(&self) -> Result<(), Error> {
+    fn playlist_clear(&self) -> Result<()> {
         unsafe {
             self.command("playlist-clear", &[])
         }
@@ -1008,7 +1012,7 @@ pub trait MpvInstance: Sized {
 
     #[inline]
     /// Remove the currently selected item from the playlist.
-    fn playlist_remove_current(&self) -> Result<(), Error> {
+    fn playlist_remove_current(&self) -> Result<()> {
         unsafe {
             self.command("playlist-remove", &["current"])
         }
@@ -1016,7 +1020,7 @@ pub trait MpvInstance: Sized {
 
     #[inline]
     /// Remove item at `position` from the playlist.
-    fn playlist_remove_index(&self, position: usize) -> Result<(), Error> {
+    fn playlist_remove_index(&self, position: usize) -> Result<()> {
         unsafe {
             self.command("playlist-remove", &[&format!("{}", position)])
         }
@@ -1024,7 +1028,7 @@ pub trait MpvInstance: Sized {
 
     #[inline]
     /// Move item `old` to the position of item `new`.
-    fn playlist_move(&self, old: usize, new: usize) -> Result<(), Error> {
+    fn playlist_move(&self, old: usize, new: usize) -> Result<()> {
         unsafe {
             self.command("playlist-move", &[&format!("{}", new), &format!("{}", old)])
         }
@@ -1032,7 +1036,7 @@ pub trait MpvInstance: Sized {
 
     #[inline]
     /// Shuffle the playlist.
-    fn playlist_shuffle(&self) -> Result<(), Error> {
+    fn playlist_shuffle(&self) -> Result<()> {
         unsafe {
             self.command("playlist-shuffle", &[])
         }
@@ -1044,7 +1048,7 @@ pub trait MpvInstance: Sized {
     #[inline]
     /// Add and select the subtitle immediately.
     fn subtitle_add_select<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'b str>>>(&self, path: &str, title: A, lang: B)
-         -> Result<(), Error>
+         -> Result<()>
     {
         match (title.into(), lang.into()) {
             (None, None) => {
@@ -1077,7 +1081,7 @@ pub trait MpvInstance: Sized {
     ///
     /// Returns an `Error::InvalidArgument` if a language, but not a title, was provided.
     fn subtitle_add_auto<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'b str>>>(&self, path: &str, title: A, lang: B)
-        -> Result<(), Error>
+        -> Result<()>
     {
         match (title.into(), lang.into()) {
             (None, None) => {
@@ -1096,7 +1100,7 @@ pub trait MpvInstance: Sized {
                 }
             }
             (None, Some(_)) => {
-                Err(Error::InvalidArgument)
+                Err(ErrorKind::InvalidArgument.into())
             }
         }
     }
@@ -1106,7 +1110,7 @@ pub trait MpvInstance: Sized {
     /// already added, that one is selected, instead of loading a duplicate entry.
     /// (In this case, title/language are ignored, and if the [sub] was changed since it was loaded,
     /// these changes won't be reflected.)".
-    fn subtitle_add_cached(&self, path: &str) -> Result<(), Error> {
+    fn subtitle_add_cached(&self, path: &str) -> Result<()> {
         unsafe {
             self.command("sub-add", &[&format!("\"{}\"", path), "cached"])
         }
@@ -1115,7 +1119,7 @@ pub trait MpvInstance: Sized {
     #[inline]
     /// "Remove the given subtitle track. If the id argument is missing, remove the current
     /// track. (Works on external subtitle files only.)"
-    fn subtitle_remove<A: Into<Option<usize>>>(&self, index: A) -> Result<(), Error> {
+    fn subtitle_remove<A: Into<Option<usize>>>(&self, index: A) -> Result<()> {
         if let Some(idx) = index.into() {
             unsafe {
                 self.command("sub-remove", &[&format!("{}", idx)])
@@ -1130,7 +1134,7 @@ pub trait MpvInstance: Sized {
     #[inline]
     /// "Reload the given subtitle track. If the id argument is missing, reload the current
     /// track. (Works on external subtitle files only.)"
-    fn subtitle_reload<A: Into<Option<usize>>>(&self, index: A) -> Result<(), Error> {
+    fn subtitle_reload<A: Into<Option<usize>>>(&self, index: A) -> Result<()> {
         if let Some(idx) = index.into() {
             unsafe {
                 self.command("sub-reload", &[&format!("{}", idx)])
@@ -1145,7 +1149,7 @@ pub trait MpvInstance: Sized {
     #[inline]
     /// "Change subtitle timing such, that the subtitle event after the next `isize` subtitle
     /// events is displayed. `isize` can be negative to step backwards."
-    fn subtitle_step(&self, skip: isize) -> Result<(), Error> {
+    fn subtitle_step(&self, skip: isize) -> Result<()> {
         unsafe {
             self.command("sub-step", &[&format!("{}", skip)])
         }
@@ -1156,7 +1160,7 @@ pub trait MpvInstance: Sized {
     /// audio instead of adjusting the subtitle delay.
     /// For embedded subtitles (like with matroska), this works only with subtitle events that
     /// have already been displayed, or are within a short prefetch range."
-    fn subtitle_seek_forward(&self) -> Result<(), Error> {
+    fn subtitle_seek_forward(&self) -> Result<()> {
         unsafe {
             self.command("sub-seek", &["1"])
         }
@@ -1164,7 +1168,7 @@ pub trait MpvInstance: Sized {
 
     #[inline]
     /// See `SeekForward`.
-    fn subtitle_seek_backward(&self) -> Result<(), Error> {
+    fn subtitle_seek_backward(&self) -> Result<()> {
         unsafe {
             self.command("sub-seek", &["-1"])
         }
@@ -1217,14 +1221,14 @@ impl<'parent, T, U> MpvInstance for Client<'parent, T, U> {
 
 #[inline]
 fn internal_set_property<A: Into<Data>>(ctx: *mut MpvHandle, name: &str, data: A) 
-    -> libc::c_int
+    -> Result<()>
 {
-    let name = CString::new(name).unwrap().into_raw();
+    let name = CString::new(name)?.into_raw();
     let mut data = data.into();
     let format = data.format().as_val();
     let ret = match data {
         Data::String(ref v) | Data::OsdString(ref v) => {
-            let data = CString::new(v.as_bytes()).unwrap();
+            let data = CString::new(v.as_bytes())?;
             let ptr: *mut _ = &mut data.as_ptr();
 
             unsafe { mpv_set_property(ctx, name, format, ptr as *mut _) }
@@ -1241,5 +1245,5 @@ fn internal_set_property<A: Into<Data>>(ctx: *mut MpvHandle, name: &str, data: A
         }
     };
     unsafe { CString::from_raw(name) };
-    ret
+    mpv_err((), ret)
 }

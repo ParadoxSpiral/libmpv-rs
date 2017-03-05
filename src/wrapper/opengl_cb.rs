@@ -57,7 +57,7 @@ impl OpenGlState {
         }
     }
 
-    pub(crate) fn new<F>(mpv_ctx: *mut MpvHandle, mut proc_addr: F) -> Result<OpenGlState, Error>
+    pub(crate) fn new<F>(mpv_ctx: *mut MpvHandle, mut proc_addr: F) -> Result<OpenGlState>
         where F: for<'a> Fn(&'a str) -> *const () + 'static
     {
         let api_ctx = unsafe {
@@ -86,7 +86,7 @@ impl OpenGlState {
     /// # Safety
     /// Mpv relies on correct and initialized OpenGL state.
     pub unsafe fn set_draw_target(&self, fbo: libc::c_int, w: usize, h: usize)
-        -> Result<(), Error>
+        -> Result<()>
     {
         mpv_err((), mpv_opengl_cb_draw(self.api_ctx, fbo, w as _, h as _))
     }

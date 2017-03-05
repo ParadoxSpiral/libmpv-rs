@@ -49,11 +49,12 @@ extern crate libc;
 extern crate parking_lot;
 #[macro_use]
 extern crate enum_primitive;
+#[macro_use]
+extern crate error_chain;
 
 /// Contains bindings to libmpv functions and data structures.
 pub mod raw;
 pub use raw::MpvLogLevel as LogLevel;
-pub use raw::MpvError;
 mod wrapper;
 pub use wrapper::*;
 #[cfg(test)]

@@ -53,6 +53,19 @@ enum_from_primitive! {
     }
 }
 
+impl ::std::fmt::Display for MpvError {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl ::std::error::Error for MpvError {
+    fn description(&self) -> &str {
+        "An API call did not execute successfully."
+    }
+    //fn cause(&self) -> Option<&Error> { None }
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MpvFormat {

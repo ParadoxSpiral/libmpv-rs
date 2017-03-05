@@ -49,6 +49,7 @@ fn read(cookie: &mut File, buf: *mut i8, nbytes: u64) -> i64 {
 }
 
 fn seek(cookie: &mut File, offset: i64) -> i64 {
+    println!("Seeking to byte {}", offset);
     cookie.seek(SeekFrom::Start(offset as u64)).unwrap() as _
 }
 
