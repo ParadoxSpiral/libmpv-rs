@@ -38,7 +38,7 @@ mod errors {
 
         errors {
             Loadfiles(index: usize, error: Box<Error>) {
-                description("Command failed during a `loadfiles` call")
+                description("Command failed during a `loadfiles` call.")
             }
             #[cfg(feature="events")]
             AlreadyObserved(e: Box<Event>) {

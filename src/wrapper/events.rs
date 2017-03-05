@@ -184,7 +184,7 @@ impl<'parent, P> Drop for EventIter<'parent, P>
                     }
                 } else if MpvEventId::LogMessage == outer_ev.as_id() &&
                    outer_ev.as_id() == inner_ev.as_id() {
-                    debug_assert!(MpvLogLevel::None.as_str() == "no");
+                    debug_assert_eq!("no", MpvLogLevel::None.as_str());
                     let min_level = &*b"no0";
                     unsafe { mpv_request_log_messages(self.ctx, min_level.as_ptr() as _) };
                     return true;
