@@ -56,7 +56,6 @@ pub fn exec() {
                     }) {
                     // . . . print the `EndFile` reason and exit, . . .
                     println!("File ended! Reason: {:?}", v);
-                    thread::sleep(Duration::from_secs(1));
                     process::exit(0);
                 } else {
                     // . . . otherwise print all `Event`s.
