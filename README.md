@@ -1,5 +1,5 @@
 # mpv-rs
-A libmpv abstraction written in rust that#s easy to use and provides the ability to read next to all video and audio codecs.
+A libmpv abstraction written in rust that's easy to use and provides the ability to read next to all video and audio codecs.
 
 To get started you need libmpv installed on the system, or enable the "build_libmpv" feature-flag.
 
