@@ -79,10 +79,6 @@ use std::marker::PhantomData;
 use std::mem;
 use std::ptr;
 use std::time::Duration;
-#[cfg(unix)]
-use std::ffi::OsStr;
-#[cfg(unix)]
-use std::os::unix::ffi::OsStrExt;
 
 static SET_LC_NUMERIC: Once = ONCE_INIT;
 
@@ -120,6 +116,9 @@ fn mpv_err<T>(ret: T, err_val: libc::c_int) -> Result<T> {
 
 #[cfg(unix)]
 fn mpv_cstr_to_string(cstr: &CStr) -> String {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
     OsStr::from_bytes(cstr.to_bytes()).to_string_lossy().into_owned()
 }
 
@@ -1047,6 +1046,7 @@ pub trait MpvInstance: Sized {
 
     #[inline]
     /// Add and select the subtitle immediately.
+    /// Specifying a language requires specifying a title.
     fn subtitle_add_select<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'b str>>>(&self, path: &str, title: A, lang: B)
          -> Result<()>
     {
@@ -1061,11 +1061,8 @@ pub trait MpvInstance: Sized {
                     self.command("sub-add", &[&format!("\"{}\"", path), "select", t])
                 }
             }
-            (None, Some(l)) => {
-                // TODO: This version is probably not supported (lang depends on title) -> throw err
-                unsafe {
-                    self.command("sub-add", &[&format!("\"{}\"", path), "select", "", l])
-                }   
+            (None, Some(_)) => {
+                Err(ErrorKind::InvalidArgument.into())
             }
             (Some(t), Some(l)) => {
                 unsafe {
