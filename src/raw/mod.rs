@@ -63,7 +63,6 @@ impl ::std::error::Error for MpvError {
     fn description(&self) -> &str {
         "An API call did not execute successfully."
     }
-    //fn cause(&self) -> Option<&Error> { None }
 }
 
 #[repr(C)]
