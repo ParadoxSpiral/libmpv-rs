@@ -39,7 +39,7 @@
 // TODO: Add test for every single function
 
 // Procedure for updating to new libmpv:
-// - make any nessecary API change, bump crate version
+// - make any nessecary API change (if so, bump crate version)
 // - update MPV_CLIENT_API consts in lib.rs
 // - update constants in build.rs
 // - run tests and examples to test whether they still work

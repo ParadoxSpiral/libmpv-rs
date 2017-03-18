@@ -30,9 +30,9 @@ use std::fs::{File, OpenOptions};
 use std::path::Path;
 use std::process::Command;
 
-const MPV_COMMIT: &'static str = "b9cebf180b6d0b429dccbffb60243a88b600aca1";
-const WIN_MPV_ARCHIVE_SIZE: usize = 109875177;
-const WIN_MPV_ARCHIVE_URL: &'static str = "https://mpv.srsfckn.biz/mpv-dev-20161120.7z";
+const MPV_COMMIT: &'static str = "d276a01ac3fd8655a48c4a39d3d8574c25e83027";
+const WIN_MPV_ARCHIVE_SIZE: usize = 109615618;
+const WIN_MPV_ARCHIVE_URL: &'static str = "https://mpv.srsfckn.biz/mpv-dev-20170212.7z";
 
 fn main() {
 	#[cfg(feature="build_libmpv")] {
