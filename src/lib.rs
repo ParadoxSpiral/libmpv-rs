@@ -20,12 +20,12 @@
 #![allow(unknown_lints)]
 #![feature(core_intrinsics, pub_restricted, untagged_unions, heap_api, alloc)]
 
-//! This crate provides abstractions for (libmpv)[https://github.com/mpv-player/mpv/tree/master/libmpv] of the (mpv media player)[https://github.com/mpv-player/mpv].
+//! This crate provides abstractions for [libmpv](https://github.com/mpv-player/mpv/tree/master/libmpv) of the [mpv media player](https://github.com/mpv-player/mpv).
 //!
 //! Libmpv requires `LC_NUMERIC` to be `C`. This is set once when the first parent is created.
 //! Do not change this during the usage of this crate.
 //!
-//! Most of the documentation is paraphrased or even copied from the (mpv manual)[https://mpv.io/manual/master/],
+//! Most of the documentation is paraphrased or even copied from the [mpv manual](https://mpv.io/manual/master/),
 //! if any questions arise it will probably answer them in much more depth than this documentation.
 //!
 //! # Examples
@@ -52,7 +52,7 @@ extern crate enum_primitive;
 #[macro_use]
 extern crate error_chain;
 
-/// Contains bindings to libmpv functions and data structures.
+/// Contains FFI bindings to libmpv functions and data structures.
 pub mod raw;
 pub use raw::MpvLogLevel as LogLevel;
 pub use raw::MpvEndFileReason as EndFileReason;

@@ -149,9 +149,7 @@ pub enum Data {
 impl Data {
     #[inline]
     /// Create a `Data`.
-    pub fn new<T>(val: T) -> Data
-        where T: Into<Data>
-    {
+    pub fn new<T: Into<Data>>(val: T) -> Data {
         val.into()
     }
 
@@ -359,16 +357,12 @@ impl<T: RefUnwindSafe, U: RefUnwindSafe> Parent<T, U> {
     /// Create a new `Parent`.
     /// The default settings can be probed by running: `$ mpv --show-profile=libmpv`
     pub fn new() -> Result<Parent<T, U>> {
-        Parent::internal_new(&[])
+        Parent::with_options(&[])
     }
 
     #[inline]
     /// Create a new `Parent`, with the given settings set before initialization.
     pub fn with_options(opts: &[(&str, Data)]) -> Result<Parent<T, U>> {
-        Parent::internal_new(opts)
-    }
-
-    fn internal_new(opts: &[(&str, Data)]) -> Result<Parent<T, U>> {
         SET_LC_NUMERIC.call_once(|| {
             let c = &*b"c0";
             unsafe { libc::setlocale(libc::LC_NUMERIC, c.as_ptr() as _) };
@@ -561,7 +555,6 @@ impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> Client<'parent, T, U> {
 
 #[allow(missing_docs)]
 /// Core functionality that is supported by both `Client` and `Parent`.
-/// See trait implementation for documentation.
 pub trait MpvInstance: Sized {
     #[doc(hidden)]
     // FIXME: These can go once `Associated Fields` lands
@@ -953,8 +946,7 @@ pub trait MpvInstance: Sized {
         -> Result<()> where A: Into<Option<&'a str>> + Clone
     {
         for (i, elem) in files.iter().enumerate() {
-            let opts = elem.2.clone().into();
-            let args = opts.unwrap_or("");
+            let args = elem.2.clone().into().unwrap_or("");
 
             let ret = unsafe {
                 self.command("loadfile", &[&format!("\"{}\"", elem.0), elem.1.val(), args])
