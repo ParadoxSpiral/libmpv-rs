@@ -206,7 +206,6 @@ pub type mpv_stream_cb_seek_fn = unsafe extern "C" fn(cookie: *mut libc::c_void,
                                                       offset: libc::int64_t) -> libc::int64_t;
 pub type mpv_stream_cb_size_fn = unsafe extern "C" fn(cookie: *mut libc::c_void) -> libc::int64_t;
 pub type mpv_stream_cb_close_fn = unsafe extern "C" fn(cookie: *mut libc::c_void);
-
 pub type mpv_stream_cb_open_ro_fn = unsafe extern "C" fn(user_data: *mut libc::c_void,
                                                          uri: *mut libc::c_char,
                                                          info: *mut MpvStreamCbInfo)
@@ -335,10 +334,6 @@ extern "C" {
                               w: libc::c_int,
                               h: libc::c_int,)
                               -> libc::c_int;
-    pub fn mpv_opengl_cb_render(ctx: *mut MpvOpenGlCbContext,
-                                fbo: libc::c_int,
-                                vp: [libc::c_int; 4])
-                                -> libc::c_int;
     pub fn mpv_opengl_cb_report_flip(ctx: *mut MpvOpenGlCbContext,
                                      time: libc::int64_t)
                                      -> libc::c_int;

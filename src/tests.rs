@@ -29,7 +29,7 @@ fn version() {
 
 #[test]
 fn properties() {
-    let mpv = Parent::<(), ()>::with_options(&[("cache-initial", 1.into()),
+    let mpv = Parent::<(), (), ()>::with_options(&[("cache-initial", 1.into()),
                                                ("volume", 0.into()),
                                                ("vo", "null".into()),
                                                ("ytdl", true.into())])

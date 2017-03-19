@@ -45,19 +45,35 @@ unsafe extern "C" fn get_proc_addr_wrapper<F>(cookie: *mut libc::c_void,
     }
 }
 
-/// Holds all state relevant to opengl callback functions.
-pub struct OpenGlState  {
-    pub(crate) api_ctx: *mut MpvOpenGlCbContext,
+#[allow(unused_must_use)]
+unsafe extern "C" fn callback_update_wrapper<F, V>(cb_ctx: *mut libc::c_void)
+    where F: for<'a> Fn(&'a V) + RefUnwindSafe + 'static, V: RefUnwindSafe
+{
+    let data = cb_ctx as *mut (*const F, *mut V);
+
+    panic::catch_unwind(|| {
+        (*(*data).0)(&*(*data).1);
+    });
 }
 
-impl OpenGlState {
-    pub(crate) fn empty() -> OpenGlState {
+/// Holds all state relevant to opengl callback functions.
+///
+/// # Safety
+/// Mpv relies on correct and initialized OpenGL state.
+pub struct OpenGlState<V: RefUnwindSafe> {
+    pub(crate) api_ctx: *mut MpvOpenGlCbContext,
+    pub(crate) update_callback_data: V,
+}
+
+impl<V: RefUnwindSafe> OpenGlState<V> {
+    pub(crate) fn empty() -> OpenGlState<V> {
         OpenGlState{
             api_ctx: ptr::null_mut(),
+            update_callback_data: unsafe{ mem::zeroed() },
         }
     }
 
-    pub(crate) fn new<F>(mpv_ctx: *mut MpvHandle, mut proc_addr: F) -> Result<OpenGlState>
+    pub(crate) fn new<F>(mpv_ctx: *mut MpvHandle, mut proc_addr: F) -> Result<OpenGlState<V>>
         where F: for<'a> Fn(&'a str) -> *const () + RefUnwindSafe + 'static
     {
         let api_ctx = unsafe {
@@ -70,6 +86,7 @@ impl OpenGlState {
         mpv_err(
             OpenGlState {
                 api_ctx: api_ctx,
+                update_callback_data: unsafe{ mem::zeroed() },
             },
             unsafe {
                     mpv_opengl_cb_init_gl(api_ctx, ptr::null(),
@@ -80,14 +97,39 @@ impl OpenGlState {
     }
 
     #[inline]
-    /// Set the fbo that mpv will draw on.
+    /// Set the fbo that mpv will draw on, and start rendering.
     /// Passing `0` as `w` or `h` will choose the size of the fbo.
-    ///
-    /// # Safety
-    /// Mpv relies on correct and initialized OpenGL state.
     pub unsafe fn set_draw_target(&self, fbo: libc::c_int, w: usize, h: usize)
         -> Result<()>
     {
         mpv_err((), mpv_opengl_cb_draw(self.api_ctx, fbo, w as _, h as _))
+    }
+
+    #[inline]
+    /// Tell the renderer that a frame was flipped.
+    ///
+    /// Note that calling this at least once informs libmpv that you will use this
+    /// function. If you use it inconsistently, expect bad video playback.
+    // TODO: The time parameter is currently not given, because it is ignored.
+    pub unsafe fn report_flip(&self) -> Result<()> {
+        mpv_err((), mpv_opengl_cb_report_flip(self.api_ctx, 0))
+    }
+
+    #[inline]
+    /// Set the callback that notifies you when a new video frame is available, or if the
+    /// video display configuration somehow changed and requires a redraw.
+    ///
+    /// # Safety
+    /// Do not call any mpv API during the callback
+    pub unsafe fn set_update_callback<F>(&mut self, mut data: V, callback: F)
+        where F: for<'a> Fn(&'a V) + RefUnwindSafe + 'static, V: RefUnwindSafe
+    {
+        mpv_opengl_cb_set_update_callback(self.api_ctx,
+                                          callback_update_wrapper::<F, V>,
+                                          &mut (&callback as *const F, &mut data as *mut V)
+                                            as *mut (*const F, *mut V)
+                                            as *mut libc::c_void);
+        
+        self.update_callback_data = data;
     }
 }
