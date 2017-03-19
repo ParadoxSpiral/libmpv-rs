@@ -77,6 +77,7 @@ use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
 use std::mem;
+use std::panic::RefUnwindSafe;
 use std::ptr;
 use std::time::Duration;
 
@@ -294,7 +295,7 @@ impl FileState {
 }
 
 /// An mpv instance from which `Client`s can be spawned.
-pub struct Parent<T, U> {
+pub struct Parent<T: RefUnwindSafe, U: RefUnwindSafe> {
     ctx: *mut MpvHandle,
     #[cfg(feature="events")]
     ev_iter_notification: *mut (Mutex<bool>, Condvar),
@@ -309,7 +310,7 @@ pub struct Parent<T, U> {
 }
 
 /// A client of a `Parent`.
-pub struct Client<'parent, T: 'parent, U: 'parent> {
+pub struct Client<'parent, T: RefUnwindSafe + 'parent, U: RefUnwindSafe + 'parent> {
     ctx: *mut MpvHandle,
     #[cfg(feature="events")]
     ev_iter_notification: *mut (Mutex<bool>, Condvar),
@@ -322,12 +323,12 @@ pub struct Client<'parent, T: 'parent, U: 'parent> {
     _does_not_outlive: PhantomData<&'parent Parent<T, U>>,
 }
 
-unsafe impl<T, U> Send for Parent<T, U> {}
-unsafe impl<T, U> Sync for Parent<T, U> {}
-unsafe impl<'parent, T, U> Send for Client<'parent, T, U> {}
-unsafe impl<'parent, T, U> Sync for Client<'parent, T, U> {}
+unsafe impl<T: RefUnwindSafe, U: RefUnwindSafe> Send for Parent<T, U> {}
+unsafe impl<T: RefUnwindSafe, U: RefUnwindSafe> Sync for Parent<T, U> {}
+unsafe impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> Send for Client<'parent, T, U> {}
+unsafe impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> Sync for Client<'parent, T, U> {}
 
-impl<T, U> Drop for Parent<T, U> {
+impl<T: RefUnwindSafe, U: RefUnwindSafe> Drop for Parent<T, U> {
     #[inline]
     fn drop(&mut self) {
         unsafe {
@@ -342,7 +343,7 @@ impl<T, U> Drop for Parent<T, U> {
     }
 }
 
-impl<'parent, T, U> Drop for Client<'parent, T, U> {
+impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> Drop for Client<'parent, T, U> {
     #[inline]
     fn drop(&mut self) {
         unsafe {
@@ -353,7 +354,7 @@ impl<'parent, T, U> Drop for Client<'parent, T, U> {
     }
 }
 
-impl<T, U> Parent<T, U> {
+impl<T: RefUnwindSafe, U: RefUnwindSafe> Parent<T, U> {
     #[inline]
     /// Create a new `Parent`.
     /// The default settings can be probed by running: `$ mpv --show-profile=libmpv`
@@ -544,7 +545,7 @@ impl<T, U> Parent<T, U> {
     #[inline]
     /// Enable opengl callback for this `Parent`.
     pub fn init_opengl_callback<F>(&self, procaddr: F) -> Result<MutexGuard<OpenGlState>>
-        where F: for<'a> Fn(&'a str) -> *const () + 'static
+        where F: for<'a> Fn(&'a str) -> *const () + RefUnwindSafe + 'static
     {
         let guard = self.opengl_state.try_lock();
 
@@ -571,7 +572,7 @@ impl<T, U> Parent<T, U> {
     }
 }
 
-impl<'parent, T, U> Client<'parent, T, U> {
+impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> Client<'parent, T, U> {
     #[inline]
     /// Returns the name associated with `self`.
     pub fn name(&self) -> &str {
@@ -1172,7 +1173,7 @@ pub trait MpvInstance: Sized {
     }
 }
 
-impl<T, U> MpvInstance for Parent<T, U> {
+impl<T: RefUnwindSafe, U: RefUnwindSafe> MpvInstance for Parent<T, U> {
     fn ctx(&self) -> *mut MpvHandle {
         self.ctx
     }
@@ -1194,7 +1195,7 @@ impl<T, U> MpvInstance for Parent<T, U> {
     }
 }
 
-impl<'parent, T, U> MpvInstance for Client<'parent, T, U> {
+impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> MpvInstance for Client<'parent, T, U> {
     fn ctx(&self) -> *mut MpvHandle {
         self.ctx
     }

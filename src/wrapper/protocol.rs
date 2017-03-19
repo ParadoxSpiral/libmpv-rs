@@ -29,7 +29,7 @@ use super::super::raw::*;
 use std::ffi::{CStr, CString};
 use std::mem;
 use std::panic;
-use std::panic::AssertUnwindSafe;
+use std::panic::RefUnwindSafe;
 use std::ptr;
 
 /// Return an initialized `T`, panic on errors.
@@ -48,6 +48,7 @@ unsafe extern "C" fn open_wrapper<T, U>(user_data: *mut libc::c_void,
                                   uri: *mut libc::c_char,
                                   info: *mut MpvStreamCbInfo)
                                   -> libc::c_int
+    where T: RefUnwindSafe, U: RefUnwindSafe
 {
 	let data = user_data as *mut ProtocolData<T, U>;
 
@@ -57,11 +58,11 @@ unsafe extern "C" fn open_wrapper<T, U>(user_data: *mut libc::c_void,
 	(*info).size_fn = size_wrapper::<T, U>;
 	(*info).close_fn = close_wrapper::<T, U>;
 
-	let ret = panic::catch_unwind(AssertUnwindSafe(|| {
+	let ret = panic::catch_unwind(|| {
 		let uri = CStr::from_ptr(uri as *const _);
 		ptr::write((*data).cookie,
 				   ((*data).open_fn)(&mut (*data).user_data, mpv_cstr_to_string(uri)));
-	}));
+	});
 	if ret.is_ok() {
 		0
 	} else {
@@ -72,13 +73,14 @@ unsafe extern "C" fn open_wrapper<T, U>(user_data: *mut libc::c_void,
 unsafe extern "C" fn read_wrapper<T, U>(cookie: *mut libc::c_void,
                                      buf: *mut libc::c_char,
                                      nbytes: libc::uint64_t) -> libc::int64_t
+    where T: RefUnwindSafe, U: RefUnwindSafe
 {
 	let data = cookie as *mut ProtocolData<T, U>;
 
-	let ret = panic::catch_unwind(AssertUnwindSafe(|| {
+	let ret = panic::catch_unwind(|| {
 		debug_assert!(!(*data).cookie.is_null());
 		((*data).read_fn)(&mut*(*data).cookie, buf, nbytes)
-	}));
+	});
 	if ret.is_ok() {
 		ret.unwrap()
 	} else {
@@ -89,6 +91,7 @@ unsafe extern "C" fn read_wrapper<T, U>(cookie: *mut libc::c_void,
 unsafe extern "C" fn seek_wrapper<T, U>(cookie: *mut libc::c_void,
                                      	offset: libc::int64_t)
 										-> libc::int64_t
+    where T: RefUnwindSafe, U: RefUnwindSafe
 {
 	let data = cookie as *mut ProtocolData<T, U>;
 
@@ -96,10 +99,10 @@ unsafe extern "C" fn seek_wrapper<T, U>(cookie: *mut libc::c_void,
 		return MpvError::Unsupported as libc::int64_t;
 	}
 
-	let ret = panic::catch_unwind(AssertUnwindSafe(|| {
+	let ret = panic::catch_unwind(|| {
 		debug_assert!(!(*data).cookie.is_null());
 		(*(*data).seek_fn.as_ref().unwrap())(&mut*(*data).cookie, offset)
-	}));
+	});
 	if ret.is_ok() {
 		ret.unwrap()
 	} else {
@@ -107,17 +110,19 @@ unsafe extern "C" fn seek_wrapper<T, U>(cookie: *mut libc::c_void,
 	}
 }
 
-unsafe extern "C" fn size_wrapper<T, U>(cookie: *mut libc::c_void)-> libc::int64_t {
+unsafe extern "C" fn size_wrapper<T, U>(cookie: *mut libc::c_void)-> libc::int64_t
+    where T: RefUnwindSafe, U: RefUnwindSafe
+{
 	let data = cookie as *mut ProtocolData<T, U>;
 
 	if (*data).size_fn.is_none() {
 		return MpvError::Unsupported as libc::int64_t;
 	}
 
-	let ret = panic::catch_unwind(AssertUnwindSafe(|| {
+	let ret = panic::catch_unwind(|| {
 		debug_assert!(!(*data).cookie.is_null());
 		(*(*data).size_fn.as_ref().unwrap())(&mut*(*data).cookie)
-	}));
+	});
 	if ret.is_ok() {
 		ret.unwrap()
 	} else {
@@ -126,12 +131,14 @@ unsafe extern "C" fn size_wrapper<T, U>(cookie: *mut libc::c_void)-> libc::int64
 }
 
 #[allow(unused_must_use)]
-unsafe extern "C" fn close_wrapper<T, U>(cookie: *mut libc::c_void) {
-	let data = AssertUnwindSafe(cookie as *mut ProtocolData<T, U>);
+unsafe extern "C" fn close_wrapper<T, U>(cookie: *mut libc::c_void)
+    where T: RefUnwindSafe, U: RefUnwindSafe
+{
+	let data = cookie as *mut ProtocolData<T, U>;
 
 	panic::catch_unwind(|| {
-		debug_assert!(!(**data).cookie.is_null());
-		((**data).close_fn)(Box::from_raw((**data).cookie))
+		debug_assert!(!(*data).cookie.is_null());
+		((*data).close_fn)(Box::from_raw((*data).cookie))
 	});
 }
 
@@ -147,12 +154,12 @@ struct ProtocolData<T, U> {
 }
 
 /// `Protocol` holds all state used by a custom protocol.
-pub struct Protocol<T: Sized, U> {
+pub struct Protocol<T: Sized + RefUnwindSafe, U: RefUnwindSafe> {
 	name: String,
 	data: *mut ProtocolData<T, U>,
 }
 
-impl<T, U> Protocol<T, U> {
+impl<T: RefUnwindSafe, U: RefUnwindSafe> Protocol<T, U> {
 	/// `name` is the prefix of the protocol, e.g. `myprotocol://path`.
 	///
 	/// `user_data` is data that will be passed to `StreamOpen`.
@@ -198,7 +205,7 @@ impl<T, U> Protocol<T, U> {
 	}
 }
 
-impl<T, U> Drop for Protocol<T, U> {
+impl<T: RefUnwindSafe, U: RefUnwindSafe> Drop for Protocol<T, U> {
 	fn drop(&mut self) {
 		unsafe {
 			Box::from_raw(self.data);

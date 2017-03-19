@@ -24,20 +24,20 @@ use super::super::raw::*;
 
 use std::ffi::CStr;
 use std::panic;
-use std::panic::AssertUnwindSafe;
+use std::panic::RefUnwindSafe;
 use std::ptr;
 
 unsafe extern "C" fn get_proc_addr_wrapper<F>(cookie: *mut libc::c_void,
                                            name: *const libc::c_char)
                                            -> *mut libc::c_void
-    where F: for<'a> Fn(&'a str) -> *const ()
+    where F: for<'a> Fn(&'a str) -> *const () + RefUnwindSafe
 {
     let fun = cookie as *mut F;
 
-    let ret = panic::catch_unwind(AssertUnwindSafe( || {
+    let ret = panic::catch_unwind(|| {
         let name = CStr::from_ptr(name).to_str().unwrap();
         (*fun)(name) as *mut () as *mut libc::c_void
-    }));
+    });
     if ret.is_ok() {
         ret.unwrap()
     } else {
@@ -58,7 +58,7 @@ impl OpenGlState {
     }
 
     pub(crate) fn new<F>(mpv_ctx: *mut MpvHandle, mut proc_addr: F) -> Result<OpenGlState>
-        where F: for<'a> Fn(&'a str) -> *const () + 'static
+        where F: for<'a> Fn(&'a str) -> *const () + RefUnwindSafe + 'static
     {
         let api_ctx = unsafe {
             mpv_get_sub_api(mpv_ctx, MpvSubApi::OpenglCb) as *mut MpvOpenGlCbContext
