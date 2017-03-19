@@ -122,21 +122,14 @@ pub enum MpvEventId {
     StartFile = 6,
     EndFile = 7,
     FileLoaded = 8,
-    TracksChanged = 9,
-    TrackSwitched = 10,
     Idle = 11,
-    Pause = 12,
-    Unpause = 13,
     Tick = 14,
-    ScriptInputDispatch = 15,
     ClientMessage = 16,
     VideoReconfig = 17,
     AudioReconfig = 18,
-    MetadataUpdate = 19,
     Seek = 20,
     PlaybackRestart = 21,
     PropertyChange = 22,
-    ChapterChange = 23,
     QueueOverflow = 24,
 }
 
@@ -182,14 +175,8 @@ pub enum MpvEndFileReason {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MpvEventEndFile {
-    pub reason: libc::c_int,
+    pub reason: MpvEndFileReason,
     pub error: libc::c_int,
-}
-
-#[repr(C)]
-pub struct MpvEventScriptInputDispatch {
-    pub arg0: libc::c_int,
-    pub type_: *const libc::c_char,
 }
 
 #[repr(C)]

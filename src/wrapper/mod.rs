@@ -384,17 +384,6 @@ impl<T: RefUnwindSafe, U: RefUnwindSafe> Parent<T, U> {
             return Err(ErrorKind::Null.into());
         }
 
-        unsafe {
-            // Disable deprecated events.
-            destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::TracksChanged, 0));
-            destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::TrackSwitched, 0));
-            destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::Pause, 0));
-            destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::Unpause, 0));
-            destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::ScriptInputDispatch, 0));
-            destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::MetadataUpdate, 0));
-            destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::ChapterChange, 0));
-        }
-
         #[cfg(feature="events")]
         let (ev_iter_notification, ev_to_observe, ev_to_observe_properties, ev_observed) = {
             let ev_iter_notification = Box::into_raw(Box::new((Mutex::new(false), Condvar::new())));
@@ -472,16 +461,6 @@ impl<T: RefUnwindSafe, U: RefUnwindSafe> Parent<T, U> {
             let name = CString::new(name)?;
             mpv_create_client(self.ctx(), name.as_ptr())
         };
-        unsafe {
-            // Disable deprecated events.
-            detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::TracksChanged, 0));
-            detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::TrackSwitched, 0));
-            detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::Pause, 0));
-            detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::Unpause, 0));
-            detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::ScriptInputDispatch, 0));
-            detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::MetadataUpdate, 0));
-            detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::ChapterChange, 0));
-        }
         #[cfg(feature="events")]
         let (ev_iter_notification, ev_to_observe, ev_to_observe_properties, ev_observed) =
             {

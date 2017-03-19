@@ -21,7 +21,7 @@ use parking_lot::{Condvar, Mutex};
 
 use super::*;
 use super::mpv_err;
-use super::super::LogLevel;
+use super::super::{LogLevel, EndFileReason};
 use super::super::raw::*;
 
 use std::collections::HashMap;
@@ -369,17 +369,6 @@ impl MpvEventEndFile {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[allow(missing_docs)]
-/// The reason an `Event::EndFile` was fired.
-pub enum EndFileReason {
-    Eof = 0,
-    Stop = 2,
-    Quit = 3,
-    Error = 4,
-    Redirect = 5,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[allow(missing_docs)]
 /// The data of an `Event::EndFile`. `error` is `Some` if `EndFileReason` is `Error`.
@@ -391,15 +380,7 @@ pub struct EndFile {
 impl EndFile {
     fn from_raw(raw: MpvEventEndFile) -> EndFile {
         EndFile {
-            reason: match raw.reason {
-                0 => EndFileReason::Eof,
-                2 => EndFileReason::Stop,
-                3 => EndFileReason::Quit,
-                4 => EndFileReason::Error,
-                5 => EndFileReason::Redirect,
-                _ => unreachable!(),
-
-            },
+            reason: raw.reason,
             error: {
                 let err = MpvError::from_i32(raw.error).unwrap();
                 if err != MpvError::Success {

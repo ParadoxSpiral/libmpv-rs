@@ -55,6 +55,7 @@ extern crate error_chain;
 /// Contains bindings to libmpv functions and data structures.
 pub mod raw;
 pub use raw::MpvLogLevel as LogLevel;
+pub use raw::MpvEndFileReason as EndFileReason;
 mod wrapper;
 pub use wrapper::*;
 #[cfg(test)]
