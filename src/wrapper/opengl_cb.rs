@@ -130,7 +130,7 @@ impl<'parent, V: RefUnwindSafe> OpenGlState<'parent, V> {
     /// video display configuration somehow changed and requires a redraw.
     ///
     /// # Safety
-    /// Do not call any mpv API during the callback
+    /// Do not call any mpv API during the callback.
     pub unsafe fn set_update_callback<F>(&mut self, mut data: V, callback: F)
         where F: for<'a> Fn(&'a V) + RefUnwindSafe + 'static, V: RefUnwindSafe
     {

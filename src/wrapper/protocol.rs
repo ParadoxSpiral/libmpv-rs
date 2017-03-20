@@ -164,6 +164,9 @@ pub struct ProtocolContext<'parent, T: RefUnwindSafe, U: RefUnwindSafe> {
     _does_not_outlive: PhantomData<&'parent Parent>,
 }
 
+unsafe impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> Send for ProtocolContext<'parent, T, U>{}
+unsafe impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> Sync for ProtocolContext<'parent, T, U>{}
+
 impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> ProtocolContext<'parent, T, U> {
     pub(crate) fn new(ctx: *mut MpvHandle,
     			   capacity: usize,
