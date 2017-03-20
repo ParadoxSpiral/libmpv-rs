@@ -295,7 +295,7 @@ impl FileState {
 pub struct Parent {
     ctx: *mut MpvHandle,
     events: bool,
-    ev_iter_notification: *mut (Mutex<bool>, Condvar),
+    ev_iter_notification: Option<*mut (Mutex<bool>, Condvar)>,
     ev_to_observe: Option<Mutex<Vec<Event>>>,
     ev_to_observe_properties: Option<Mutex<HashMap<String, libc::uint64_t>>>,
     ev_observed: Option<Mutex<Vec<InnerEvent>>>,
@@ -307,7 +307,7 @@ pub struct Parent {
 pub struct Client<'parent> {
     ctx: *mut MpvHandle,
     events: bool,
-    ev_iter_notification: *mut (Mutex<bool>, Condvar),
+    ev_iter_notification: Option<*mut (Mutex<bool>, Condvar)>,
     ev_to_observe: Option<Mutex<Vec<Event>>>,
     ev_observed: Option<Mutex<Vec<InnerEvent>>>,
     ev_to_observe_properties: Option<Mutex<HashMap<String, libc::uint64_t>>>,
@@ -375,7 +375,7 @@ impl Parent {
                                             ev_iter_notification as *mut _);
                 }
 
-                (ev_iter_notification,
+                (Some(ev_iter_notification),
                  Some(Mutex::new(Vec::with_capacity(15))),
                  Some(Mutex::new(HashMap::with_capacity(10))),
                  Some(Mutex::new(Vec::with_capacity(22))))
@@ -397,7 +397,7 @@ impl Parent {
                     detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::PropertyChange, 0));
                     detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::QueueOverflow, 0));
                 }
-                (ptr::null_mut(), None, None, None)
+                (None, None, None, None)
             }
         };
 
@@ -443,7 +443,7 @@ impl Parent {
                                             ev_iter_notification as *mut _);
                 }
 
-                (ev_iter_notification,
+                (Some(ev_iter_notification),
                  Some(Mutex::new(Vec::with_capacity(15))),
                  Some(Mutex::new(HashMap::with_capacity(10))),
                  Some(Mutex::new(Vec::with_capacity(22))))
@@ -465,7 +465,7 @@ impl Parent {
                     detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::PropertyChange, 0));
                     detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::QueueOverflow, 0));
                 }
-                (ptr::null_mut(), None, None, None)
+                (None, None, None, None)
             }
         };
 
@@ -525,13 +525,13 @@ pub trait MpvInstance: Sized {
     // FIXME: These can go once `Associated Fields` lands
     fn ctx(&self) -> *mut MpvHandle;
     fn events(&self) -> bool;
-    fn ev_iter_notification(&self) -> *mut (Mutex<bool>, Condvar);
+    fn ev_iter_notification(&self) -> &Option<*mut (Mutex<bool>, Condvar)>;
     fn ev_to_observe(&self) -> &Option<Mutex<Vec<Event>>>;
     fn ev_to_observe_properties(&self) -> &Option<Mutex<HashMap<String, libc::uint64_t>>>;
     fn ev_observed(&self) -> &Option<Mutex<Vec<InnerEvent>>>;
     unsafe fn drop_ev_iter(&mut self) {
         if self.events() {
-            Box::from_raw(self.ev_iter_notification());    
+            Box::from_raw(self.ev_iter_notification().unwrap());
         }
     }
 
@@ -615,7 +615,7 @@ pub trait MpvInstance: Sized {
         Ok(EventIter {
             ctx: self.ctx(),
             first_iteration: true,
-            notification: self.ev_iter_notification(),
+            notification: self.ev_iter_notification().unwrap(),
             all_to_observe: self.ev_to_observe().as_ref().unwrap(),
             all_to_observe_properties: self.ev_to_observe_properties().as_ref().unwrap(),
             local_to_observe: evs,
@@ -1119,8 +1119,8 @@ impl MpvInstance for Parent {
     fn events(&self) -> bool {
         self.events
     }
-    fn ev_iter_notification(&self) -> *mut (Mutex<bool>, Condvar) {
-        self.ev_iter_notification
+    fn ev_iter_notification(&self) -> &Option<*mut (Mutex<bool>, Condvar)> {
+        &self.ev_iter_notification
     }
     fn ev_to_observe(&self) -> &Option<Mutex<Vec<Event>>> {
         &self.ev_to_observe
@@ -1140,8 +1140,8 @@ impl<'parent> MpvInstance for Client<'parent> {
     fn events(&self) -> bool {
         self.events
     }
-    fn ev_iter_notification(&self) -> *mut (Mutex<bool>, Condvar) {
-        self.ev_iter_notification
+    fn ev_iter_notification(&self) -> &Option<*mut (Mutex<bool>, Condvar)> {
+        &self.ev_iter_notification
     }
     fn ev_to_observe(&self) -> &Option<Mutex<Vec<Event>>> {
         &self.ev_to_observe
