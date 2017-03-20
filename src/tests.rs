@@ -29,11 +29,8 @@ fn version() {
 
 #[test]
 fn properties() {
-    let mpv = Parent::<(), (), ()>::with_options(&[("cache-initial", 1.into()),
-                                               ("volume", 0.into()),
-                                               ("vo", "null".into()),
-                                               ("ytdl", true.into())])
-        .unwrap();
+    let mpv = Parent::with_options(&[("cache-initial", 1.into()), ("volume", 0.into()),
+                                     ("vo", "null".into()), ("ytdl", true.into())]).unwrap();
 
     mpv.playlist_load_files(&[("https://www.youtube.com/watch?v=DLzxrzFCyOs",
                                FileState::AppendPlay, None)])

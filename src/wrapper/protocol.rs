@@ -184,7 +184,7 @@ impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> ProtocolContext<'parent, T, U>
     ///
     /// Returns `Error::Mpv(MpvError::InvalidParameter)` if a protocol with the same name has
     /// already been registered.
-    pub fn register_protocol(&self, protocol: Protocol<T, U>) -> Result<()> {
+    pub fn register(&self, protocol: Protocol<T, U>) -> Result<()> {
         let mut protocols = self.protocols.lock();
         protocol.register(self.ctx)?;
         protocols.push(protocol);
