@@ -17,12 +17,14 @@
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 use libc;
+use parking_lot::MutexGuard;
 
 use super::*;
 use super::mpv_err;
 use super::super::raw::*;
 
 use std::ffi::CStr;
+use std::marker::PhantomData;
 use std::panic;
 use std::panic::RefUnwindSafe;
 use std::ptr;
@@ -60,20 +62,27 @@ unsafe extern "C" fn callback_update_wrapper<F, V>(cb_ctx: *mut libc::c_void)
 ///
 /// # Safety
 /// Mpv relies on correct and initialized OpenGL state.
-pub struct OpenGlState<V: RefUnwindSafe> {
-    pub(crate) api_ctx: *mut MpvOpenGlCbContext,
-    pub(crate) update_callback_data: V,
+pub struct OpenGlState<'parent, V: RefUnwindSafe,
+                        T: RefUnwindSafe + 'parent, U: RefUnwindSafe + 'parent>
+{
+    api_ctx: *mut MpvOpenGlCbContext,
+    update_callback_data: V,
+    _guard: MutexGuard<'parent, ()>,
+    _does_not_outlive: PhantomData<&'parent Parent<T, U>>,
 }
 
-impl<V: RefUnwindSafe> OpenGlState<V> {
-    pub(crate) fn empty() -> OpenGlState<V> {
-        OpenGlState{
-            api_ctx: ptr::null_mut(),
-            update_callback_data: unsafe{ mem::zeroed() },
-        }
+impl<'parent, V: RefUnwindSafe, T: RefUnwindSafe + 'parent, U: RefUnwindSafe + 'parent> Drop for OpenGlState<'parent, V, T, U> {
+    fn drop(&mut self) {
+        unsafe { mpv_opengl_cb_uninit_gl(self.api_ctx) };
     }
+}
 
-    pub(crate) fn new<F>(mpv_ctx: *mut MpvHandle, mut proc_addr: F) -> Result<OpenGlState<V>>
+impl<'parent, V: RefUnwindSafe, T: RefUnwindSafe + 'parent, U: RefUnwindSafe + 'parent> OpenGlState<'parent, V, T, U> {
+    pub(crate) fn new<F>(mpv_ctx: *mut MpvHandle,
+                         mut proc_addr: F,
+                         guard: MutexGuard<'parent, ()>,
+                         parent: PhantomData<&'parent Parent<T, U>>)
+            -> Result<OpenGlState<'parent, V, T, U>>
         where F: for<'a> Fn(&'a str) -> *const () + RefUnwindSafe + 'static
     {
         let api_ctx = unsafe {
@@ -87,6 +96,8 @@ impl<V: RefUnwindSafe> OpenGlState<V> {
             OpenGlState {
                 api_ctx: api_ctx,
                 update_callback_data: unsafe{ mem::zeroed() },
+                _guard: guard,
+                _does_not_outlive: parent,
             },
             unsafe {
                     mpv_opengl_cb_init_gl(api_ctx, ptr::null(),
@@ -133,3 +144,4 @@ impl<V: RefUnwindSafe> OpenGlState<V> {
         self.update_callback_data = data;
     }
 }
+
