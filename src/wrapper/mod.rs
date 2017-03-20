@@ -50,8 +50,8 @@ mod errors {
             VersionMismatch(linked: u32, loaded: u32) {
                 description("The library was compiled against a different mpv version than what is present on the system.")
             }
-            CallbackExists {
-                description("An opengl callback has already been registered.")
+            ContextExists {
+                description("An opengl or protocol context has already been created.")
             }
             Null {
                 description("Mpv returned null while creating the core.")
@@ -293,7 +293,7 @@ impl FileState {
 }
 
 /// An mpv instance from which `Client`s can be spawned.
-pub struct Parent<T: RefUnwindSafe, U: RefUnwindSafe> {
+pub struct Parent {
     ctx: *mut MpvHandle,
     #[cfg(feature="events")]
     ev_iter_notification: *mut (Mutex<bool>, Condvar),
@@ -303,12 +303,12 @@ pub struct Parent<T: RefUnwindSafe, U: RefUnwindSafe> {
     ev_to_observe_properties: Mutex<HashMap<String, libc::uint64_t>>,
     #[cfg(feature="events")]
     ev_observed: Mutex<Vec<InnerEvent>>,
-    custom_protocols: Mutex<Vec<Protocol<T, U>>>,
+    protocols_guard: Mutex<()>,
     opengl_guard: Mutex<()>,
 }
 
 /// A client of a `Parent`.
-pub struct Client<'parent, T: RefUnwindSafe + 'parent, U: RefUnwindSafe + 'parent> {
+pub struct Client<'parent> {
     ctx: *mut MpvHandle,
     #[cfg(feature="events")]
     ev_iter_notification: *mut (Mutex<bool>, Condvar),
@@ -318,15 +318,15 @@ pub struct Client<'parent, T: RefUnwindSafe + 'parent, U: RefUnwindSafe + 'paren
     ev_observed: Mutex<Vec<InnerEvent>>,
     #[cfg(feature="events")]
     ev_to_observe_properties: Mutex<HashMap<String, libc::uint64_t>>,
-    _does_not_outlive: PhantomData<&'parent Parent<T, U>>,
+    _does_not_outlive: PhantomData<&'parent Parent>,
 }
 
-unsafe impl<T: RefUnwindSafe, U: RefUnwindSafe> Send for Parent<T, U> {}
-unsafe impl<T: RefUnwindSafe, U: RefUnwindSafe> Sync for Parent<T, U> {}
-unsafe impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> Send for Client<'parent, T, U> {}
-unsafe impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> Sync for Client<'parent, T, U> {}
+unsafe impl Send for Parent {}
+unsafe impl Sync for Parent {}
+unsafe impl<'parent> Send for Client<'parent> {}
+unsafe impl<'parent> Sync for Client<'parent> {}
 
-impl<T: RefUnwindSafe, U: RefUnwindSafe> Drop for Parent<T, U> {
+impl Drop for Parent {
     #[inline]
     fn drop(&mut self) {
         unsafe {
@@ -337,7 +337,7 @@ impl<T: RefUnwindSafe, U: RefUnwindSafe> Drop for Parent<T, U> {
     }
 }
 
-impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> Drop for Client<'parent, T, U> {
+impl<'parent> Drop for Client<'parent> {
     #[inline]
     fn drop(&mut self) {
         unsafe {
@@ -348,17 +348,17 @@ impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> Drop for Client<'parent, T, U>
     }
 }
 
-impl<T: RefUnwindSafe, U: RefUnwindSafe> Parent<T, U> {
+impl Parent {
     #[inline]
     /// Create a new `Parent`.
     /// The default settings can be probed by running: `$ mpv --show-profile=libmpv`
-    pub fn new() -> Result<Parent<T, U>> {
+    pub fn new() -> Result<Parent> {
         Parent::with_options(&[])
     }
 
     #[inline]
     /// Create a new `Parent`, with the given settings set before initialization.
-    pub fn with_options(opts: &[(&str, Data)]) -> Result<Parent<T, U>> {
+    pub fn with_options(opts: &[(&str, Data)]) -> Result<Parent> {
         SET_LC_NUMERIC.call_once(|| {
             let c = &*b"c0";
             unsafe { libc::setlocale(libc::LC_NUMERIC, c.as_ptr() as _) };
@@ -424,7 +424,7 @@ impl<T: RefUnwindSafe, U: RefUnwindSafe> Parent<T, U> {
         #[cfg(not(feature="events"))] {
             ret = Ok(Parent {
                 ctx: ctx,
-                custom_protocols: Mutex::new(Vec::new()),
+                protocols_guard: Mutex::new(()),
                 opengl_guard: Mutex::new(()),
             });
         }
@@ -436,7 +436,7 @@ impl<T: RefUnwindSafe, U: RefUnwindSafe> Parent<T, U> {
                 ev_to_observe: ev_to_observe,
                 ev_to_observe_properties: ev_to_observe_properties,
                 ev_observed: ev_observed,
-                custom_protocols: Mutex::new(Vec::new()),
+                protocols_guard: Mutex::new(()),
                 opengl_guard: Mutex::new(()),
             });
         }
@@ -446,7 +446,7 @@ impl<T: RefUnwindSafe, U: RefUnwindSafe> Parent<T, U> {
     #[inline]
     /// Create a client with `name`, that is connected to the core of `self`, but has its own queue
     /// for API events and such.
-    pub fn new_client(&self, name: &str) -> Result<Client<T, U>> {
+    pub fn new_client(&self, name: &str) -> Result<Client> {
         let ctx = unsafe {
             let name = CString::new(name)?;
             mpv_create_client(self.ctx(), name.as_ptr())
@@ -512,35 +512,36 @@ impl<T: RefUnwindSafe, U: RefUnwindSafe> Parent<T, U> {
     }
 
     #[inline]
-    /// Enable opengl callback for this `Parent`.
-    pub fn init_opengl_callback<F, V>(&self, procaddr: F) -> Result<OpenGlState<V, T, U>>
+    /// Create a context with which opengl callback functions can be used.
+    pub fn create_opengl_context<F, V>(&self, procaddr: F) -> Result<OpenGlState<V>>
         where F: for<'a> Fn(&'a str) -> *const () + RefUnwindSafe + 'static,
               V: RefUnwindSafe
     {
         let guard = self.opengl_guard.try_lock();
 
         if guard.is_none() {
-            Err(ErrorKind::CallbackExists.into())
+            Err(ErrorKind::ContextExists.into())
         } else {
             Ok(OpenGlState::new(self.ctx, procaddr, guard.unwrap(), PhantomData::<&Self>)?)
         }
     }
 
     #[inline]
-    /// Register a custom `Protocol`. Once a protocol has been registered, it lives as long as the
-    /// `Parent`.
-    ///
-    /// Returns `Error::Mpv(MpvError::InvalidParameter)` if a protocol with the same name has
-    /// already been registered.
-    pub fn register_protocol(&self, protocol: Protocol<T, U>) -> Result<()> {
-        let mut protocols = self.custom_protocols.lock();
-        protocol.register(self.ctx)?;
-        protocols.push(protocol);
-        Ok(())
+    /// Create a context with which custom protocols can be registered.
+    pub fn create_protocol_context<T, U>(&self, capacity: usize) -> Result<ProtocolContext<T, U>>
+        where T: RefUnwindSafe, U: RefUnwindSafe
+    {
+        let guard = self.protocols_guard.try_lock();
+
+        if guard.is_none() {
+            Err(ErrorKind::ContextExists.into())
+        } else {
+            Ok(ProtocolContext::new(self.ctx, capacity, guard.unwrap(), PhantomData::<&Self>))
+        }
     }
 }
 
-impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> Client<'parent, T, U> {
+impl<'parent> Client<'parent> {
     #[inline]
     /// Returns the name associated with `self`.
     pub fn name(&self) -> &str {
@@ -1147,7 +1148,7 @@ pub trait MpvInstance: Sized {
     }
 }
 
-impl<T: RefUnwindSafe, U: RefUnwindSafe> MpvInstance for Parent<T, U> {
+impl MpvInstance for Parent {
     fn ctx(&self) -> *mut MpvHandle {
         self.ctx
     }
@@ -1169,7 +1170,7 @@ impl<T: RefUnwindSafe, U: RefUnwindSafe> MpvInstance for Parent<T, U> {
     }
 }
 
-impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> MpvInstance for Client<'parent, T, U> {
+impl<'parent> MpvInstance for Client<'parent> {
     fn ctx(&self) -> *mut MpvHandle {
         self.ctx
     }

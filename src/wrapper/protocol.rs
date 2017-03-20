@@ -21,12 +21,14 @@
 
 use alloc::heap;
 use libc;
+use parking_lot::{Mutex, MutexGuard};
 
 use super::*;
 use super::{mpv_err, mpv_cstr_to_string};
 use super::super::raw::*;
 
 use std::ffi::{CStr, CString};
+use std::marker::PhantomData;
 use std::mem;
 use std::panic;
 use std::panic::RefUnwindSafe;
@@ -151,6 +153,43 @@ struct ProtocolData<T, U> {
 	read_fn: StreamRead<T>,
 	seek_fn: Option<StreamSeek<T>>,
 	size_fn: Option<StreamSize<T>>,
+}
+
+/// This context holds state relevant to custom protocols.
+/// It is created by calling `Parent::create_protocol_context`.
+pub struct ProtocolContext<'parent, T: RefUnwindSafe, U: RefUnwindSafe> {
+	ctx: *mut MpvHandle,
+	protocols: Mutex<Vec<Protocol<T, U>>>,
+	_guard: MutexGuard<'parent, ()>,
+    _does_not_outlive: PhantomData<&'parent Parent>,
+}
+
+impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> ProtocolContext<'parent, T, U> {
+    pub(crate) fn new(ctx: *mut MpvHandle,
+    			   capacity: usize,
+    			   guard: MutexGuard<'parent, ()>,
+    			   marker: PhantomData<&'parent Parent>)
+    	-> ProtocolContext<'parent, T, U>
+    {
+    	ProtocolContext {
+    		ctx: ctx,
+    		protocols: Mutex::new(Vec::with_capacity(capacity)),
+    		_guard: guard,
+    		_does_not_outlive: marker,
+    	}
+    }
+
+    /// Register a custom `Protocol`. Once a protocol has been registered, it lives as long as the
+    /// `Parent`.
+    ///
+    /// Returns `Error::Mpv(MpvError::InvalidParameter)` if a protocol with the same name has
+    /// already been registered.
+    pub fn register_protocol(&self, protocol: Protocol<T, U>) -> Result<()> {
+        let mut protocols = self.protocols.lock();
+        protocol.register(self.ctx)?;
+        protocols.push(protocol);
+        Ok(())
+	}
 }
 
 /// `Protocol` holds all state used by a custom protocol.

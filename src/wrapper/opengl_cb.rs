@@ -62,27 +62,26 @@ unsafe extern "C" fn callback_update_wrapper<F, V>(cb_ctx: *mut libc::c_void)
 ///
 /// # Safety
 /// Mpv relies on correct and initialized OpenGL state.
-pub struct OpenGlState<'parent, V: RefUnwindSafe,
-                        T: RefUnwindSafe + 'parent, U: RefUnwindSafe + 'parent>
+pub struct OpenGlState<'parent, V: RefUnwindSafe>
 {
     api_ctx: *mut MpvOpenGlCbContext,
     update_callback_data: V,
     _guard: MutexGuard<'parent, ()>,
-    _does_not_outlive: PhantomData<&'parent Parent<T, U>>,
+    _does_not_outlive: PhantomData<&'parent Parent>,
 }
 
-impl<'parent, V: RefUnwindSafe, T: RefUnwindSafe + 'parent, U: RefUnwindSafe + 'parent> Drop for OpenGlState<'parent, V, T, U> {
+impl<'parent, V: RefUnwindSafe> Drop for OpenGlState<'parent, V> {
     fn drop(&mut self) {
         unsafe { mpv_opengl_cb_uninit_gl(self.api_ctx) };
     }
 }
 
-impl<'parent, V: RefUnwindSafe, T: RefUnwindSafe + 'parent, U: RefUnwindSafe + 'parent> OpenGlState<'parent, V, T, U> {
+impl<'parent, V: RefUnwindSafe> OpenGlState<'parent, V> {
     pub(crate) fn new<F>(mpv_ctx: *mut MpvHandle,
                          mut proc_addr: F,
                          guard: MutexGuard<'parent, ()>,
-                         parent: PhantomData<&'parent Parent<T, U>>)
-            -> Result<OpenGlState<'parent, V, T, U>>
+                         parent: PhantomData<&'parent Parent>)
+            -> Result<OpenGlState<'parent, V>>
         where F: for<'a> Fn(&'a str) -> *const () + RefUnwindSafe + 'static
     {
         let api_ctx = unsafe {
