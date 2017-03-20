@@ -35,7 +35,6 @@
 // TODO: write an overview of examples
 // TODO: write docs for build/static_libmpv
 // TODO: clean up docs in general
-// TODO: Once const-dependant type system lands, remove event feature by const bool
 // TODO: Add test for every single function
 
 // Procedure for updating to new libmpv:

@@ -37,8 +37,5 @@ hyper = "0.10"
 git2 = "0.6"
 
 [features]
-default = ["events", "custom_protocol"]
-events = [] # enable events
-custom_protocol = [] # enable custom protocols
 build_libmpv = [] # build libmpv automatically at compile time
 static_libmpv = ["build_libmpv"] # build & link libmpv statically

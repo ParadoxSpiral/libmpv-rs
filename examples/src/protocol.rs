@@ -73,7 +73,7 @@ pub fn exec() {
                       Some(size))
     };
 
-    let mpv = Parent::with_options(&[("volume", 30.into())]).unwrap();
+    let mpv = Parent::with_options(false, &[("volume", 30.into())]).unwrap();
     let proto_ctx = mpv.create_protocol_context(1).unwrap();
     proto_ctx.register(protocol).unwrap();
 
