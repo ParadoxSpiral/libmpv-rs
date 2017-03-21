@@ -482,9 +482,10 @@ impl Parent {
 
     #[inline]
     /// Create a context with which opengl callback functions can be used.
+    ///
+    /// `vo` has to be set to `opengl-cb` for this to work properly.
     pub fn create_opengl_context<F, V>(&self, procaddr: F) -> Result<OpenGlState<V>>
-        where F: for<'a> Fn(&'a str) -> *const () + 'static,
-              V: RefUnwindSafe
+        where F: for<'a> Fn(&'a str) -> *const () + 'static
     {
         let guard = self.opengl_guard.try_lock();
 
