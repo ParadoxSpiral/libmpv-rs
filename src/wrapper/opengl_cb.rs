@@ -65,7 +65,7 @@ unsafe extern "C" fn callback_update_wrapper<F, V>(cb_ctx: *mut libc::c_void)
 pub struct OpenGlState<'parent, V>
 {
     api_ctx: *mut MpvOpenGlCbContext,
-    update_callback_data: V,
+    update_callback_data: Option<V>,
     _guard: MutexGuard<'parent, ()>,
     _does_not_outlive: PhantomData<&'parent Parent>,
 }
@@ -97,7 +97,7 @@ impl<'parent, V> OpenGlState<'parent, V> {
         mpv_err(
             OpenGlState {
                 api_ctx: api_ctx,
-                update_callback_data: unsafe{ mem::zeroed() },
+                update_callback_data: None,
                 _guard: guard,
                 _does_not_outlive: parent,
             },
@@ -144,6 +144,6 @@ impl<'parent, V> OpenGlState<'parent, V> {
                                             as *mut (*const F, *mut V)
                                             as *mut libc::c_void);
         
-        self.update_callback_data = data;
+        self.update_callback_data = Some(data);
     }
 }
