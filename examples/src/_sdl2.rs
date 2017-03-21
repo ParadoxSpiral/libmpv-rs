@@ -19,7 +19,6 @@
 use crossbeam;
 use mpv::*;
 use mpv::opengl_cb::*;
-use parking_lot::Mutex as PMutex;
 use parking_lot::Condvar;
 use sdl2;
 use sdl2::event::Event;
@@ -48,7 +47,7 @@ pub fn exec() {
         // Create SDL state
         let sdl_context = sdl2::init().unwrap();
         let video_subsystem = sdl_context.video().unwrap();
-        let window = video_subsystem.window("mpv-rs sdl2 example", 1290, 720)
+        let window = video_subsystem.window("mpv-rs sdl2 example", 1280, 720)
             .resizable()
             .position_centered()
             .opengl()
@@ -66,15 +65,16 @@ pub fn exec() {
                                          ("volume", 30.into()),
                                          ("ytdl", true.into())])
                 .unwrap();
-        let mut mpv_ogl = mpv.create_opengl_context(move |name|
-                                *AssertUnwindSafe(video_subsystem.gl_get_proc_address(name)))
+        let mut mpv_ogl = mpv.create_opengl_context(|name| {
+            (*AssertUnwindSafe(|name| -> *const () {
+                video_subsystem.gl_get_proc_address(name)
+            }))(name)
+        })
                              .unwrap();
-        let notifier = Arc::new(Condvar::new());
-        let n = notifier.clone();
-        mpv_ogl.set_update_callback(AssertUnwindSafe(n), gl_update_callback);
+        let notifier = Condvar::new();
+        mpv_ogl.set_update_callback(AssertUnwindSafe(&notifier), gl_update_callback);
 
         // Setup input event polling at 20hz
-        let n = notifier.clone();
         scope.spawn(move || {
             let mut event_pump = sdl_context.event_pump().unwrap();
             let sync = Duration::from_millis(1000 / 20);
@@ -85,7 +85,7 @@ pub fn exec() {
                         Event::Quit { .. } |
                         Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
                             RUNNING.store(false, Ordering::Release);
-                            n.notify_one();
+                            notifier.notify_one();
                             break 'main;
                         }
                         Event::KeyDown { keycode: Some(Keycode::Space), repeat: false, .. } => {
@@ -110,10 +110,12 @@ pub fn exec() {
         });
 
         // Setup drawing
-        let notifier = notifier.clone();
         scope.spawn(move || {
+            use parking_lot::Mutex;
+
             let wref = renderer.window().unwrap();
-            let mut guard = PMutex::new(false);
+            wref.gl_set_context_to_current().unwrap();
+            let mut guard = Mutex::new(false);
             loop {
                 if RUNNING.load(Ordering::Acquire) {
                     notifier.wait(&mut guard.lock());
@@ -131,6 +133,6 @@ pub fn exec() {
     });
 }
 
-fn gl_update_callback(notifier: &AssertUnwindSafe<Arc<Condvar>>) {
+fn gl_update_callback(notifier: &AssertUnwindSafe<&Condvar>) {
     notifier.notify_one();
 }
