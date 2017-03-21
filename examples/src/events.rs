@@ -16,8 +16,7 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-extern crate crossbeam;
-
+use crossbeam;
 use mpv::*;
 use mpv::events::*;
 
@@ -27,30 +26,32 @@ use std::thread;
 
 pub fn exec() {
     // Create a `Parent` (with events enabled) and set some properties.
-    let mpv = Parent::with_options(true, &[("cache-initial", 1.into()), ("volume", 10.into()),
-                                     ("vo", "null".into()), ("ytdl", true.into())]).unwrap();
+    let mpv = Parent::with_options(true,
+                                   &[("cache-initial", 1.into()),
+                                     ("volume", 10.into()),
+                                     ("vo", "null".into()),
+                                     ("ytdl", true.into())])
+            .unwrap();
 
     // Create a crossbeam scope for convenience to use mpv in multiple threads.
     crossbeam::scope(|scope| {
         // Spin up 3 threads that observe different sets of `Event`s.
         scope.spawn(|| {
             let iter = mpv.observe_events(&[Event::FileLoaded,
-                                  Event::StartFile,
-                                  Event::Seek,
-                                  Event::PlaybackRestart,
-                                  Event::EndFile(None)])
+                                            Event::StartFile,
+                                            Event::Seek,
+                                            Event::PlaybackRestart,
+                                            Event::EndFile(None)])
                 .unwrap();
 
             for vec in iter {
                 // If any `Event` was an `Endfile`, . . .
                 if let Some(&Event::EndFile(ref v)) =
-                    vec.iter().find(|e| {
-                        if let Event::EndFile(_) = **e {
-                            true
-                        } else {
-                            false
-                        }
-                    }) {
+                    vec.iter().find(|e| if let Event::EndFile(_) = **e {
+                                        true
+                                    } else {
+                                        false
+                                    }) {
                     // . . . print the `EndFile` reason and exit, . . .
                     println!("File ended! Reason: {:?}", v);
                     thread::sleep(Duration::from_millis(300));
@@ -64,7 +65,7 @@ pub fn exec() {
         scope.spawn(|| {
             // Here the value of the property is irrelevant: only the name is used.
             let iter = mpv.observe_events(&[Event::PropertyChange(("volume".into(), 0.into())),
-                                  Event::PropertyChange(("pause".into(), false.into()))])
+                                            Event::PropertyChange(("pause".into(), false.into()))])
                 .unwrap();
 
             for vec in iter {

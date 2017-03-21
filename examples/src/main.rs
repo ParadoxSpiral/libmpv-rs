@@ -20,8 +20,12 @@
 
 mod events;
 mod protocol;
+mod _sdl2;
 
+extern crate crossbeam;
 extern crate mpv;
+extern crate parking_lot;
+extern crate sdl2;
 
 fn main() {
     if cfg!(any(feature = "all", feature = "events")) {
@@ -29,5 +33,8 @@ fn main() {
     }
     if cfg!(any(feature = "all", feature = "protocol")) {
         protocol::exec();
+    }
+    if cfg!(any(feature = "all", feature = "_sdl2")) {
+        _sdl2::exec();
     }
 }

@@ -24,10 +24,13 @@ authors = ["ParadoxSpiral <ParadoxSpiral@riseup.net>"]
 [features]
 # Decide which examples to show
 deafult = ["all"]
-all = ['events', 'protocol']
+all = ['events', 'protocol', '_sdl2']
 events = []
 protocol = []
+_sdl2 = []
 
 [dependencies]
 mpv = {path = "../"}
 crossbeam = "0.2"
+sdl2 = "0.29"
+parking_lot = {version = "0.3", features = ['nightly']}

@@ -85,7 +85,7 @@ impl<'parent, V: RefUnwindSafe> OpenGlState<'parent, V> {
                          guard: MutexGuard<'parent, ()>,
                          parent: PhantomData<&'parent Parent>)
             -> Result<OpenGlState<'parent, V>>
-        where F: for<'a> Fn(&'a str) -> *const () + RefUnwindSafe + 'static
+        where F: for<'a> Fn(&'a str) -> *const () + RefUnwindSafe
     {
         let api_ctx = unsafe {
             mpv_get_sub_api(mpv_ctx, MpvSubApi::OpenglCb) as *mut MpvOpenGlCbContext
