@@ -5,9 +5,9 @@ To get started you need libmpv installed on the system, or enable the "build_lib
 
 # Examples
 To run an example, execute `cargo run [--release] --example x -- path`, where x is any of:
-	*events: multi-threaded event enumeration
-	*protocol: implementation of custom `filereader://` protocol that… reads files
-	*sdl2: draw onto an sdl2 framebuffer, keybindings
+* events: multi-threaded event enumeration
+* protocol: implementation of custom `filereader://` protocol that… reads files
+* sdl2: draw onto an sdl2 framebuffer, keybindings
 
 # Dependencies
 Libmpv is required, and in the case of the last example sdl2.
