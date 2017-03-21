@@ -66,7 +66,8 @@ pub fn exec() {
             .unwrap();
     let vs = video_subsystem.clone();
     let mut mpv_ogl = mpv.create_opengl_context(move |name| vs.gl_get_proc_address(name)).unwrap();
-    unsafe { mpv_ogl.set_update_callback(AssertUnwindSafe(events), gl_update_callback) };
+    unsafe { mpv_ogl.set_update_callback(AssertUnwindSafe(events),
+                                         |events| events.push_custom_event(Draw {}).unwrap()) };
 
     // Load specified file
     mpv.playlist_load_files(&[(&path, FileState::AppendPlay, None)]).unwrap();
@@ -104,8 +105,4 @@ pub fn exec() {
             }
         }
     }
-}
-
-fn gl_update_callback(events: &AssertUnwindSafe<sdl2::EventSubsystem>) {
-    events.push_custom_event(Draw {}).unwrap()
 }
