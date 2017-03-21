@@ -109,7 +109,8 @@ impl<'parent, V: RefUnwindSafe> OpenGlState<'parent, V> {
     #[inline]
     /// Set the fbo that mpv will draw on, and start rendering.
     /// Passing `0` as `w` or `h` will choose the size of the fbo.
-    pub unsafe fn set_draw_target(&self, fbo: libc::c_int, w: usize, h: usize)
+    /// If `h` is negative, the coordinate system is flipped.
+    pub unsafe fn draw(&self, fbo: libc::c_int, w: usize, h: isize)
         -> Result<()>
     {
         mpv_err((), mpv_opengl_cb_draw(self.api_ctx, fbo, w as _, h as _))
