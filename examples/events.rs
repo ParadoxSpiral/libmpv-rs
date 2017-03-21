@@ -27,6 +27,8 @@ use std::time::Duration;
 use std::thread;
 
 pub fn main() {
+    let path = env::args().nth(1).expect("Expected path to media as argument, found nil.");
+
     // Create a `Parent` (with events enabled) and set some properties.
     let mpv = Parent::with_options(true,
                                    &[("cache-initial", 1.into()),
@@ -84,10 +86,7 @@ pub fn main() {
         });
 
         // Add a file to play, ytdl was set to true for this.
-        mpv.playlist_load_files(&[("https://www.youtube.com/watch?v=DLzxrzFCyOs",
-                                    FileState::AppendPlay,
-                                    None)])
-            .unwrap();
+        mpv.playlist_load_files(&[(&path, FileState::AppendPlay, None)]).unwrap();
 
         thread::sleep(Duration::from_secs(3));
 

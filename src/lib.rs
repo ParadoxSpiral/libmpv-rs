@@ -32,8 +32,6 @@
 //!
 //! See the 'examples' directory in the crate root.
 
-// TODO: write an overview of examples
-// TODO: write docs for build/static_libmpv
 // TODO: clean up docs in general
 // TODO: Add test for every single function
 

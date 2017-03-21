@@ -3,7 +3,16 @@ A libmpv abstraction written in rust that's easy to use and provides the ability
 
 To get started you need libmpv installed on the system, or enable the "build_libmpv" feature-flag.
 
-For examples see /examples/, which contain usages of general methods, events, and custom protocols.
+# Examples
+To run an example, execute `cargo run [--release] --example x -- path`, where x is any of:
+	*events: multi-threaded event enumeration
+	*protocol: implementation of custom `filereader://` protocol that… reads files
+	*sdl2: draw onto an sdl2 framebuffer, keybindings
+
+# Dependencies
+Libmpv is required, and in the case of the last example sdl2.
+However, the feature-flag `build_libmpv` automatically downloads and links against a compatible libmpv.
+`static_libmpv` automatically builds and links against a static libmpv. This works cross-platform, but not across architectures.
 
 # Contributing
-All pull requests welcome.
+All pull requests/issues welcome.
