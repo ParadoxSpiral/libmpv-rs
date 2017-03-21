@@ -33,4 +33,3 @@ _sdl2 = []
 mpv = {path = "../"}
 crossbeam = "0.2"
 sdl2 = "0.29"
-parking_lot = {version = "0.3", features = ['nightly']}

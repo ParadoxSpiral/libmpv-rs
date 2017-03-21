@@ -4,7 +4,6 @@ version = "0.1.0"
 dependencies = [
  "crossbeam 0.2.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "mpv 0.0.1",
- "parking_lot 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "sdl2 0.29.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 

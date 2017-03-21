@@ -16,22 +16,18 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-use crossbeam;
 use mpv::*;
-use mpv::opengl_cb::*;
-use parking_lot::Condvar;
 use sdl2;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 
 use std::env;
 use std::panic::AssertUnwindSafe;
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, Instant};
-use std::thread;
+use std::rc::Rc;
+use std::sync::Mutex;
+use std::time::Duration;
 
-static RUNNING: AtomicBool = AtomicBool::new(true);
+struct Draw{}
 
 pub fn exec() {
     let path = env::args().nth(1).expect("Expected path to media as argument, found nil.");
@@ -43,96 +39,75 @@ pub fn exec() {
         panic!("OpenGl driver not found!")
     };
 
-    crossbeam::scope(|scope| {
-        // Create SDL state
-        let sdl_context = sdl2::init().unwrap();
-        let video_subsystem = sdl_context.video().unwrap();
-        let window = video_subsystem.window("mpv-rs sdl2 example", 1280, 720)
-            .resizable()
-            .position_centered()
-            .opengl()
-            .build()
+    // Create SDL state
+    let sdl = sdl2::init().unwrap();
+    let video_subsystem = Rc::new(Mutex::new(sdl.video().unwrap()));
+    let vs = video_subsystem.clone();
+    let window = vs.lock().unwrap().window("mpv-rs sdl2 example", 1280, 720)
+        .resizable()
+        .position_centered()
+        .opengl()
+        .build()
+        .unwrap();
+    let renderer = window.renderer()
+        .index(driver_index as _)
+        .build()
+        .expect("Failed to create renderer with given parameters");
+    let wref = renderer.window().unwrap();
+    let mut event_pump = sdl.event_pump().unwrap();
+    let events = sdl.event().unwrap();
+    events.register_custom_event::<Draw>().unwrap();
+
+    // Create mpv state
+    let mpv = Parent::with_options(false,
+                                   &[("vo", "opengl-cb".into()),
+                                     ("cache-initial", 1.into()),
+                                     ("volume", 30.into()),
+                                     ("ytdl", true.into())])
             .unwrap();
-        let renderer = window.renderer()
-            .index(driver_index as _)
-            .build()
-            .expect("Failed to create renderer with given parameters");
+    let vs = video_subsystem.clone();
+    let mut mpv_ogl = mpv.create_opengl_context(move |name| (*vs.lock().unwrap()).gl_get_proc_address(name)).unwrap();
+    unsafe { mpv_ogl.set_update_callback(AssertUnwindSafe(events), gl_update_callback) };
 
-        // Create mpv state
-        let mpv = Parent::with_options(false,
-                                       &[("vo", "opengl-cb".into()),
-                                         ("cache-initial", 1.into()),
-                                         ("volume", 30.into()),
-                                         ("ytdl", true.into())])
-                .unwrap();
-        let mut mpv_ogl = mpv.create_opengl_context(|name| {
-            (*AssertUnwindSafe(|name| -> *const () {
-                video_subsystem.gl_get_proc_address(name)
-            }))(name)
-        })
-                             .unwrap();
-        let notifier = Condvar::new();
-        mpv_ogl.set_update_callback(AssertUnwindSafe(&notifier), gl_update_callback);
+    // Load specified file
+    mpv.playlist_load_files(&[(&path, FileState::AppendPlay, None)]).unwrap();
 
-        // Setup input event polling at 20hz
-        scope.spawn(move || {
-            let mut event_pump = sdl_context.event_pump().unwrap();
-            let sync = Duration::from_millis(1000 / 20);
-            'main: loop {
-                let initial = Instant::now();
-                for event in event_pump.poll_iter() {
-                    match event {
-                        Event::Quit { .. } |
-                        Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
-                            RUNNING.store(false, Ordering::Release);
-                            notifier.notify_one();
-                            break 'main;
-                        }
-                        Event::KeyDown { keycode: Some(Keycode::Space), repeat: false, .. } => {
-                            if let Data::Flag(true) = mpv.get_property("pause", Format::Flag)
-                                   .unwrap() {
-                                mpv.unpause().unwrap();
-                            } else {
-                                mpv.pause().unwrap();
-                            }
-                        }
-                        Event::KeyDown { keycode: Some(Keycode::Right), repeat: false, .. } => {
-                            mpv.seek_forward(&Duration::from_secs(10)).unwrap();
-                        }
-                        _ => {}
+    // Setup event handling
+    'main: loop {
+        for event in event_pump.wait_iter() {
+            if event.is_user_event() {
+                // The only user event is `Draw`, we don't have to check.
+                let (width, height) = wref.size();
+                unsafe {
+                    mpv_ogl.draw(0, width as _, -(height as isize)).unwrap();
+                }
+                wref.gl_swap_window();
+                continue;
+            }
+
+            match event {
+                Event::Quit { .. } |
+                Event::KeyDown { keycode: Some(Keycode::Escape), .. } |
+                Event::KeyDown { keycode: Some(Keycode::Q), .. } => {
+                    break 'main;
+                }
+                Event::KeyDown { keycode: Some(Keycode::Space), repeat: false, .. } => {
+                    if let Data::Flag(true) = mpv.get_property("pause", Format::Flag)
+                           .unwrap() {
+                        mpv.unpause().unwrap();
+                    } else {
+                        mpv.pause().unwrap();
                     }
                 }
-                let diff = Instant::now() - initial;
-                if diff < sync {
-                    thread::sleep(sync - diff);
+                Event::KeyDown { keycode: Some(Keycode::Right), repeat: false, .. } => {
+                    mpv.seek_forward(&Duration::from_secs(10)).unwrap();
                 }
+                _ => { }
             }
-        });
-
-        // Setup drawing
-        scope.spawn(move || {
-            use parking_lot::Mutex;
-
-            let wref = renderer.window().unwrap();
-            wref.gl_set_context_to_current().unwrap();
-            let mut guard = Mutex::new(false);
-            loop {
-                if RUNNING.load(Ordering::Acquire) {
-                    notifier.wait(&mut guard.lock());
-                    let (width, height) = wref.size();
-                    unsafe {
-                        mpv_ogl.draw(0, width as _, -(height as isize)).unwrap();
-                    }
-                    wref.gl_swap_window();
-                }
-            }
-        });
-
-        // Load specified file
-        mpv.playlist_load_files(&[(&path, FileState::AppendPlay, None)]).unwrap();
-    });
+        }
+    }
 }
 
-fn gl_update_callback(notifier: &AssertUnwindSafe<&Condvar>) {
-    notifier.notify_one();
+fn gl_update_callback(events: &AssertUnwindSafe<sdl2::EventSubsystem>) {
+    events.push_custom_event(Draw{}).unwrap()
 }

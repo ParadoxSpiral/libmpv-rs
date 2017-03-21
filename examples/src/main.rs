@@ -17,14 +17,12 @@
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 // For an example of opengl callback, see pmpv.
-
 mod events;
 mod protocol;
 mod _sdl2;
 
 extern crate crossbeam;
 extern crate mpv;
-extern crate parking_lot;
 extern crate sdl2;
 
 fn main() {
