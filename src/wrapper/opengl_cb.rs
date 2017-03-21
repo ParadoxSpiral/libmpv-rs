@@ -26,20 +26,20 @@ use super::super::raw::*;
 use std::ffi::CStr;
 use std::marker::PhantomData;
 use std::panic;
-use std::panic::RefUnwindSafe;
+use std::panic::{AssertUnwindSafe, RefUnwindSafe};
 use std::ptr;
 
 unsafe extern "C" fn get_proc_addr_wrapper<F>(cookie: *mut libc::c_void,
                                            name: *const libc::c_char)
                                            -> *mut libc::c_void
-    where F: for<'a> Fn(&'a str) -> *const () + RefUnwindSafe
+    where F: for<'a> Fn(&'a str) -> *const ()
 {
     let fun = cookie as *mut F;
 
-    let ret = panic::catch_unwind(|| {
+    let ret = panic::catch_unwind(AssertUnwindSafe( || {
         let name = CStr::from_ptr(name).to_str().unwrap();
         (*fun)(name) as *mut () as *mut libc::c_void
-    });
+    }));
     if ret.is_ok() {
         ret.unwrap()
     } else {
@@ -62,7 +62,7 @@ unsafe extern "C" fn callback_update_wrapper<F, V>(cb_ctx: *mut libc::c_void)
 ///
 /// # Safety
 /// Mpv relies on correct and initialized OpenGL state.
-pub struct OpenGlState<'parent, V: RefUnwindSafe>
+pub struct OpenGlState<'parent, V>
 {
     api_ctx: *mut MpvOpenGlCbContext,
     update_callback_data: V,
@@ -70,22 +70,22 @@ pub struct OpenGlState<'parent, V: RefUnwindSafe>
     _does_not_outlive: PhantomData<&'parent Parent>,
 }
 
-unsafe impl<'parent, V: RefUnwindSafe> Send for OpenGlState<'parent, V>{}
-unsafe impl<'parent, V: RefUnwindSafe> Sync for OpenGlState<'parent, V>{}
+unsafe impl<'parent, V> Send for OpenGlState<'parent, V>{}
+unsafe impl<'parent, V> Sync for OpenGlState<'parent, V>{}
 
-impl<'parent, V: RefUnwindSafe> Drop for OpenGlState<'parent, V> {
+impl<'parent, V> Drop for OpenGlState<'parent, V> {
     fn drop(&mut self) {
         unsafe { mpv_opengl_cb_uninit_gl(self.api_ctx) };
     }
 }
 
-impl<'parent, V: RefUnwindSafe> OpenGlState<'parent, V> {
+impl<'parent, V> OpenGlState<'parent, V> {
     pub(crate) fn new<F>(mpv_ctx: *mut MpvHandle,
                          mut proc_addr: F,
                          guard: MutexGuard<'parent, ()>,
                          parent: PhantomData<&'parent Parent>)
             -> Result<OpenGlState<'parent, V>>
-        where F: for<'a> Fn(&'a str) -> *const () + RefUnwindSafe + 'static
+        where F: for<'a> Fn(&'a str) -> *const () + 'static
     {
         let api_ctx = unsafe {
             mpv_get_sub_api(mpv_ctx, MpvSubApi::OpenglCb) as *mut MpvOpenGlCbContext
