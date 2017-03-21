@@ -24,10 +24,9 @@ use sdl2::keyboard::Keycode;
 use std::env;
 use std::panic::AssertUnwindSafe;
 use std::rc::Rc;
-use std::sync::Mutex;
 use std::time::Duration;
 
-struct Draw{}
+struct Draw {}
 
 pub fn exec() {
     let path = env::args().nth(1).expect("Expected path to media as argument, found nil.");
@@ -41,9 +40,9 @@ pub fn exec() {
 
     // Create SDL state
     let sdl = sdl2::init().unwrap();
-    let video_subsystem = Rc::new(Mutex::new(sdl.video().unwrap()));
+    let video_subsystem = Rc::new(sdl.video().unwrap());
     let vs = video_subsystem.clone();
-    let window = vs.lock().unwrap().window("mpv-rs sdl2 example", 1280, 720)
+    let window = vs.window("mpv-rs sdl2 example", 1280, 720)
         .resizable()
         .position_centered()
         .opengl()
@@ -66,7 +65,7 @@ pub fn exec() {
                                      ("ytdl", true.into())])
             .unwrap();
     let vs = video_subsystem.clone();
-    let mut mpv_ogl = mpv.create_opengl_context(move |name| (*vs.lock().unwrap()).gl_get_proc_address(name)).unwrap();
+    let mut mpv_ogl = mpv.create_opengl_context(move |name| vs.gl_get_proc_address(name)).unwrap();
     unsafe { mpv_ogl.set_update_callback(AssertUnwindSafe(events), gl_update_callback) };
 
     // Load specified file
@@ -92,8 +91,7 @@ pub fn exec() {
                     break 'main;
                 }
                 Event::KeyDown { keycode: Some(Keycode::Space), repeat: false, .. } => {
-                    if let Data::Flag(true) = mpv.get_property("pause", Format::Flag)
-                           .unwrap() {
+                    if let Data::Flag(true) = mpv.get_property("pause", Format::Flag).unwrap() {
                         mpv.unpause().unwrap();
                     } else {
                         mpv.pause().unwrap();
@@ -102,12 +100,12 @@ pub fn exec() {
                 Event::KeyDown { keycode: Some(Keycode::Right), repeat: false, .. } => {
                     mpv.seek_forward(&Duration::from_secs(10)).unwrap();
                 }
-                _ => { }
+                _ => {}
             }
         }
     }
 }
 
 fn gl_update_callback(events: &AssertUnwindSafe<sdl2::EventSubsystem>) {
-    events.push_custom_event(Draw{}).unwrap()
+    events.push_custom_event(Draw {}).unwrap()
 }
