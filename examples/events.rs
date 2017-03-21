@@ -16,7 +16,9 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-use crossbeam;
+extern crate mpv;
+extern crate crossbeam;
+
 use mpv::*;
 use mpv::events::*;
 
@@ -24,7 +26,7 @@ use std::process;
 use std::time::Duration;
 use std::thread;
 
-pub fn exec() {
+pub fn main() {
     // Create a `Parent` (with events enabled) and set some properties.
     let mpv = Parent::with_options(true,
                                    &[("cache-initial", 1.into()),

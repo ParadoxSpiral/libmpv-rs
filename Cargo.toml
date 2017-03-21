@@ -32,6 +32,10 @@ parking_lot = {version = "0.4", features = ['nightly']}
 enum_primitive = "0.1"
 error-chain = "0.10"
 
+[dev-dependencies]
+sdl2 = "0.29"
+crossbeam = "0.2"
+
 [build-dependencies]
 hyper = "0.10"
 git2 = "0.6"

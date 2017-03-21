@@ -16,7 +16,9 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-use mpv::{MpvInstance, Parent, FileState};
+extern crate mpv;
+
+use mpv::*;
 use mpv::protocol::*;
 
 use std::env;
@@ -57,7 +59,7 @@ fn size(cookie: &mut File) -> i64 {
     cookie.metadata().unwrap().len() as _
 }
 
-pub fn exec() {
+pub fn main() {
     let path =
         format!("filereader://{}",
                 env::args().nth(1).expect("Expected path to local media as argument, found nil."));

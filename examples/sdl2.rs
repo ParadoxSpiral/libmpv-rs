@@ -16,8 +16,10 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
+extern crate mpv;
+extern crate sdl2;
+
 use mpv::*;
-use sdl2;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 
@@ -28,7 +30,7 @@ use std::time::Duration;
 
 struct Draw {}
 
-pub fn exec() {
+pub fn main() {
     let path = env::args().nth(1).expect("Expected path to media as argument, found nil.");
 
     // Check for driver availability
