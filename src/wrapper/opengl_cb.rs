@@ -124,7 +124,6 @@ impl<'parent, V> OpenGlState<'parent, V> {
     ///
     /// Note that calling this at least once informs libmpv that you will use this
     /// function. If you use it inconsistently, expect bad video playback.
-    // TODO: The time parameter is currently not given, because it is ignored.
     pub unsafe fn report_flip(&self) -> Result<()> {
         mpv_err((), mpv_opengl_cb_report_flip(self.api_ctx, 0))
     }

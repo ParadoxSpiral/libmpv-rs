@@ -709,8 +709,6 @@ pub trait MpvInstance: Sized {
     // --- Convenience property functions ---
     //
     
-    // TODO: All these format!s should be alloca!ed in the future
-
     #[inline]
     /// Add -or subtract- any value from a property. Over/underflow clamps to max/min.
     fn add_property(&self, property: &str, value: isize) -> Result<()> {

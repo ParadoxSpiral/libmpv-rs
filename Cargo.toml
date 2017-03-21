@@ -28,7 +28,7 @@ keywords = ["media", "playback", "mpv", "libmpv"]
 
 [dependencies]
 libc = "0.2"
-parking_lot = {version = "0.3", features = ['nightly']}
+parking_lot = {version = "0.4", features = ['nightly']}
 enum_primitive = "0.1"
 error-chain = "0.10"
 
