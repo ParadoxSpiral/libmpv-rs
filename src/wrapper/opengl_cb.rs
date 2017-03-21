@@ -70,6 +70,9 @@ pub struct OpenGlState<'parent, V: RefUnwindSafe>
     _does_not_outlive: PhantomData<&'parent Parent>,
 }
 
+unsafe impl<'parent, V: RefUnwindSafe> Send for OpenGlState<'parent, V>{}
+unsafe impl<'parent, V: RefUnwindSafe> Sync for OpenGlState<'parent, V>{}
+
 impl<'parent, V: RefUnwindSafe> Drop for OpenGlState<'parent, V> {
     fn drop(&mut self) {
         unsafe { mpv_opengl_cb_uninit_gl(self.api_ctx) };
@@ -144,4 +147,3 @@ impl<'parent, V: RefUnwindSafe> OpenGlState<'parent, V> {
         self.update_callback_data = data;
     }
 }
-
