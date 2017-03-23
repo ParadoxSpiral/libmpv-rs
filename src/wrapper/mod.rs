@@ -376,9 +376,9 @@ impl Parent {
                 }
 
                 (Some(ev_iter_notification),
-                 Some(Mutex::new(Vec::with_capacity(15))),
+                 Some(Mutex::new(Vec::with_capacity(10))),
                  Some(Mutex::new(HashMap::with_capacity(10))),
-                 Some(Mutex::new(Vec::with_capacity(22))))
+                 Some(Mutex::new(Vec::with_capacity(15))))
             } else {
                 unsafe {
                     detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::LogMessage, 0));
@@ -444,9 +444,9 @@ impl Parent {
                 }
 
                 (Some(ev_iter_notification),
-                 Some(Mutex::new(Vec::with_capacity(15))),
+                 Some(Mutex::new(Vec::with_capacity(10))),
                  Some(Mutex::new(HashMap::with_capacity(10))),
-                 Some(Mutex::new(Vec::with_capacity(22))))
+                 Some(Mutex::new(Vec::with_capacity(15))))
             } else {
                 unsafe {
                     detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::LogMessage, 0));
