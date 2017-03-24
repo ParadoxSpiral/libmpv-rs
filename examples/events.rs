@@ -22,6 +22,7 @@ extern crate crossbeam;
 use mpv::*;
 use mpv::events::*;
 
+use std::env;
 use std::process;
 use std::time::Duration;
 use std::thread;
