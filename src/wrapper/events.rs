@@ -30,7 +30,7 @@ use std::ffi::CStr;
 use std::intrinsics;
 
 pub(crate) unsafe extern "C" fn event_callback(d: *mut libc::c_void) {
-    (*(d as *mut (Mutex<bool>, Condvar))).1.notify_one();
+    (*(d as *mut Condvar)).notify_one();
 }
 
 fn property_from_raw(raw: *mut libc::c_void) -> (String, Data) {
@@ -145,7 +145,6 @@ impl MpvEvent {
     }
 }
 
-#[derive(Debug)]
 /// A blocking `Iterator` over some observed events of an mpv instance.
 /// Once the `EventIter` is dropped, it's `Event`s are removed from
 /// the "to be observed" queue, therefore new `Event` invocations won't be observed.
@@ -154,7 +153,7 @@ pub struct EventIter<'parent, P>
 {
     pub(crate) ctx: *mut MpvHandle,
     pub(crate) first_iteration: bool,
-    pub(crate) notification: *mut (Mutex<bool>, Condvar),
+    pub(crate) notification: &'parent (Mutex<bool>, Condvar),
     pub(crate) all_to_observe: &'parent Mutex<Vec<Event>>,
     pub(crate) all_to_observe_properties: &'parent Mutex<HashMap<String, libc::uint64_t>>,
     pub(crate) local_to_observe: Vec<Event>,
@@ -215,7 +214,7 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
             let mut observed = self.all_observed.lock();
             if observed.is_empty() && !self.first_iteration {
                 drop(observed);
-                unsafe { (*self.notification).1.wait(&mut (*self.notification).0.lock()) };
+                self.notification.1.wait(&mut self.notification.0.lock());
                 observed = self.all_observed.lock();
             }
 
@@ -254,7 +253,7 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
                 }
                 if !observed.is_empty() {
                     drop(observed);
-                    unsafe { (*self.notification).1.notify_all() };
+                    self.notification.1.notify_all();
                 }
             } else {
                 // Return true where outer_ev == inner_ev, and push inner_ev to ret_events
@@ -279,7 +278,7 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
 
                 if !observed.is_empty() {
                     drop(observed);
-                    unsafe { (*self.notification).1.notify_all() };
+                    self.notification.1.notify_all();
                 }
             }
             
