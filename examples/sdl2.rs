@@ -31,7 +31,9 @@ use std::time::Duration;
 struct Draw {}
 
 pub fn main() {
-    let path = env::args().nth(1).expect("Expected path to media as argument, found nil.");
+    let path = env::args()
+        .nth(1)
+        .expect("Expected path to media as argument, found nil.");
 
     // Check for driver availability
     let driver_index = if let Some(i) = sdl2::render::drivers().position(|e| e.name == "opengl") {
@@ -50,7 +52,8 @@ pub fn main() {
         .opengl()
         .build()
         .unwrap();
-    let renderer = window.renderer()
+    let renderer = window
+        .renderer()
         .index(driver_index as _)
         .build()
         .expect("Failed to create renderer with given parameters");
@@ -67,12 +70,16 @@ pub fn main() {
                                      ("ytdl", true.into())])
             .unwrap();
     let vs = video_subsystem.clone();
-    let mut mpv_ogl = mpv.create_opengl_context(move |name| vs.gl_get_proc_address(name)).unwrap();
-    unsafe { mpv_ogl.set_update_callback(AssertUnwindSafe(events),
-                                         |events| events.push_custom_event(Draw {}).unwrap()) };
+    let mut mpv_ogl = mpv.create_opengl_context(move |name| vs.gl_get_proc_address(name))
+        .unwrap();
+    unsafe {
+        mpv_ogl.set_update_callback(AssertUnwindSafe(events),
+                                    |events| events.push_custom_event(Draw {}).unwrap())
+    };
 
     // Load specified file
-    mpv.playlist_load_files(&[(&path, FileState::AppendPlay, None)]).unwrap();
+    mpv.playlist_load_files(&[(&path, FileState::AppendPlay, None)])
+        .unwrap();
 
     // Setup event handling
     'main: loop {
@@ -93,14 +100,22 @@ pub fn main() {
                 Event::KeyDown { keycode: Some(Keycode::Q), .. } => {
                     break 'main;
                 }
-                Event::KeyDown { keycode: Some(Keycode::Space), repeat: false, .. } => {
+                Event::KeyDown {
+                    keycode: Some(Keycode::Space),
+                    repeat: false,
+                    ..
+                } => {
                     if let Data::Flag(true) = mpv.get_property("pause", Format::Flag).unwrap() {
                         mpv.unpause().unwrap();
                     } else {
                         mpv.pause().unwrap();
                     }
                 }
-                Event::KeyDown { keycode: Some(Keycode::Right), repeat: false, .. } => {
+                Event::KeyDown {
+                    keycode: Some(Keycode::Right),
+                    repeat: false,
+                    ..
+                } => {
                     mpv.seek_forward(&Duration::from_secs(10)).unwrap();
                 }
                 _ => {}

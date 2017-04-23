@@ -64,4 +64,6 @@ pub const MPV_CLIENT_API_MAJOR: u32 = 1;
 #[allow(missing_docs)]
 pub const MPV_CLIENT_API_MINOR: u32 = 24;
 #[allow(missing_docs)]
-pub const MPV_CLIENT_API_VERSION: u32 = { MPV_CLIENT_API_MAJOR << 16 | MPV_CLIENT_API_MINOR };
+pub const MPV_CLIENT_API_VERSION: u32 = {
+    MPV_CLIENT_API_MAJOR << 16 | MPV_CLIENT_API_MINOR
+};

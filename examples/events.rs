@@ -28,7 +28,9 @@ use std::time::Duration;
 use std::thread;
 
 pub fn main() {
-    let path = env::args().nth(1).expect("Expected path to media as argument, found nil.");
+    let path = env::args()
+        .nth(1)
+        .expect("Expected path to media as argument, found nil.");
 
     // Create a `Parent` (with events enabled) and set some properties.
     let mpv = Parent::with_options(true,
@@ -46,17 +48,24 @@ pub fn main() {
                                             Event::StartFile,
                                             Event::Seek,
                                             Event::PlaybackRestart,
-                                            Event::EndFile{reason: EndFileReason::Eof, error: None}])
+                                            Event::EndFile {
+                                                reason: EndFileReason::Eof,
+                                                error: None,
+                                            }])
                 .unwrap();
 
             for vec in iter {
                 // If any `Event` was an `Endfile`, . . .
-                if let Some(&Event::EndFile{reason: ref r, error: ref e}) =
-                    vec.iter().find(|ev| if let Event::EndFile{..} = **ev {
-                                        true
-                                    } else {
-                                        false
-                                    }) {
+                if let Some(&Event::EndFile {
+                                 reason: ref r,
+                                 error: ref e,
+                             }) =
+                    vec.iter()
+                        .find(|ev| if let Event::EndFile { .. } = **ev {
+                                  true
+                              } else {
+                                  false
+                              }) {
                     // . . . print the `EndFile` reason and exit, . . .
                     println!("File ended! Reason: {:?}; Error: {:?}", r, e);
                     thread::sleep(Duration::from_millis(300));
@@ -78,16 +87,17 @@ pub fn main() {
             }
         });
         scope.spawn(|| {
-            let iter = mpv.observe_events(&[Event::empty_logmessage(LogLevel::Info)])
-                .unwrap();
+                        let iter = mpv.observe_events(&[Event::empty_logmessage(LogLevel::Info)])
+                            .unwrap();
 
-            for vec in iter {
-                println!("log: {:#?}", vec);
-            }
-        });
+                        for vec in iter {
+                            println!("log: {:#?}", vec);
+                        }
+                    });
 
         // Add a file to play, ytdl was set to true for this.
-        mpv.playlist_load_files(&[(&path, FileState::AppendPlay, None)]).unwrap();
+        mpv.playlist_load_files(&[(&path, FileState::AppendPlay, None)])
+            .unwrap();
 
         thread::sleep(Duration::from_secs(3));
 

@@ -201,9 +201,11 @@ pub enum MpvSubApi {
 
 pub type mpv_stream_cb_read_fn = unsafe extern "C" fn(cookie: *mut libc::c_void,
                                                       buf: *mut libc::c_char,
-                                                      nbytes: libc::uint64_t) -> libc::int64_t;
+                                                      nbytes: libc::uint64_t)
+                                                      -> libc::int64_t;
 pub type mpv_stream_cb_seek_fn = unsafe extern "C" fn(cookie: *mut libc::c_void,
-                                                      offset: libc::int64_t) -> libc::int64_t;
+                                                      offset: libc::int64_t)
+                                                      -> libc::int64_t;
 pub type mpv_stream_cb_size_fn = unsafe extern "C" fn(cookie: *mut libc::c_void) -> libc::int64_t;
 pub type mpv_stream_cb_close_fn = unsafe extern "C" fn(cookie: *mut libc::c_void);
 pub type mpv_stream_cb_open_ro_fn = unsafe extern "C" fn(user_data: *mut libc::c_void,
@@ -217,7 +219,7 @@ pub type mpv_opengl_cb_get_proc_address_fn = unsafe extern "C" fn(fn_ctx: *mut l
                                                                   -> *mut libc::c_void;
 
 #[repr(C)]
-pub struct MpvStreamCbInfo { 
+pub struct MpvStreamCbInfo {
     pub cookie: *mut libc::c_void,
 
     pub read_fn: mpv_stream_cb_read_fn,
@@ -237,23 +239,15 @@ extern "C" {
     pub fn mpv_initialize(ctx: *mut MpvHandle) -> libc::c_int;
     pub fn mpv_detach_destroy(ctx: *mut MpvHandle);
     pub fn mpv_terminate_destroy(ctx: *mut MpvHandle);
-    pub fn mpv_create_client(ctx: *mut MpvHandle,
-                             name: *const libc::c_char)
-                             -> *mut MpvHandle;
-    pub fn mpv_load_config_file(ctx: *mut MpvHandle,
-                                filename: *const libc::c_char)
-                                -> libc::c_int;
+    pub fn mpv_create_client(ctx: *mut MpvHandle, name: *const libc::c_char) -> *mut MpvHandle;
+    pub fn mpv_load_config_file(ctx: *mut MpvHandle, filename: *const libc::c_char) -> libc::c_int;
     pub fn mpv_free_node_contents(node: *mut MpvNode);
-    pub fn mpv_command(ctx: *mut MpvHandle,
-                       args: *mut *const libc::c_char)
-                       -> libc::c_int;
+    pub fn mpv_command(ctx: *mut MpvHandle, args: *mut *const libc::c_char) -> libc::c_int;
     pub fn mpv_command_node(ctx: *mut MpvHandle,
                             args: *mut MpvNode,
                             result: *mut MpvNode)
                             -> libc::c_int;
-    pub fn mpv_command_string(ctx: *mut MpvHandle,
-                              args: *const libc::c_char)
-                              -> libc::c_int;
+    pub fn mpv_command_string(ctx: *mut MpvHandle, args: *const libc::c_char) -> libc::c_int;
     pub fn mpv_get_time_us(ctx: *mut MpvHandle) -> libc::int64_t;
     pub fn mpv_command_async(ctx: *mut MpvHandle,
                              reply_userdata: libc::uint64_t,
@@ -306,9 +300,7 @@ extern "C" {
     pub fn mpv_request_log_messages(ctx: *mut MpvHandle,
                                     min_level: *const libc::c_char)
                                     -> libc::c_int;
-    pub fn mpv_wait_event(ctx: *mut MpvHandle,
-                          timeout: libc::c_double)
-                          -> *mut MpvEvent;
+    pub fn mpv_wait_event(ctx: *mut MpvHandle, timeout: libc::c_double) -> *mut MpvEvent;
     pub fn mpv_wakeup(ctx: *mut MpvHandle);
     pub fn mpv_set_wakeup_callback(ctx: *mut MpvHandle,
                                    cb: unsafe extern "C" fn(*mut libc::c_void),
@@ -322,8 +314,8 @@ extern "C" {
                                 open_fn: mpv_stream_cb_open_ro_fn)
                                 -> libc::c_int;
     pub fn mpv_opengl_cb_set_update_callback(ctx: *mut MpvOpenGlCbContext,
-                                    callback: mpv_opengl_cb_update_fn,
-                                    callback_ctx: *mut libc::c_void);
+                                             callback: mpv_opengl_cb_update_fn,
+                                             callback_ctx: *mut libc::c_void);
     pub fn mpv_opengl_cb_init_gl(ctx: *mut MpvOpenGlCbContext,
                                  exts: *const libc::c_char,
                                  get_proc_address: mpv_opengl_cb_get_proc_address_fn,
@@ -332,11 +324,10 @@ extern "C" {
     pub fn mpv_opengl_cb_draw(ctx: *mut MpvOpenGlCbContext,
                               fbo: libc::c_int,
                               w: libc::c_int,
-                              h: libc::c_int,)
+                              h: libc::c_int)
                               -> libc::c_int;
     pub fn mpv_opengl_cb_report_flip(ctx: *mut MpvOpenGlCbContext,
                                      time: libc::int64_t)
                                      -> libc::c_int;
-    pub fn mpv_opengl_cb_uninit_gl(ctx: *mut MpvOpenGlCbContext)
-                                   -> libc::c_int;
+    pub fn mpv_opengl_cb_uninit_gl(ctx: *mut MpvOpenGlCbContext) -> libc::c_int;
 }

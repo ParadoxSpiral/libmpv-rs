@@ -29,7 +29,7 @@ mod errors {
     use super::super::raw::MpvError;
     use std::ffi::NulError;
 
-    // FIXME: Once error_chain issue 134 is solved, this should derive Clone, and use RCs 
+    // FIXME: Once error_chain issue 134 is solved, this should derive Clone, and use RCs
     // instead of `Box`es. Remove temp impl Clone below then.
     error_chain!{
         foreign_links {
@@ -69,10 +69,14 @@ mod errors {
                 &ErrorKind::Msg(ref e) => ErrorKind::Msg(e.clone()).into(),
                 &ErrorKind::Nul(ref e) => ErrorKind::Nul(e.clone()).into(),
                 &ErrorKind::Native(ref e) => ErrorKind::Native(*e).into(),
-                &ErrorKind::Loadfiles(ref idx, ref err) => ErrorKind::Loadfiles(*idx, err.clone()).into(),
+                &ErrorKind::Loadfiles(ref idx, ref err) => {
+                    ErrorKind::Loadfiles(*idx, err.clone()).into()
+                }
                 &ErrorKind::AlreadyObserved(ref e) => ErrorKind::AlreadyObserved(e.clone()).into(),
                 &ErrorKind::InvalidArgument => ErrorKind::InvalidArgument.into(),
-                &ErrorKind::VersionMismatch(ref li, ref lo) => ErrorKind::VersionMismatch(* li, *lo).into(),
+                &ErrorKind::VersionMismatch(ref li, ref lo) => {
+                    ErrorKind::VersionMismatch(*li, *lo).into()
+                }
                 &ErrorKind::ContextExists => ErrorKind::ContextExists.into(),
                 &ErrorKind::EventsDisabled => ErrorKind::EventsDisabled.into(),
                 &ErrorKind::Null => ErrorKind::Null.into(),
@@ -158,7 +162,9 @@ fn mpv_cstr_to_string(cstr: &CStr) -> String {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
 
-    OsStr::from_bytes(cstr.to_bytes()).to_string_lossy().into_owned()
+    OsStr::from_bytes(cstr.to_bytes())
+        .to_string_lossy()
+        .into_owned()
 }
 
 #[cfg(windows)]
@@ -204,7 +210,7 @@ impl Data {
     fn from_raw(fmt: MpvFormat, ptr: *mut libc::c_void) -> Data {
         debug_assert!(!ptr.is_null());
         match fmt {
-            MpvFormat::Flag => Data::Flag(unsafe { *(ptr as *mut libc::int64_t) } != 0 ),
+            MpvFormat::Flag => Data::Flag(unsafe { *(ptr as *mut libc::int64_t) } != 0),
             MpvFormat::Int64 => Data::Int64(unsafe { *(ptr as *mut _) }),
             MpvFormat::Double => Data::Double(unsafe { *(ptr as *mut _) }),
             _ => unreachable!(),
@@ -388,13 +394,14 @@ impl Parent {
     /// Create a new `Parent`, with the given settings set before initialization.
     pub fn with_options(events: bool, opts: &[(&str, Data)]) -> Result<Parent> {
         SET_LC_NUMERIC.call_once(|| {
-            let c = &*b"c0";
-            unsafe { libc::setlocale(libc::LC_NUMERIC, c.as_ptr() as _) };
-        });
+                                     let c = &*b"c0";
+                                     unsafe { libc::setlocale(libc::LC_NUMERIC, c.as_ptr() as _) };
+                                 });
 
         let api_version = unsafe { mpv_client_api_version() };
         if super::MPV_CLIENT_API_VERSION != api_version {
-            return Err(ErrorKind::VersionMismatch(super::MPV_CLIENT_API_VERSION, api_version).into());
+            return Err(ErrorKind::VersionMismatch(super::MPV_CLIENT_API_VERSION, api_version)
+                           .into());
         }
 
         let ctx = unsafe { mpv_create() };
@@ -404,11 +411,13 @@ impl Parent {
 
         let (ev_iter_notification, ev_to_observe, ev_to_observe_properties, ev_observed) = {
             if events {
-                let mut ev_iter_notification = Box::new((Mutex::new(false), Condvar::new()));
+                let ev_iter_notification = Box::new((Mutex::new(false), Condvar::new()));
                 unsafe {
                     mpv_set_wakeup_callback(ctx,
                                             event_callback,
-                                            (&mut ev_iter_notification.1) as *mut Condvar as *mut _);
+                                            &ev_iter_notification.1 as *const Condvar as
+                                            *mut Condvar as
+                                            *mut _);
                 }
 
                 (Some(ev_iter_notification),
@@ -439,7 +448,7 @@ impl Parent {
 
         for opt in opts {
             if let Err(err) = internal_set_property(ctx, opt.0, opt.1.clone()) {
-                unsafe { 
+                unsafe {
                     mpv_terminate_destroy(ctx);
                 }
                 return Err(err);
@@ -449,15 +458,15 @@ impl Parent {
         unsafe { destroy_on_err!(ctx, mpv_initialize(ctx)) }
 
         Ok(Parent {
-            ctx: ctx,
-            events: events,
-            ev_iter_notification: ev_iter_notification,
-            ev_to_observe: ev_to_observe,
-            ev_to_observe_properties: ev_to_observe_properties,
-            ev_observed: ev_observed,
-            protocols_guard: Mutex::new(()),
-            opengl_guard: Mutex::new(()),
-        })
+               ctx: ctx,
+               events: events,
+               ev_iter_notification: ev_iter_notification,
+               ev_to_observe: ev_to_observe,
+               ev_to_observe_properties: ev_to_observe_properties,
+               ev_observed: ev_observed,
+               protocols_guard: Mutex::new(()),
+               opengl_guard: Mutex::new(()),
+           })
     }
 
     #[inline]
@@ -471,12 +480,12 @@ impl Parent {
 
         let (ev_iter_notification, ev_to_observe, ev_to_observe_properties, ev_observed) = {
             if events {
-                let mut ev_iter_notification = Box::new((Mutex::new(false),
-                                                                   Condvar::new()));
+                let mut ev_iter_notification = Box::new((Mutex::new(false), Condvar::new()));
                 unsafe {
                     mpv_set_wakeup_callback(ctx,
                                             event_callback,
-                                            (&mut ev_iter_notification.1) as *mut Condvar as *mut _);
+                                            (&mut ev_iter_notification.1) as *mut Condvar as
+                                            *mut _);
                 }
 
                 (Some(ev_iter_notification),
@@ -506,14 +515,14 @@ impl Parent {
         };
 
         Ok(Client {
-            ctx: ctx,
-            events: events,
-            ev_iter_notification: ev_iter_notification,
-            ev_to_observe: ev_to_observe,
-            ev_to_observe_properties: ev_to_observe_properties,
-            ev_observed: ev_observed,
-            _does_not_outlive: PhantomData::<&Self>,
-        })
+               ctx: ctx,
+               events: events,
+               ev_iter_notification: ev_iter_notification,
+               ev_to_observe: ev_to_observe,
+               ev_to_observe_properties: ev_to_observe_properties,
+               ev_observed: ev_observed,
+               _does_not_outlive: PhantomData::<&Self>,
+           })
     }
 
     #[inline]
@@ -535,7 +544,8 @@ impl Parent {
     #[inline]
     /// Create a context with which custom protocols can be registered.
     pub fn create_protocol_context<T, U>(&self, capacity: usize) -> Result<ProtocolContext<T, U>>
-        where T: RefUnwindSafe, U: RefUnwindSafe
+        where T: RefUnwindSafe,
+              U: RefUnwindSafe
     {
         let guard = self.protocols_guard.try_lock();
 
@@ -551,7 +561,11 @@ impl<'parent> Client<'parent> {
     #[inline]
     /// Returns the name associated with `self`.
     pub fn name(&self) -> &str {
-        unsafe { CStr::from_ptr(mpv_client_name(self.ctx())).to_str().unwrap() }
+        unsafe {
+            CStr::from_ptr(mpv_client_name(self.ctx()))
+                .to_str()
+                .unwrap()
+        }
     }
 }
 
@@ -584,7 +598,10 @@ pub trait MpvInstance: Sized {
         }
 
         let mut observe = self.ev_to_observe().as_ref().unwrap().lock();
-        let mut properties = self.ev_to_observe_properties().as_ref().unwrap().lock();
+        let mut properties = self.ev_to_observe_properties()
+            .as_ref()
+            .unwrap()
+            .lock();
 
         let len = events.len();
         // FIXME: This can be alloca'ed once the RFC is implemented
@@ -596,7 +613,8 @@ pub trait MpvInstance: Sized {
                 if properties.contains_key(&v.0) {
                     return Err(ErrorKind::AlreadyObserved(Box::new(elem.clone())).into());
                 } else {
-                    mpv_err((), unsafe { mpv_request_event(self.ctx(), elem.as_id(), 1) })?;
+                    mpv_err((),
+                            unsafe { mpv_request_event(self.ctx(), elem.as_id(), 1) })?;
                     props.push(v);
                     ids.push(elem.as_id());
                     evs.push(elem.clone());
@@ -608,14 +626,14 @@ pub trait MpvInstance: Sized {
                     }
                 }
 
-                if let Event::LogMessage{level: lvl, ..} = *elem {
+                if let Event::LogMessage { level: lvl, .. } = *elem {
                     let min_level = CString::new(lvl.as_str())?;
-                    mpv_err((), unsafe {
-                        mpv_request_log_messages(self.ctx(), min_level.as_ptr())
-                    })?;
+                    mpv_err((),
+                            unsafe { mpv_request_log_messages(self.ctx(), min_level.as_ptr()) })?;
                 }
 
-                mpv_err((), unsafe { mpv_request_event(self.ctx(), elem.as_id(), 1) })?;
+                mpv_err((),
+                        unsafe { mpv_request_event(self.ctx(), elem.as_id(), 1) })?;
                 ids.push(elem.as_id());
                 evs.push(elem.clone());
             }
@@ -625,13 +643,12 @@ pub trait MpvInstance: Sized {
         let start_id = properties.len();
         for (i, elem) in props.iter().enumerate() {
             let name = CString::new(&elem.0[..])?;
-            let err = mpv_err((),
-                              unsafe {
-                                mpv_observe_property(self.ctx(),
-                                                     (start_id + i) as _,
-                                                     name.as_ptr(),
-                                                     elem.1.format() as _)
-                              });
+            let err = mpv_err((), unsafe {
+                mpv_observe_property(self.ctx(),
+                                     (start_id + i) as _,
+                                     name.as_ptr(),
+                                     elem.1.format() as _)
+            });
             if err.is_err() {
                 for (_, id) in props_ins {
                     // Ignore errors.
@@ -645,15 +662,15 @@ pub trait MpvInstance: Sized {
         properties.extend(props_ins);
 
         Ok(EventIter {
-            ctx: self.ctx(),
-            first_iteration: true,
-            notification: self.ev_iter_notification().as_ref().unwrap(),
-            all_to_observe: self.ev_to_observe().as_ref().unwrap(),
-            all_to_observe_properties: self.ev_to_observe_properties().as_ref().unwrap(),
-            local_to_observe: evs,
-            all_observed: self.ev_observed().as_ref().unwrap(),
-            _does_not_outlive: PhantomData::<&Self>,
-        })
+               ctx: self.ctx(),
+               first_iteration: true,
+               notification: self.ev_iter_notification().as_ref().unwrap(),
+               all_to_observe: self.ev_to_observe().as_ref().unwrap(),
+               all_to_observe_properties: self.ev_to_observe_properties().as_ref().unwrap(),
+               local_to_observe: evs,
+               all_observed: self.ev_observed().as_ref().unwrap(),
+               _does_not_outlive: PhantomData::<&Self>,
+           })
     }
 
     #[inline]
@@ -666,8 +683,8 @@ pub trait MpvInstance: Sized {
     /// # Safety
     /// This method is unsafe because arbitrary code may be executed resulting in UB and more.
     unsafe fn command(&self, name: &str, args: &[&str]) -> Result<()> {
-        let mut cmd = String::with_capacity(name.len() + args.iter()
-                                                             .fold(0, |acc, e| acc + e.len() + 1));
+        let mut cmd = String::with_capacity(name.len() +
+                                            args.iter().fold(0, |acc, e| acc + e.len() + 1));
         cmd.push_str(name);
 
         for elem in args {
@@ -706,13 +723,13 @@ pub trait MpvInstance: Sized {
 
                         let data = mpv_cstr_to_string(ret);
 
-                        unsafe{mpv_free(*ptr as *mut _)}
+                        unsafe { mpv_free(*ptr as *mut _) }
 
                         Ok(match format {
-                            Format::String => Data::String(data),
-                            Format::OsdString => Data::OsdString(data),
-                            _ => unreachable!(),
-                        })
+                               Format::String => Data::String(data),
+                               Format::OsdString => Data::OsdString(data),
+                               _ => unreachable!(),
+                           })
                     })
             }
             _ => {
@@ -723,8 +740,9 @@ pub trait MpvInstance: Sized {
                                      name.as_ptr(),
                                      format.as_mpv_format().as_val(),
                                      ptr)
-                }).or_else(Err)
-                  .and_then(|_| Ok(Data::from_raw(format.as_mpv_format(), ptr)))
+                })
+                        .or_else(Err)
+                        .and_then(|_| Ok(Data::from_raw(format.as_mpv_format(), ptr)))
             }
         }
     }
@@ -739,7 +757,7 @@ pub trait MpvInstance: Sized {
 
     // --- Convenience property functions ---
     //
-    
+
     #[inline]
     /// Add -or subtract- any value from a property. Over/underflow clamps to max/min.
     fn add_property(&self, property: &str, value: isize) -> Result<()> {
@@ -783,25 +801,19 @@ pub trait MpvInstance: Sized {
     /// (https://mpv.io/manual/master/#command-interface-
     /// [relative|absolute|absolute-percent|relative-percent|exact|keyframes]).
     fn seek_forward(&self, time: &Duration) -> Result<()> {
-        unsafe {
-            self.command("seek", &[&format!("{}", time.as_secs()), "relative"])
-        }
+        unsafe { self.command("seek", &[&format!("{}", time.as_secs()), "relative"]) }
     }
 
     #[inline]
     /// See `seek_forward`.
     fn seek_backward(&self, time: &Duration) -> Result<()> {
-        unsafe {
-            self.command("seek", &[&format!("-{}", time.as_secs()), "relative"])
-        }
+        unsafe { self.command("seek", &[&format!("-{}", time.as_secs()), "relative"]) }
     }
 
     #[inline]
     /// Seek to a given absolute time.
     fn seek_absolute(&self, time: &Duration) -> Result<()> {
-        unsafe {
-            self.command("seek", &[&format!("{}", time.as_secs()), "absolute"])
-        }
+        unsafe { self.command("seek", &[&format!("{}", time.as_secs()), "absolute"]) }
     }
 
     #[inline]
@@ -809,17 +821,13 @@ pub trait MpvInstance: Sized {
     /// If `percent` of the playtime is bigger than the remaining playtime, the next file is played.
     /// out of bounds values are clamped to either 0 or 100.
     fn seek_percent(&self, percent: isize) -> Result<()> {
-        unsafe {
-            self.command("seek", &[&format!("{}", percent), "relative-percent"])
-        }
+        unsafe { self.command("seek", &[&format!("{}", percent), "relative-percent"]) }
     }
 
     #[inline]
     /// Seek to the given percentage of the playtime.
     fn seek_percent_absolute(&self, percent: usize) -> Result<()> {
-        unsafe {
-            self.command("seek", &[&format!("{}", percent), "relative-percent"])
-        }
+        unsafe { self.command("seek", &[&format!("{}", percent), "relative-percent"]) }
     }
 
     #[inline]
@@ -898,34 +906,26 @@ pub trait MpvInstance: Sized {
     /// Play the next item of the current playlist.
     /// Does nothing if the current item is the last item.
     fn playlist_next_weak(&self) -> Result<()> {
-        unsafe {
-            self.command("playlist-next", &["weak"])
-        }
+        unsafe { self.command("playlist-next", &["weak"]) }
     }
 
     #[inline]
     /// Play the next item of the current playlist.
     /// Terminates playback if the current item is the last item.
     fn playlist_next_force(&self) -> Result<()> {
-        unsafe {
-            self.command("playlist-next", &["force"])
-        }
+        unsafe { self.command("playlist-next", &["force"]) }
     }
 
     #[inline]
     /// See `playlist_next_weak`.
     fn playlist_previous_weak(&self) -> Result<()> {
-        unsafe {
-            self.command("playlist-previous", &["weak"])
-        }
+        unsafe { self.command("playlist-previous", &["weak"]) }
     }
 
     #[inline]
     /// See `playlist_next_force`.
     fn playlist_previous_force(&self) -> Result<()> {
-        unsafe {
-            self.command("playlist-previous", &["force"])
-        }
+        unsafe { self.command("playlist-previous", &["force"]) }
     }
 
     #[inline]
@@ -940,18 +940,19 @@ pub trait MpvInstance: Sized {
     ///
     /// # Peculiarities
     /// `loadfile` is kind of asynchronous, any additional option is set during loading, [specifics](https://github.com/mpv-player/mpv/issues/4089).
-    fn playlist_load_files<'a, A>(&self, files: &[(&str, FileState, A)])
-        -> Result<()> where A: Into<Option<&'a str>> + Clone
+    fn playlist_load_files<'a, A>(&self, files: &[(&str, FileState, A)]) -> Result<()>
+        where A: Into<Option<&'a str>> + Clone
     {
         for (i, elem) in files.iter().enumerate() {
             let args = elem.2.clone().into().unwrap_or("");
 
             let ret = unsafe {
-                self.command("loadfile", &[&format!("\"{}\"", elem.0), elem.1.val(), args])
+                self.command("loadfile",
+                             &[&format!("\"{}\"", elem.0), elem.1.val(), args])
             };
 
             if ret.is_err() {
-                return Err(ErrorKind::Loadfiles(i, Box::new(ret.unwrap_err())).into())
+                return Err(ErrorKind::Loadfiles(i, Box::new(ret.unwrap_err())).into());
             }
         }
         Ok(())
@@ -961,54 +962,40 @@ pub trait MpvInstance: Sized {
     /// Load the given playlist file, that either replaces the current playlist, or appends to it.
     fn playlist_load_list(&self, path: &str, replace: bool) -> Result<()> {
         if replace {
-            unsafe {
-                self.command("loadlist", &[&format!("\"{}\"", path), "replace"])
-            }
+            unsafe { self.command("loadlist", &[&format!("\"{}\"", path), "replace"]) }
         } else {
-            unsafe {
-                self.command("loadlist", &[&format!("\"{}\"", path), "append"])
-            }
+            unsafe { self.command("loadlist", &[&format!("\"{}\"", path), "append"]) }
         }
     }
 
     #[inline]
     /// Remove every, except the current, item from the playlist.
     fn playlist_clear(&self) -> Result<()> {
-        unsafe {
-            self.command("playlist-clear", &[])
-        }
+        unsafe { self.command("playlist-clear", &[]) }
     }
 
     #[inline]
     /// Remove the currently selected item from the playlist.
     fn playlist_remove_current(&self) -> Result<()> {
-        unsafe {
-            self.command("playlist-remove", &["current"])
-        }
+        unsafe { self.command("playlist-remove", &["current"]) }
     }
 
     #[inline]
     /// Remove item at `position` from the playlist.
     fn playlist_remove_index(&self, position: usize) -> Result<()> {
-        unsafe {
-            self.command("playlist-remove", &[&format!("{}", position)])
-        }
+        unsafe { self.command("playlist-remove", &[&format!("{}", position)]) }
     }
 
     #[inline]
     /// Move item `old` to the position of item `new`.
     fn playlist_move(&self, old: usize, new: usize) -> Result<()> {
-        unsafe {
-            self.command("playlist-move", &[&format!("{}", new), &format!("{}", old)])
-        }
+        unsafe { self.command("playlist-move", &[&format!("{}", new), &format!("{}", old)]) }
     }
 
     #[inline]
     /// Shuffle the playlist.
     fn playlist_shuffle(&self) -> Result<()> {
-        unsafe {
-            self.command("playlist-shuffle", &[])
-        }
+        unsafe { self.command("playlist-shuffle", &[]) }
     }
 
     // --- Subtitle functions ---
@@ -1017,28 +1004,23 @@ pub trait MpvInstance: Sized {
     #[inline]
     /// Add and select the subtitle immediately.
     /// Specifying a language requires specifying a title.
-    fn subtitle_add_select<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'b str>>>(&self, path: &str, title: A, lang: B)
-         -> Result<()>
-    {
+    fn subtitle_add_select<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'b str>>>
+        (&self,
+         path: &str,
+         title: A,
+         lang: B)
+         -> Result<()> {
         match (title.into(), lang.into()) {
-            (None, None) => {
-                unsafe {
-                    self.command("sub-add", &[&format!("\"{}\"", path), "select"])
-                }
-            }
-            (Some(t), None) => {
-                unsafe {
-                    self.command("sub-add", &[&format!("\"{}\"", path), "select", t])
-                }
-            }
-            (None, Some(_)) => {
-                Err(ErrorKind::InvalidArgument.into())
-            }
-            (Some(t), Some(l)) => {
-                unsafe {
-                    self.command("sub-add", &[&format!("\"{}\"", path), "select", t, l])
-                }   
-            }
+            (None, None) => unsafe {
+                self.command("sub-add", &[&format!("\"{}\"", path), "select"])
+            },
+            (Some(t), None) => unsafe {
+                self.command("sub-add", &[&format!("\"{}\"", path), "select", t])
+            },
+            (None, Some(_)) => Err(ErrorKind::InvalidArgument.into()),
+            (Some(t), Some(l)) => unsafe {
+                self.command("sub-add", &[&format!("\"{}\"", path), "select", t, l])
+            },
         }
     }
 
@@ -1047,28 +1029,21 @@ pub trait MpvInstance: Sized {
     /// (Or in some special situations, let the default stream selection mechanism decide.)".
     ///
     /// Returns an `Error::InvalidArgument` if a language, but not a title, was provided.
-    fn subtitle_add_auto<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'b str>>>(&self, path: &str, title: A, lang: B)
-        -> Result<()>
-    {
+    fn subtitle_add_auto<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'b str>>>
+        (&self,
+         path: &str,
+         title: A,
+         lang: B)
+         -> Result<()> {
         match (title.into(), lang.into()) {
-            (None, None) => {
-                unsafe {
-                    self.command("sub-add", &[&format!("\"{}\"", path), "auto"])
-                }
-            }
-            (Some(t), None) => {
-                unsafe {
-                    self.command("sub-add", &[&format!("\"{}\"", path), "auto", t])
-                }
-            }
-            (Some(t), Some(l)) => {
-                unsafe {
-                    self.command("sub-add", &[&format!("\"{}\"", path), "auto", t, l])
-                }
-            }
-            (None, Some(_)) => {
-                Err(ErrorKind::InvalidArgument.into())
-            }
+            (None, None) => unsafe { self.command("sub-add", &[&format!("\"{}\"", path), "auto"]) },
+            (Some(t), None) => unsafe {
+                self.command("sub-add", &[&format!("\"{}\"", path), "auto", t])
+            },
+            (Some(t), Some(l)) => unsafe {
+                self.command("sub-add", &[&format!("\"{}\"", path), "auto", t, l])
+            },
+            (None, Some(_)) => Err(ErrorKind::InvalidArgument.into()),
         }
     }
 
@@ -1078,9 +1053,7 @@ pub trait MpvInstance: Sized {
     /// (In this case, title/language are ignored, and if the [sub] was changed since it was loaded,
     /// these changes won't be reflected.)".
     fn subtitle_add_cached(&self, path: &str) -> Result<()> {
-        unsafe {
-            self.command("sub-add", &[&format!("\"{}\"", path), "cached"])
-        }
+        unsafe { self.command("sub-add", &[&format!("\"{}\"", path), "cached"]) }
     }
 
     #[inline]
@@ -1088,13 +1061,9 @@ pub trait MpvInstance: Sized {
     /// track. (Works on external subtitle files only.)"
     fn subtitle_remove<A: Into<Option<usize>>>(&self, index: A) -> Result<()> {
         if let Some(idx) = index.into() {
-            unsafe {
-                self.command("sub-remove", &[&format!("{}", idx)])
-            }
+            unsafe { self.command("sub-remove", &[&format!("{}", idx)]) }
         } else {
-            unsafe {
-                self.command("sub-remove", &[])
-            }
+            unsafe { self.command("sub-remove", &[]) }
         }
     }
 
@@ -1103,13 +1072,9 @@ pub trait MpvInstance: Sized {
     /// track. (Works on external subtitle files only.)"
     fn subtitle_reload<A: Into<Option<usize>>>(&self, index: A) -> Result<()> {
         if let Some(idx) = index.into() {
-            unsafe {
-                self.command("sub-reload", &[&format!("{}", idx)])
-            }
+            unsafe { self.command("sub-reload", &[&format!("{}", idx)]) }
         } else {
-            unsafe {
-                self.command("sub-reload", &[])
-            }
+            unsafe { self.command("sub-reload", &[]) }
         }
     }
 
@@ -1117,9 +1082,7 @@ pub trait MpvInstance: Sized {
     /// "Change subtitle timing such, that the subtitle event after the next `isize` subtitle
     /// events is displayed. `isize` can be negative to step backwards."
     fn subtitle_step(&self, skip: isize) -> Result<()> {
-        unsafe {
-            self.command("sub-step", &[&format!("{}", skip)])
-        }
+        unsafe { self.command("sub-step", &[&format!("{}", skip)]) }
     }
 
     #[inline]
@@ -1128,17 +1091,13 @@ pub trait MpvInstance: Sized {
     /// For embedded subtitles (like with matroska), this works only with subtitle events that
     /// have already been displayed, or are within a short prefetch range."
     fn subtitle_seek_forward(&self) -> Result<()> {
-        unsafe {
-            self.command("sub-seek", &["1"])
-        }
+        unsafe { self.command("sub-seek", &["1"]) }
     }
 
     #[inline]
     /// See `SeekForward`.
     fn subtitle_seek_backward(&self) -> Result<()> {
-        unsafe {
-            self.command("sub-seek", &["-1"])
-        }
+        unsafe { self.command("sub-seek", &["-1"]) }
     }
 }
 
@@ -1185,26 +1144,25 @@ impl<'parent> MpvInstance for Client<'parent> {
 }
 
 #[inline]
-fn internal_set_property<A: Into<Data>>(ctx: *mut MpvHandle, name: &str, data: A) 
-    -> Result<()>
-{
+fn internal_set_property<A: Into<Data>>(ctx: *mut MpvHandle, name: &str, data: A) -> Result<()> {
     let name = CString::new(name)?.into_raw();
     let mut data = data.into();
     let format = data.format().as_val();
     let ret = match data {
-        Data::String(ref v) | Data::OsdString(ref v) => {
+        Data::String(ref v) |
+        Data::OsdString(ref v) => {
             let data = CString::new(v.as_bytes())?;
             let ptr: *mut _ = &mut data.as_ptr();
 
             unsafe { mpv_set_property(ctx, name, format, ptr as *mut _) }
         }
         _ => {
-        let data = match data {
-            Data::Flag(ref mut v) => v as *mut bool as *mut libc::c_void,
-            Data::Int64(ref mut v) => v as *mut libc::int64_t as *mut libc::c_void,
-            Data::Double(ref mut v) => v as *mut libc::c_double as *mut libc::c_void,
-            _ => unreachable!(),
-        };
+            let data = match data {
+                Data::Flag(ref mut v) => v as *mut bool as *mut libc::c_void,
+                Data::Int64(ref mut v) => v as *mut libc::int64_t as *mut libc::c_void,
+                Data::Double(ref mut v) => v as *mut libc::c_double as *mut libc::c_void,
+                _ => unreachable!(),
+            };
 
             unsafe { mpv_set_property(ctx, name, format, data) }
         }

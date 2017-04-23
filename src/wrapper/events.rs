@@ -54,9 +54,16 @@ impl InnerEvent {
 #[allow(missing_docs)]
 /// An event returned by `EventIter`.
 pub enum Event {
-    LogMessage{prefix: String, level: LogLevel, text: String},
+    LogMessage {
+        prefix: String,
+        level: LogLevel,
+        text: String,
+    },
     StartFile,
-    EndFile{reason: EndFileReason, error: Option<Error>},
+    EndFile {
+        reason: EndFileReason,
+        error: Option<Error>,
+    },
     FileLoaded,
     Idle,
     Tick,
@@ -80,9 +87,9 @@ impl Event {
 
     pub(crate) fn as_id(&self) -> MpvEventId {
         match *self {
-            Event::LogMessage{..} => MpvEventId::LogMessage,
+            Event::LogMessage { .. } => MpvEventId::LogMessage,
             Event::StartFile => MpvEventId::StartFile,
-            Event::EndFile{..} => MpvEventId::EndFile,
+            Event::EndFile { .. } => MpvEventId::EndFile,
             Event::FileLoaded => MpvEventId::FileLoaded,
             Event::Idle => MpvEventId::Idle,
             Event::Tick => MpvEventId::Tick,
@@ -124,10 +131,8 @@ impl Event {
     fn property_from_raw(raw: *mut libc::c_void) -> Event {
         debug_assert!(!raw.is_null());
         let raw = unsafe { &mut *(raw as *mut MpvEventProperty) };
-        Event::PropertyChange((
-            unsafe { CStr::from_ptr(raw.name).to_str().unwrap().into() },
-            Data::from_raw(raw.format, raw.data)
-        ))
+        Event::PropertyChange((unsafe { CStr::from_ptr(raw.name).to_str().unwrap().into() },
+                               Data::from_raw(raw.format, raw.data)))
     }
 }
 
@@ -211,13 +216,15 @@ impl<'parent, P> Drop for EventIter<'parent, P>
                     // `.0` is the name of the property.
                     if outer_prop.0 == inner_prop.0 {
                         unsafe {
-                            mpv_unobserve_property(self.ctx, all_to_observe_properties.remove(
-                                                                        &outer_prop.0).unwrap());
+                            mpv_unobserve_property(self.ctx,
+                                                   all_to_observe_properties
+                                                       .remove(&outer_prop.0)
+                                                       .unwrap());
                         }
                         return true;
                     }
                 } else if MpvEventId::LogMessage == outer_ev.as_id() &&
-                   outer_ev.as_id() == inner_ev.as_id() {
+                          outer_ev.as_id() == inner_ev.as_id() {
                     debug_assert_eq!("no", MpvLogLevel::None.as_str());
                     let min_level = &*b"no0";
                     unsafe { mpv_request_log_messages(self.ctx, min_level.as_ptr() as _) };
@@ -249,7 +256,9 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
             let mut observed = self.all_observed.lock();
             if observed.is_empty() && !self.first_iteration {
                 drop(observed);
-                self.notification.1.wait(&mut self.notification.0.lock());
+                self.notification
+                    .1
+                    .wait(&mut self.notification.0.lock());
                 observed = self.all_observed.lock();
             }
 
@@ -316,7 +325,7 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
                     self.notification.1.notify_all();
                 }
             }
-            
+
             self.first_iteration = false;
 
             if !ret_events.is_empty() {

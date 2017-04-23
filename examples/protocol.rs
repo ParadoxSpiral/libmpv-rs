@@ -61,9 +61,10 @@ fn size(cookie: &mut File) -> i64 {
 }
 
 pub fn main() {
-    let path =
-        format!("filereader://{}",
-                env::args().nth(1).expect("Expected path to local media as argument, found nil."));
+    let path = format!("filereader://{}",
+                       env::args()
+                           .nth(1)
+                           .expect("Expected path to local media as argument, found nil."));
 
     let protocol = unsafe {
         Protocol::new("filereader".into(),
@@ -79,7 +80,8 @@ pub fn main() {
     let proto_ctx = mpv.create_protocol_context(1).unwrap();
     proto_ctx.register(protocol).unwrap();
 
-    mpv.playlist_load_files(&[(&path, FileState::AppendPlay, None)]).unwrap();
+    mpv.playlist_load_files(&[(&path, FileState::AppendPlay, None)])
+        .unwrap();
 
     thread::sleep(Duration::from_secs(10));
 
