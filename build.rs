@@ -137,7 +137,7 @@ fn main() {
 			env::remove_var("TARGET");
 
 			#[cfg(feature="static_libmpv")]
-			let cmd = format!("cd {} && echo \"--enable-libmpv-static\" > {0}/mpv_options \
+			let cmd = format!("cd {} && echo \"--enable-libmpv-static\n--enable-static-build\n--disable-cplayer\" > {0}/mpv_options \
 			  				  && {0}/build -j{}", path, num_threads);
 			#[cfg(not(feature="static_libmpv"))]
 			let cmd = format!("cd {} && echo \"--enable-libmpv-shared\" > {0}/mpv_options \
