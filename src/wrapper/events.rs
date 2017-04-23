@@ -33,23 +33,6 @@ pub(crate) unsafe extern "C" fn event_callback(d: *mut libc::c_void) {
     (*(d as *mut Condvar)).notify_one();
 }
 
-#[doc(hidden)]
-#[derive(Clone, PartialEq)]
-/// Designed for internal use.
-pub struct InnerEvent {
-    event: Event,
-    err: Option<MpvError>,
-}
-
-impl InnerEvent {
-    fn as_event(&self) -> &Event {
-        &self.event
-    }
-    pub(crate) fn as_id(&self) -> MpvEventId {
-        self.event.as_id()
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 #[allow(missing_docs)]
 /// An event returned by `EventIter`.
@@ -155,19 +138,6 @@ impl MpvEvent {
             _ => unreachable!(),
         }
     }
-    fn as_inner_event(&self) -> InnerEvent {
-        InnerEvent {
-            event: self.as_owned(),
-            err: {
-                let err = MpvError::from_i32(self.error).unwrap();
-                if err != MpvError::Success {
-                    Some(err)
-                } else {
-                    None
-                }
-            },
-        }
-    }
 }
 
 impl MpvLogLevel {
@@ -197,7 +167,7 @@ pub struct EventIter<'parent, P>
     pub(crate) all_to_observe: &'parent Mutex<Vec<Event>>,
     pub(crate) all_to_observe_properties: &'parent Mutex<HashMap<String, libc::uint64_t>>,
     pub(crate) local_to_observe: Vec<Event>,
-    pub(crate) all_observed: &'parent Mutex<Vec<InnerEvent>>,
+    pub(crate) all_observed: &'parent Mutex<Vec<(Event, Option<MpvError>)>>,
     pub(crate) _does_not_outlive: PhantomData<&'parent P>,
 }
 
@@ -240,7 +210,7 @@ impl<'parent, P> Drop for EventIter<'parent, P>
         // This removes all events for which compare_ev_unobserve returns true.
         for outer_ev in &self.local_to_observe {
             all_to_observe.retain(|inner_ev| !compare_ev_unobserve(outer_ev, inner_ev));
-            all_observed.retain(|inner_ev| !compare_ev_unobserve(outer_ev, (*inner_ev).as_event()));
+            all_observed.retain(|inner_ev| !compare_ev_unobserve(outer_ev, &inner_ev.0));
         }
     }
 }
@@ -290,7 +260,15 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
                     }
                     for all_ob_ev in &*all_to_observe {
                         if ev_id == all_ob_ev.as_id() {
-                            observed.push(event.as_inner_event());
+                            observed.push((event.as_owned(),
+                                           {
+                                               let err = MpvError::from_i32(event.error).unwrap();
+                                               if err != MpvError::Success {
+                                                   Some(err)
+                                               } else {
+                                                   None
+                                               }
+                                           }));
                             continue 'events;
                         }
                     }
@@ -301,23 +279,23 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
                 }
             } else {
                 // Return true where outer_ev == inner_ev, and push inner_ev to ret_events
-                let mut compare_ev = |outer_ev: &Event, inner_ev: &InnerEvent| {
+                let mut compare_ev = |outer_ev: &Event, inner_ev: &Event| {
                     if let Event::PropertyChange(ref outer_prop) = *outer_ev {
-                        if let Event::PropertyChange(ref inner_prop) = *inner_ev.as_event() {
+                        if let Event::PropertyChange(ref inner_prop) = *inner_ev {
                             if outer_prop.0 == inner_prop.0 {
-                                ret_events.push(inner_ev.as_event().clone());
+                                ret_events.push(inner_ev.clone());
                                 return true;
                             }
                         }
                     } else if outer_ev.as_id() == inner_ev.as_id() {
-                        ret_events.push(inner_ev.as_event().clone());
+                        ret_events.push(inner_ev.clone());
                         return true;
                     }
                     false
                 };
                 // Remove events belonging to this EventIter from observed
                 for outer_ev in &self.local_to_observe {
-                    observed.retain(|inner_ev| !compare_ev(outer_ev, inner_ev));
+                    observed.retain(|inner_ev| !compare_ev(outer_ev, &inner_ev.0));
                 }
 
                 if !observed.is_empty() {

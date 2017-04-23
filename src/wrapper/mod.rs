@@ -343,7 +343,7 @@ pub struct Parent {
     ev_iter_notification: Option<Box<(Mutex<bool>, Condvar)>>,
     ev_to_observe: Option<Mutex<Vec<Event>>>,
     ev_to_observe_properties: Option<Mutex<HashMap<String, libc::uint64_t>>>,
-    ev_observed: Option<Mutex<Vec<InnerEvent>>>,
+    ev_observed: Option<Mutex<Vec<(Event, Option<MpvError>)>>>,
     protocols_guard: Mutex<()>,
     opengl_guard: Mutex<()>,
 }
@@ -354,7 +354,7 @@ pub struct Client<'parent> {
     events: bool,
     ev_iter_notification: Option<Box<(Mutex<bool>, Condvar)>>,
     ev_to_observe: Option<Mutex<Vec<Event>>>,
-    ev_observed: Option<Mutex<Vec<InnerEvent>>>,
+    ev_observed: Option<Mutex<Vec<(Event, Option<MpvError>)>>>,
     ev_to_observe_properties: Option<Mutex<HashMap<String, libc::uint64_t>>>,
     _does_not_outlive: PhantomData<&'parent Parent>,
 }
@@ -579,7 +579,7 @@ pub trait MpvInstance: Sized {
     fn ev_iter_notification(&self) -> &Option<Box<(Mutex<bool>, Condvar)>>;
     fn ev_to_observe(&self) -> &Option<Mutex<Vec<Event>>>;
     fn ev_to_observe_properties(&self) -> &Option<Mutex<HashMap<String, libc::uint64_t>>>;
-    fn ev_observed(&self) -> &Option<Mutex<Vec<InnerEvent>>>;
+    fn ev_observed(&self) -> &Option<Mutex<Vec<(Event, Option<MpvError>)>>>;
 
     #[inline]
     /// Load a configuration file. The path has to be absolute, and a file.
@@ -1117,7 +1117,7 @@ impl MpvInstance for Parent {
     fn ev_to_observe_properties(&self) -> &Option<Mutex<HashMap<String, libc::uint64_t>>> {
         &self.ev_to_observe_properties
     }
-    fn ev_observed(&self) -> &Option<Mutex<Vec<InnerEvent>>> {
+    fn ev_observed(&self) -> &Option<Mutex<Vec<(Event, Option<MpvError>)>>> {
         &self.ev_observed
     }
 }
@@ -1138,7 +1138,7 @@ impl<'parent> MpvInstance for Client<'parent> {
     fn ev_to_observe_properties(&self) -> &Option<Mutex<HashMap<String, libc::uint64_t>>> {
         &self.ev_to_observe_properties
     }
-    fn ev_observed(&self) -> &Option<Mutex<Vec<InnerEvent>>> {
+    fn ev_observed(&self) -> &Option<Mutex<Vec<(Event, Option<MpvError>)>>> {
         &self.ev_observed
     }
 }
