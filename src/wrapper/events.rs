@@ -33,17 +33,8 @@ pub(crate) unsafe extern "C" fn event_callback(d: *mut libc::c_void) {
     (*(d as *mut Condvar)).notify_one();
 }
 
-fn property_from_raw(raw: *mut libc::c_void) -> (String, Data) {
-    debug_assert!(!raw.is_null());
-    let raw = unsafe { &mut *(raw as *mut MpvEventProperty) };
-    (
-        unsafe { CStr::from_ptr(raw.name).to_str().unwrap().into() },
-        Data::from_raw(raw.format, raw.data)
-    )
-}
-
 #[doc(hidden)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 /// Designed for internal use.
 pub struct InnerEvent {
     event: Event,
@@ -59,13 +50,13 @@ impl InnerEvent {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 #[allow(missing_docs)]
 /// An event returned by `EventIter`.
 pub enum Event {
-    LogMessage(LogMessage),
+    LogMessage{prefix: String, level: LogLevel, text: String},
     StartFile,
-    EndFile(Option<EndFile>),
+    EndFile{reason: EndFileReason, error: Option<Error>},
     FileLoaded,
     Idle,
     Tick,
@@ -77,11 +68,21 @@ pub enum Event {
 }
 
 impl Event {
+    /// Create an empty `Event::LogMessage` with given `LogLevel`.
+    /// Use this to observe log messages.
+    pub fn empty_logmessage(lvl: LogLevel) -> Event {
+        Event::LogMessage {
+            prefix: "".into(),
+            level: lvl,
+            text: "".into(),
+        }
+    }
+
     pub(crate) fn as_id(&self) -> MpvEventId {
         match *self {
-            Event::LogMessage(_) => MpvEventId::LogMessage,
+            Event::LogMessage{prefix: _, level: _, text: _} => MpvEventId::LogMessage,
             Event::StartFile => MpvEventId::StartFile,
-            Event::EndFile(_) => MpvEventId::EndFile,
+            Event::EndFile{reason: _, error: _} => MpvEventId::EndFile,
             Event::FileLoaded => MpvEventId::FileLoaded,
             Event::Idle => MpvEventId::Idle,
             Event::Tick => MpvEventId::Tick,
@@ -92,6 +93,42 @@ impl Event {
             Event::PropertyChange(_) => MpvEventId::PropertyChange,
         }
     }
+
+    fn endfile_from_raw(raw: *mut libc::c_void) -> Event {
+        debug_assert!(!raw.is_null());
+        let raw = unsafe { &mut *(raw as *mut MpvEventEndFile) };
+
+        Event::EndFile {
+            reason: raw.reason,
+            error: {
+                let err = MpvError::from_i32(raw.error).unwrap();
+                if err != MpvError::Success {
+                    Some(err.into())
+                } else {
+                    None
+                }
+            },
+        }
+    }
+
+    fn logmessage_from_raw(raw: *mut libc::c_void) -> Event {
+        debug_assert!(!raw.is_null());
+        let raw = unsafe { &mut *(raw as *mut MpvEventLogMessage) };
+        Event::LogMessage {
+            prefix: unsafe { CStr::from_ptr(raw.prefix).to_str().unwrap().into() },
+            level: raw.log_level,
+            text: unsafe { CStr::from_ptr(raw.text).to_str().unwrap().into() },
+        }
+    }
+
+    fn property_from_raw(raw: *mut libc::c_void) -> Event {
+        debug_assert!(!raw.is_null());
+        let raw = unsafe { &mut *(raw as *mut MpvEventProperty) };
+        Event::PropertyChange((
+            unsafe { CStr::from_ptr(raw.name).to_str().unwrap().into() },
+            Data::from_raw(raw.format, raw.data)
+        ))
+    }
 }
 
 impl MpvEvent {
@@ -99,11 +136,9 @@ impl MpvEvent {
     fn as_owned(&self) -> Event {
         debug_assert!(mpv_err((), self.error).is_ok());
         match self.event_id {
-            MpvEventId::LogMessage => Event::LogMessage(LogMessage::from_raw(self.data)),
+            MpvEventId::LogMessage => Event::logmessage_from_raw(self.data),
             MpvEventId::StartFile => Event::StartFile,
-            MpvEventId::EndFile => {
-                Event::EndFile(Some(EndFile::from_raw(MpvEventEndFile::from_raw(self.data))))
-            }
+            MpvEventId::EndFile => Event::endfile_from_raw(self.data),
             MpvEventId::FileLoaded => Event::FileLoaded,
             MpvEventId::Idle => Event::Idle,
             MpvEventId::Tick => Event::Tick,
@@ -111,28 +146,13 @@ impl MpvEvent {
             MpvEventId::AudioReconfig => Event::AudioReconfig,
             MpvEventId::Seek => Event::Seek,
             MpvEventId::PlaybackRestart => Event::PlaybackRestart,
-            MpvEventId::PropertyChange => Event::PropertyChange(property_from_raw(self.data)),
+            MpvEventId::PropertyChange => Event::property_from_raw(self.data),
             _ => unreachable!(),
         }
     }
     fn as_inner_event(&self) -> InnerEvent {
         InnerEvent {
-            event: match self.event_id {
-                MpvEventId::LogMessage => Event::LogMessage(LogMessage::from_raw(self.data)),
-                MpvEventId::StartFile => Event::StartFile,
-                MpvEventId::EndFile => {
-                    Event::EndFile(Some(EndFile::from_raw(MpvEventEndFile::from_raw(self.data))))
-                }
-                MpvEventId::FileLoaded => Event::FileLoaded,
-                MpvEventId::Idle => Event::Idle,
-                MpvEventId::Tick => Event::Tick,
-                MpvEventId::VideoReconfig => Event::VideoReconfig,
-                MpvEventId::AudioReconfig => Event::AudioReconfig,
-                MpvEventId::Seek => Event::Seek,
-                MpvEventId::PlaybackRestart => Event::PlaybackRestart,
-                MpvEventId::PropertyChange => Event::PropertyChange(property_from_raw(self.data)),
-                _ => unreachable!(),
-            },
+            event: self.as_owned(),
             err: {
                 let err = MpvError::from_i32(self.error).unwrap();
                 if err != MpvError::Success {
@@ -141,6 +161,21 @@ impl MpvEvent {
                     None
                 }
             },
+        }
+    }
+}
+
+impl MpvLogLevel {
+    pub(crate) fn as_str(&self) -> &str {
+        match *self {
+            MpvLogLevel::None => "no",
+            MpvLogLevel::Fatal => "fatal",
+            MpvLogLevel::Error => "error",
+            MpvLogLevel::Warn => "warn",
+            MpvLogLevel::Info => "info",
+            MpvLogLevel::V => "v",
+            MpvLogLevel::Debug => "debug",
+            MpvLogLevel::Trace => "trace",
         }
     }
 }
@@ -290,104 +325,6 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
             } else {
                 continue 'no_events_anchor;
             }
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(missing_docs)]
-/// The data of an `Event::LogMessage`.
-pub struct LogMessage {
-    pub prefix: String,
-    pub level: LogLevel,
-    pub text: String,
-    pub log_level: LogLevel,
-}
-
-impl LogMessage {
-    /// Create an empty `LogMessage` with specified verbosity, useful for observing.
-    pub fn new(lvl: LogLevel) -> LogMessage {
-        LogMessage {
-            prefix: "".into(),
-            level: lvl,
-            text: "".into(),
-            log_level: lvl,
-        }
-    }
-
-    fn from_raw(raw: *mut libc::c_void) -> LogMessage {
-        debug_assert!(!raw.is_null());
-        let raw = unsafe { &mut *(raw as *mut MpvEventLogMessage) };
-        LogMessage {
-            prefix: unsafe { CStr::from_ptr(raw.prefix).to_str().unwrap().into() },
-            level: unsafe { MpvLogLevel::from_str(CStr::from_ptr(raw.level).to_str().unwrap()) },
-            text: unsafe { CStr::from_ptr(raw.text).to_str().unwrap().into() },
-            log_level: raw.log_level,
-        }
-    }
-}
-
-impl MpvLogLevel {
-    pub(crate) fn as_str(&self) -> &str {
-        match *self {
-            MpvLogLevel::None => "no",
-            MpvLogLevel::Fatal => "fatal",
-            MpvLogLevel::Error => "error",
-            MpvLogLevel::Warn => "warn",
-            MpvLogLevel::Info => "info",
-            MpvLogLevel::V => "v",
-            MpvLogLevel::Debug => "debug",
-            MpvLogLevel::Trace => "trace",
-        }
-    }
-
-    #[allow(should_implement_trait)]
-    fn from_str(name: &str) -> MpvLogLevel {
-        match name {
-            "no" => MpvLogLevel::None,
-            "fatal" => MpvLogLevel::Fatal,
-            "error" => MpvLogLevel::Error,
-            "warn" => MpvLogLevel::Warn,
-            "info" => MpvLogLevel::Info,
-            "v" => MpvLogLevel::V,
-            "debug" => MpvLogLevel::Debug,
-            "trace" => MpvLogLevel::Trace,
-            _ => unreachable!(),
-        }
-    }
-}
-
-impl MpvEventEndFile {
-    fn from_raw(raw: *mut libc::c_void) -> MpvEventEndFile {
-        debug_assert!(!raw.is_null());
-        let raw = unsafe { &mut *(raw as *mut MpvEventEndFile) };
-        MpvEventEndFile {
-            reason: raw.reason,
-            error: raw.error,
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(missing_docs)]
-/// The data of an `Event::EndFile`. `error` is `Some` if `EndFileReason` is `Error`.
-pub struct EndFile {
-    pub reason: EndFileReason,
-    pub error: Option<MpvError>,
-}
-
-impl EndFile {
-    fn from_raw(raw: MpvEventEndFile) -> EndFile {
-        EndFile {
-            reason: raw.reason,
-            error: {
-                let err = MpvError::from_i32(raw.error).unwrap();
-                if err != MpvError::Success {
-                    Some(err)
-                } else {
-                    None
-                }
-            },
         }
     }
 }

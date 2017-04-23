@@ -46,24 +46,24 @@ pub fn main() {
                                             Event::StartFile,
                                             Event::Seek,
                                             Event::PlaybackRestart,
-                                            Event::EndFile(None)])
+                                            Event::EndFile{reason: EndFileReason::Eof, error: None}])
                 .unwrap();
 
             for vec in iter {
                 // If any `Event` was an `Endfile`, . . .
-                if let Some(&Event::EndFile(ref v)) =
-                    vec.iter().find(|e| if let Event::EndFile(_) = **e {
+                if let Some(&Event::EndFile{reason: ref r, error: ref e}) =
+                    vec.iter().find(|ev| if let Event::EndFile{reason: _, error: _} = **ev {
                                         true
                                     } else {
                                         false
                                     }) {
                     // . . . print the `EndFile` reason and exit, . . .
-                    println!("File ended! Reason: {:?}", v);
+                    println!("File ended! Reason: {:?}; Error: {:?}", r, e);
                     thread::sleep(Duration::from_millis(300));
                     process::exit(0);
                 } else {
                     // . . . otherwise print all `Event`s.
-                    println!("playback_events: {:?}", vec);
+                    println!("playback: {:?}", vec);
                 };
             }
         });
@@ -74,15 +74,15 @@ pub fn main() {
                 .unwrap();
 
             for vec in iter {
-                println!("prop_events: {:?}", vec);
+                println!("properties: {:?}", vec);
             }
         });
         scope.spawn(|| {
-            let iter = mpv.observe_events(&[Event::LogMessage(LogMessage::new(LogLevel::Info))])
+            let iter = mpv.observe_events(&[Event::empty_logmessage(LogLevel::Info)])
                 .unwrap();
 
             for vec in iter {
-                println!("log_events: {:#?}", vec);
+                println!("log: {:#?}", vec);
             }
         });
 

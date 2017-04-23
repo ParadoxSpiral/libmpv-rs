@@ -52,6 +52,7 @@ extern crate error_chain;
 /// Contains FFI bindings to libmpv functions and data structures.
 pub mod raw;
 pub use raw::MpvLogLevel as LogLevel;
+/// The reason an `Event::EndFile` was fired.
 pub use raw::MpvEndFileReason as EndFileReason;
 mod wrapper;
 pub use wrapper::*;

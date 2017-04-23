@@ -29,6 +29,8 @@ mod errors {
     use super::super::raw::MpvError;
     use std::ffi::NulError;
 
+    // FIXME: Once error_chain issue 134 is solved, this should derive Clone, and use RCs 
+    // instead of `Box`es. Remove temp impl below then.
     error_chain!{
         foreign_links {
             Nul(NulError);
@@ -56,6 +58,41 @@ mod errors {
             }
             Null {
                 description("Mpv returned null while creating the core.")
+            }
+        }
+    }
+
+    impl Clone for Error {
+        fn clone(&self) -> Error {
+            match self.kind() {
+                &ErrorKind::Msg(ref e) => ErrorKind::Msg(e.clone()).into(),
+                &ErrorKind::Nul(ref e) => ErrorKind::Nul(e.clone()).into(),
+                &ErrorKind::Native(ref e) => ErrorKind::Native(e.clone()).into(),
+                &ErrorKind::Loadfiles(ref idx, ref err) => ErrorKind::Loadfiles(*idx, err.clone()).into(),
+                &ErrorKind::AlreadyObserved(ref e) => ErrorKind::AlreadyObserved(e.clone()).into(),
+                &ErrorKind::InvalidArgument => ErrorKind::InvalidArgument.into(),
+                &ErrorKind::VersionMismatch(ref li, ref lo) => ErrorKind::VersionMismatch(* li, *lo).into(),
+                &ErrorKind::ContextExists => ErrorKind::ContextExists.into(),
+                &ErrorKind::EventsDisabled => ErrorKind::EventsDisabled.into(),
+                &ErrorKind::Null => ErrorKind::Null.into(),
+            }
+        }
+    }
+
+    impl PartialEq for Error {
+        fn eq(&self, rhs: &Error) -> bool {
+            match (self.kind(), rhs.kind()) {
+                (&ErrorKind::Msg(_), &ErrorKind::Msg(_)) => true,
+                (&ErrorKind::Nul(_), &ErrorKind::Nul(_)) => true,
+                (&ErrorKind::Native(_), &ErrorKind::Native(_)) => true,
+                (&ErrorKind::Loadfiles(_, _), &ErrorKind::Loadfiles(_, _)) => true,
+                (&ErrorKind::AlreadyObserved(_), &ErrorKind::AlreadyObserved(_)) => true,
+                (&ErrorKind::InvalidArgument, &ErrorKind::InvalidArgument) => true,
+                (&ErrorKind::VersionMismatch(_, _), &ErrorKind::VersionMismatch(_, _)) => true,
+                (&ErrorKind::ContextExists, &ErrorKind::ContextExists) => true,
+                (&ErrorKind::EventsDisabled, &ErrorKind::EventsDisabled) => true,
+                (&ErrorKind::Null, &ErrorKind::Null) => true,
+                _ => false,
             }
         }
     }
@@ -569,8 +606,8 @@ pub trait MpvInstance: Sized {
                     }
                 }
 
-                if let Event::LogMessage(ref v) = *elem {
-                    let min_level = CString::new(v.log_level.as_str())?;
+                if let Event::LogMessage{prefix: _, level: ref lvl, text: _} = *elem {
+                    let min_level = CString::new(lvl.as_str())?;
                     mpv_err((), unsafe {
                         mpv_request_log_messages(self.ctx(), min_level.as_ptr())
                     })?;
