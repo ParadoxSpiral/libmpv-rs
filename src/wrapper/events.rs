@@ -80,9 +80,9 @@ impl Event {
 
     pub(crate) fn as_id(&self) -> MpvEventId {
         match *self {
-            Event::LogMessage{prefix: _, level: _, text: _} => MpvEventId::LogMessage,
+            Event::LogMessage{..} => MpvEventId::LogMessage,
             Event::StartFile => MpvEventId::StartFile,
-            Event::EndFile{reason: _, error: _} => MpvEventId::EndFile,
+            Event::EndFile{..} => MpvEventId::EndFile,
             Event::FileLoaded => MpvEventId::FileLoaded,
             Event::Idle => MpvEventId::Idle,
             Event::Tick => MpvEventId::Tick,

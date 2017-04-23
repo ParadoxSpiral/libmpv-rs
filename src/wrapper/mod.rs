@@ -30,7 +30,7 @@ mod errors {
     use std::ffi::NulError;
 
     // FIXME: Once error_chain issue 134 is solved, this should derive Clone, and use RCs 
-    // instead of `Box`es. Remove temp impl below then.
+    // instead of `Box`es. Remove temp impl Clone below then.
     error_chain!{
         foreign_links {
             Nul(NulError);
@@ -63,11 +63,12 @@ mod errors {
     }
 
     impl Clone for Error {
+        #[allow(match_ref_pats)]
         fn clone(&self) -> Error {
             match self.kind() {
                 &ErrorKind::Msg(ref e) => ErrorKind::Msg(e.clone()).into(),
                 &ErrorKind::Nul(ref e) => ErrorKind::Nul(e.clone()).into(),
-                &ErrorKind::Native(ref e) => ErrorKind::Native(e.clone()).into(),
+                &ErrorKind::Native(ref e) => ErrorKind::Native(*e).into(),
                 &ErrorKind::Loadfiles(ref idx, ref err) => ErrorKind::Loadfiles(*idx, err.clone()).into(),
                 &ErrorKind::AlreadyObserved(ref e) => ErrorKind::AlreadyObserved(e.clone()).into(),
                 &ErrorKind::InvalidArgument => ErrorKind::InvalidArgument.into(),
@@ -80,17 +81,18 @@ mod errors {
     }
 
     impl PartialEq for Error {
+        #[allow(match_ref_pats)]
         fn eq(&self, rhs: &Error) -> bool {
             match (self.kind(), rhs.kind()) {
-                (&ErrorKind::Msg(_), &ErrorKind::Msg(_)) => true,
-                (&ErrorKind::Nul(_), &ErrorKind::Nul(_)) => true,
-                (&ErrorKind::Native(_), &ErrorKind::Native(_)) => true,
-                (&ErrorKind::Loadfiles(_, _), &ErrorKind::Loadfiles(_, _)) => true,
-                (&ErrorKind::AlreadyObserved(_), &ErrorKind::AlreadyObserved(_)) => true,
-                (&ErrorKind::InvalidArgument, &ErrorKind::InvalidArgument) => true,
-                (&ErrorKind::VersionMismatch(_, _), &ErrorKind::VersionMismatch(_, _)) => true,
-                (&ErrorKind::ContextExists, &ErrorKind::ContextExists) => true,
-                (&ErrorKind::EventsDisabled, &ErrorKind::EventsDisabled) => true,
+                (&ErrorKind::Msg(_), &ErrorKind::Msg(_)) |
+                (&ErrorKind::Nul(_), &ErrorKind::Nul(_)) |
+                (&ErrorKind::Native(_), &ErrorKind::Native(_)) |
+                (&ErrorKind::Loadfiles(_, _), &ErrorKind::Loadfiles(_, _)) |
+                (&ErrorKind::AlreadyObserved(_), &ErrorKind::AlreadyObserved(_)) |
+                (&ErrorKind::InvalidArgument, &ErrorKind::InvalidArgument) |
+                (&ErrorKind::VersionMismatch(_, _), &ErrorKind::VersionMismatch(_, _)) |
+                (&ErrorKind::ContextExists, &ErrorKind::ContextExists) |
+                (&ErrorKind::EventsDisabled, &ErrorKind::EventsDisabled) |
                 (&ErrorKind::Null, &ErrorKind::Null) => true,
                 _ => false,
             }
@@ -606,7 +608,7 @@ pub trait MpvInstance: Sized {
                     }
                 }
 
-                if let Event::LogMessage{prefix: _, level: ref lvl, text: _} = *elem {
+                if let Event::LogMessage{level: lvl, ..} = *elem {
                     let min_level = CString::new(lvl.as_str())?;
                     mpv_err((), unsafe {
                         mpv_request_log_messages(self.ctx(), min_level.as_ptr())

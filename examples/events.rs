@@ -52,7 +52,7 @@ pub fn main() {
             for vec in iter {
                 // If any `Event` was an `Endfile`, . . .
                 if let Some(&Event::EndFile{reason: ref r, error: ref e}) =
-                    vec.iter().find(|ev| if let Event::EndFile{reason: _, error: _} = **ev {
+                    vec.iter().find(|ev| if let Event::EndFile{..} = **ev {
                                         true
                                     } else {
                                         false
@@ -93,7 +93,7 @@ pub fn main() {
 
         mpv.set_property("volume", 25).unwrap();
 
-        thread::sleep(Duration::from_secs(30));
+        thread::sleep(Duration::from_secs(20));
 
         // Trigger `Event::EndFile` observed above to quit.
         mpv.playlist_next_force().unwrap();
