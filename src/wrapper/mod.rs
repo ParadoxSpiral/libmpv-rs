@@ -83,25 +83,6 @@ mod errors {
             }
         }
     }
-
-    impl PartialEq for Error {
-        #[allow(match_ref_pats)]
-        fn eq(&self, rhs: &Error) -> bool {
-            match (self.kind(), rhs.kind()) {
-                (&ErrorKind::Msg(_), &ErrorKind::Msg(_)) |
-                (&ErrorKind::Nul(_), &ErrorKind::Nul(_)) |
-                (&ErrorKind::Native(_), &ErrorKind::Native(_)) |
-                (&ErrorKind::Loadfiles(_, _), &ErrorKind::Loadfiles(_, _)) |
-                (&ErrorKind::AlreadyObserved(_), &ErrorKind::AlreadyObserved(_)) |
-                (&ErrorKind::InvalidArgument, &ErrorKind::InvalidArgument) |
-                (&ErrorKind::VersionMismatch(_, _), &ErrorKind::VersionMismatch(_, _)) |
-                (&ErrorKind::ContextExists, &ErrorKind::ContextExists) |
-                (&ErrorKind::EventsDisabled, &ErrorKind::EventsDisabled) |
-                (&ErrorKind::Null, &ErrorKind::Null) => true,
-                _ => false,
-            }
-        }
-    }
 }
 
 use enum_primitive::FromPrimitive;

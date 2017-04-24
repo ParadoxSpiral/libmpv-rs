@@ -33,9 +33,11 @@ pub(crate) unsafe extern "C" fn event_callback(d: *mut libc::c_void) {
     (*(d as *mut Condvar)).notify_one();
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 #[allow(missing_docs)]
 /// An event returned by `EventIter`.
+///
+/// Equality is implemented as equality between variants, not values.
 pub enum Event {
     LogMessage {
         prefix: String,
@@ -55,6 +57,25 @@ pub enum Event {
     Seek,
     PlaybackRestart,
     PropertyChange((String, Data)),
+}
+
+impl PartialEq for Event {
+    fn eq(&self, rhs: &Event) -> bool {
+        match (self, rhs) {
+            (&Event::LogMessage { .. }, &Event::LogMessage { .. }) |
+            (&Event::StartFile, &Event::StartFile) |
+            (&Event::EndFile { .. }, &Event::EndFile { .. }) |
+            (&Event::FileLoaded, &Event::FileLoaded) |
+            (&Event::Idle, &Event::Idle) |
+            (&Event::Tick, &Event::Tick) |
+            (&Event::VideoReconfig, &Event::VideoReconfig) |
+            (&Event::AudioReconfig, &Event::AudioReconfig) |
+            (&Event::Seek, &Event::Seek) |
+            (&Event::PlaybackRestart, &Event::PlaybackRestart) |
+            (&Event::PropertyChange(_), &Event::PropertyChange(_)) => true,
+            _ => false,
+        }
+    }
 }
 
 impl Event {
@@ -193,14 +214,13 @@ impl<'parent, P> Drop for EventIter<'parent, P>
                         }
                         return true;
                     }
-                } else if MpvEventId::LogMessage == outer_ev.as_id() &&
-                          outer_ev.as_id() == inner_ev.as_id() {
+                } else if MpvEventId::LogMessage == outer_ev.as_id() && outer_ev == inner_ev {
                     debug_assert_eq!("no", MpvLogLevel::None.as_str());
                     let min_level = &*b"no0";
                     unsafe { mpv_request_log_messages(self.ctx, min_level.as_ptr() as _) };
                     return true;
                 }
-            } else if outer_ev.as_id() == inner_ev.as_id() {
+            } else if outer_ev == inner_ev {
                 unsafe { mpv_request_event(self.ctx, inner_ev.as_id(), 0) };
                 return true;
             }
@@ -287,7 +307,7 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
                                 return true;
                             }
                         }
-                    } else if outer_ev.as_id() == inner_ev.as_id() {
+                    } else if outer_ev == inner_ev {
                         ret_events.push(inner_ev.clone());
                         return true;
                     }
