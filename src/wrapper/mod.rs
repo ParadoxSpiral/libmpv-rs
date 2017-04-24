@@ -324,7 +324,7 @@ pub struct Parent {
     ev_iter_notification: Option<Box<(Mutex<bool>, Condvar)>>,
     ev_to_observe: Option<Mutex<Vec<Event>>>,
     ev_to_observe_properties: Option<Mutex<HashMap<String, libc::uint64_t>>>,
-    ev_observed: Option<Mutex<Vec<(Event, Option<MpvError>)>>>,
+    ev_observed: Option<Mutex<Vec<Event>>>,
     protocols_guard: Mutex<()>,
     opengl_guard: Mutex<()>,
 }
@@ -335,7 +335,7 @@ pub struct Client<'parent> {
     events: bool,
     ev_iter_notification: Option<Box<(Mutex<bool>, Condvar)>>,
     ev_to_observe: Option<Mutex<Vec<Event>>>,
-    ev_observed: Option<Mutex<Vec<(Event, Option<MpvError>)>>>,
+    ev_observed: Option<Mutex<Vec<Event>>>,
     ev_to_observe_properties: Option<Mutex<HashMap<String, libc::uint64_t>>>,
     _does_not_outlive: PhantomData<&'parent Parent>,
 }
@@ -553,14 +553,13 @@ impl<'parent> Client<'parent> {
 #[allow(missing_docs)]
 /// Core functionality that is supported by both `Client` and `Parent`.
 pub trait MpvInstance: Sized {
-    #[doc(hidden)]
     // FIXME: These can go once `Associated Fields` lands
     fn ctx(&self) -> *mut MpvHandle;
     fn events(&self) -> bool;
     fn ev_iter_notification(&self) -> &Option<Box<(Mutex<bool>, Condvar)>>;
     fn ev_to_observe(&self) -> &Option<Mutex<Vec<Event>>>;
     fn ev_to_observe_properties(&self) -> &Option<Mutex<HashMap<String, libc::uint64_t>>>;
-    fn ev_observed(&self) -> &Option<Mutex<Vec<(Event, Option<MpvError>)>>>;
+    fn ev_observed(&self) -> &Option<Mutex<Vec<Event>>>;
 
     #[inline]
     /// Load a configuration file. The path has to be absolute, and a file.
@@ -1098,7 +1097,7 @@ impl MpvInstance for Parent {
     fn ev_to_observe_properties(&self) -> &Option<Mutex<HashMap<String, libc::uint64_t>>> {
         &self.ev_to_observe_properties
     }
-    fn ev_observed(&self) -> &Option<Mutex<Vec<(Event, Option<MpvError>)>>> {
+    fn ev_observed(&self) -> &Option<Mutex<Vec<Event>>> {
         &self.ev_observed
     }
 }
@@ -1119,7 +1118,7 @@ impl<'parent> MpvInstance for Client<'parent> {
     fn ev_to_observe_properties(&self) -> &Option<Mutex<HashMap<String, libc::uint64_t>>> {
         &self.ev_to_observe_properties
     }
-    fn ev_observed(&self) -> &Option<Mutex<Vec<(Event, Option<MpvError>)>>> {
+    fn ev_observed(&self) -> &Option<Mutex<Vec<Event>>> {
         &self.ev_observed
     }
 }

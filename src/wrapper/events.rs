@@ -188,7 +188,7 @@ pub struct EventIter<'parent, P>
     pub(crate) all_to_observe: &'parent Mutex<Vec<Event>>,
     pub(crate) all_to_observe_properties: &'parent Mutex<HashMap<String, libc::uint64_t>>,
     pub(crate) local_to_observe: Vec<Event>,
-    pub(crate) all_observed: &'parent Mutex<Vec<(Event, Option<MpvError>)>>,
+    pub(crate) all_observed: &'parent Mutex<Vec<Event>>,
     pub(crate) _does_not_outlive: PhantomData<&'parent P>,
 }
 
@@ -230,7 +230,7 @@ impl<'parent, P> Drop for EventIter<'parent, P>
         // This removes all events for which compare_ev_unobserve returns true.
         for outer_ev in &self.local_to_observe {
             all_to_observe.retain(|inner_ev| !compare_ev_unobserve(outer_ev, inner_ev));
-            all_observed.retain(|inner_ev| !compare_ev_unobserve(outer_ev, &inner_ev.0));
+            all_observed.retain(|inner_ev| !compare_ev_unobserve(outer_ev, &inner_ev));
         }
     }
 }
@@ -280,15 +280,7 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
                     }
                     for all_ob_ev in &*all_to_observe {
                         if ev_id == all_ob_ev.as_id() {
-                            observed.push((event.as_owned(),
-                                           {
-                                               let err = MpvError::from_i32(event.error).unwrap();
-                                               if err != MpvError::Success {
-                                                   Some(err)
-                                               } else {
-                                                   None
-                                               }
-                                           }));
+                            observed.push(event.as_owned());
                             continue 'events;
                         }
                     }
@@ -315,7 +307,7 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
                 };
                 // Remove events belonging to this EventIter from observed
                 for outer_ev in &self.local_to_observe {
-                    observed.retain(|inner_ev| !compare_ev(outer_ev, &inner_ev.0));
+                    observed.retain(|inner_ev| !compare_ev(outer_ev, &inner_ev));
                 }
 
                 if !observed.is_empty() {
