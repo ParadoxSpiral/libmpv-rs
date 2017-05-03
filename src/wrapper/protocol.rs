@@ -210,7 +210,8 @@ impl<T: RefUnwindSafe, U: RefUnwindSafe> Protocol<T, U> {
     /// `user_data` is data that will be passed to `StreamOpen`.
     ///
     /// # Safety
-    ///	Do not call libmpv functions in any supplied function.
+    /// Do not call libmpv functions in any supplied function.
+    /// All panics of the provided functions are catched and can be used as generic error returns.
     ///
     /// Panic unwinding is catched and returns an appropriate error.
     pub unsafe fn new(name: String,

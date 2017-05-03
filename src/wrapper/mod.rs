@@ -542,9 +542,7 @@ impl<'parent> Client<'parent> {
     #[inline]
     /// Returns the name associated with `self`.
     pub fn name(&self) -> String {
-        unsafe {
-            mpv_cstr_to_string(CStr::from_ptr(mpv_client_name(self.ctx())))
-        }
+        unsafe { mpv_cstr_to_string(CStr::from_ptr(mpv_client_name(self.ctx()))) }
     }
 }
 

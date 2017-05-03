@@ -8,6 +8,7 @@ To run an example, execute `cargo run [--release] --example x -- path`, where x 
 * events: multi-threaded event enumeration
 * protocol: implementation of custom `filereader://` protocol that… reads files
 * sdl2: draw onto an sdl2 framebuffer, keybindings
+`path` should be a valid (local if using protocol) path, e.g. music, or a youtube video.
 
 # Dependencies
 Libmpv is required, and in the case of the last example sdl2.
