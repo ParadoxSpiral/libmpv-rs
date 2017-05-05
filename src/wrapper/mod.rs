@@ -106,30 +106,6 @@ use std::time::Duration;
 
 static SET_LC_NUMERIC: Once = ONCE_INIT;
 
-macro_rules! destroy_on_err {
-    ($ctx:expr, $exec:expr) => (
-        {
-            let err = mpv_err((), $exec);
-            if err.is_err() {
-                mpv_terminate_destroy($ctx);
-                return Err(err.unwrap_err());
-            }
-        }
-    )
-}
-
-macro_rules! detach_on_err {
-    ($ctx:expr, $exec:expr) => (
-        {
-            let err = mpv_err((), $exec);
-            if err.is_err() {
-                mpv_detach_destroy($ctx);
-                return Err(err.unwrap_err());
-            }
-        }
-    )
-}
-
 fn mpv_err<T>(ret: T, err_val: libc::c_int) -> Result<T> {
     if err_val == 0 {
         Ok(ret)
@@ -406,23 +382,6 @@ impl Parent {
                  Some(Mutex::new(HashMap::with_capacity(10))),
                  Some(Mutex::new(Vec::with_capacity(15))))
             } else {
-                unsafe {
-                    destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::LogMessage, 0));
-                    destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::GetPropertyReply, 0));
-                    destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::SetPropertyReply, 0));
-                    destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::CommandReply, 0));
-                    destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::StartFile, 0));
-                    destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::EndFile, 0));
-                    destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::FileLoaded, 0));
-                    destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::Idle, 0));
-                    destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::ClientMessage, 0));
-                    destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::VideoReconfig, 0));
-                    destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::AudioReconfig, 0));
-                    destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::Seek, 0));
-                    destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::PlaybackRestart, 0));
-                    destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::PropertyChange, 0));
-                    destroy_on_err!(ctx, mpv_request_event(ctx, MpvEventId::QueueOverflow, 0));
-                }
                 (None, None, None, None)
             }
         };
@@ -436,7 +395,11 @@ impl Parent {
             }
         }
 
-        unsafe { destroy_on_err!(ctx, mpv_initialize(ctx)) }
+        let _ = mpv_err((), unsafe { mpv_initialize(ctx) })
+            .or_else(|err| {
+                         unsafe { mpv_terminate_destroy(ctx) };
+                         Err(err)
+                     })?;
 
         Ok(Parent {
                ctx: ctx,
@@ -474,23 +437,6 @@ impl Parent {
                  Some(Mutex::new(HashMap::with_capacity(10))),
                  Some(Mutex::new(Vec::with_capacity(15))))
             } else {
-                unsafe {
-                    detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::LogMessage, 0));
-                    detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::GetPropertyReply, 0));
-                    detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::SetPropertyReply, 0));
-                    detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::CommandReply, 0));
-                    detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::StartFile, 0));
-                    detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::EndFile, 0));
-                    detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::FileLoaded, 0));
-                    detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::Idle, 0));
-                    detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::ClientMessage, 0));
-                    detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::VideoReconfig, 0));
-                    detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::AudioReconfig, 0));
-                    detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::Seek, 0));
-                    detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::PlaybackRestart, 0));
-                    detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::PropertyChange, 0));
-                    detach_on_err!(ctx, mpv_request_event(ctx, MpvEventId::QueueOverflow, 0));
-                }
                 (None, None, None, None)
             }
         };
