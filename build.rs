@@ -110,8 +110,10 @@ fn main() {
             let url = "https://github.com/mpv-player/mpv-build";
             let path = format!("{}/mpv-build", out_dir);
             let num_threads = env::var("NUM_JOBS").unwrap();
+            let needs_rebuild;
 
             if !Path::new(&path).exists() {
+                needs_rebuild = true;
                 Repository::clone(url, &path).expect("failed to clone mpv-build");
 
                 Command::new("sh")
@@ -139,6 +141,7 @@ fn main() {
                        .find_object(Oid::from_str(MPV_COMMIT).unwrap(),
                                     Some(ObjectType::Commit))
                        .is_err() {
+                    needs_rebuild = true;
                     Command::new("sh")
                         .arg("-c")
                         .arg(&format!("cd {} && {0}/update", path))
@@ -146,6 +149,8 @@ fn main() {
                         .expect("mpv-build update failed")
                         .wait()
                         .expect("mpv-build update failed");
+                } else {
+                    needs_rebuild = false;
                 }
 
                 mpv_repo
@@ -168,13 +173,15 @@ fn main() {
                               path,
                               num_threads);
 
-            Command::new("sh")
-                .arg("-c")
-                .arg(&cmd)
-                .spawn()
-                .expect("mpv-build build failed")
-                .wait()
-                .expect("mpv-build build failed");
+            if needs_rebuild {
+                Command::new("sh")
+                    .arg("-c")
+                    .arg(&cmd)
+                    .spawn()
+                    .expect("mpv-build build failed")
+                    .wait()
+                    .expect("mpv-build build failed");
+            }
 
             println!("cargo:rustc-link-search=native={}/mpv/build/", path);
         }

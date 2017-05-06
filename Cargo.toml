@@ -42,4 +42,3 @@ git2 = "0.6"
 
 [features]
 build_libmpv = [] # build libmpv automatically at compile time
-static_libmpv = ["build_libmpv"] # build & link libmpv statically
