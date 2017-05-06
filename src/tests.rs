@@ -30,10 +30,10 @@ fn version() {
 #[test]
 fn properties() {
     let mpv = Parent::with_options(false,
-                                   &[("cache-initial", 1.into()),
-                                     ("volume", 0.into()),
-                                     ("vo", "null".into()),
-                                     ("ytdl", true.into())])
+                                   &[("cache-initial", &1),
+                                     ("volume", &0),
+                                     ("vo", &"null"),
+                                     ("ytdl", &true)])
             .unwrap();
 
     mpv.playlist_load_files(&[("https://www.youtube.com/watch?v=DLzxrzFCyOs",
@@ -43,10 +43,9 @@ fn properties() {
 
     thread::sleep(Duration::from_millis(250));
 
-    assert_eq!(Data::new(0),
-               mpv.get_property("volume", Format::Int64).unwrap());
+    assert_eq!(0i64, mpv.get_property("volume").unwrap());
 
-    let title = mpv.get_property("media-title", Format::String).unwrap();
-    assert!(Data::new("Rick Astley - Never Gonna Give You Up [HQ]".to_owned()) == title ||
-            Data::new("watch?v=DLzxrzFCyOs".to_owned()) == title);
+    let title: String = mpv.get_property("media-title").unwrap();
+    assert!("Rick Astley - Never Gonna Give You Up [HQ]".to_owned() == title ||
+            "watch?v=DLzxrzFCyOs".to_owned() == title);
 }

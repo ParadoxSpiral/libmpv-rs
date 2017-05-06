@@ -35,6 +35,39 @@ pub(crate) unsafe extern "C" fn event_callback(d: *mut libc::c_void) {
 
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
+/// Data that is returned by the `PropertyChange` event.
+pub enum PropertyData {
+    String(String),
+    OsdString(String),
+    Flag(bool),
+    Int64(libc::int64_t),
+    Double(libc::c_double),
+}
+
+impl PropertyData {
+    pub(crate) fn format(&self) -> MpvFormat {
+        match *self {
+            PropertyData::String(_) => MpvFormat::String,
+            PropertyData::OsdString(_) => MpvFormat::OsdString,
+            PropertyData::Flag(_) => MpvFormat::Flag,
+            PropertyData::Int64(_) => MpvFormat::Int64,
+            PropertyData::Double(_) => MpvFormat::Double,
+        }
+    }
+
+    fn from_raw(fmt: MpvFormat, ptr: *mut libc::c_void) -> PropertyData {
+        debug_assert!(!ptr.is_null());
+        match fmt {
+            MpvFormat::Flag => PropertyData::Flag(unsafe { *(ptr as *mut libc::int64_t) } != 0),
+            MpvFormat::Int64 => PropertyData::Int64(unsafe { *(ptr as *mut _) }),
+            MpvFormat::Double => PropertyData::Double(unsafe { *(ptr as *mut _) }),
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+#[allow(missing_docs)]
 /// An event returned by `EventIter`.
 ///
 /// Equality is implemented as equality between variants, not values.
@@ -56,7 +89,7 @@ pub enum Event {
     AudioReconfig,
     Seek,
     PlaybackRestart,
-    PropertyChange((String, Data)),
+    PropertyChange((String, PropertyData)),
 }
 
 impl PartialEq for Event {
@@ -136,7 +169,7 @@ impl Event {
         debug_assert!(!raw.is_null());
         let raw = unsafe { &mut *(raw as *mut MpvEventProperty) };
         Event::PropertyChange((unsafe { CStr::from_ptr(raw.name).to_str().unwrap().into() },
-                               Data::from_raw(raw.format, raw.data)))
+                               PropertyData::from_raw(raw.format, raw.data)))
     }
 }
 
@@ -230,7 +263,7 @@ impl<'parent, P> Drop for EventIter<'parent, P>
         // This removes all events for which compare_ev_unobserve returns true.
         for outer_ev in &self.local_to_observe {
             all_to_observe.retain(|inner_ev| !compare_ev_unobserve(outer_ev, inner_ev));
-            all_observed.retain(|inner_ev| !compare_ev_unobserve(outer_ev, &inner_ev));
+            all_observed.retain(|inner_ev| !compare_ev_unobserve(outer_ev, inner_ev));
         }
     }
 }
@@ -242,7 +275,7 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
 
     fn next(&mut self) -> Option<Self::Item> {
         // Loop until some events can be returned
-        'no_events_anchor: loop {
+        loop {
             let mut observed = self.all_observed.lock();
             if observed.is_empty() && !self.first_iteration {
                 drop(observed);
@@ -259,6 +292,7 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
                 'events: loop {
                     let event = unsafe { &*mpv_wait_event(self.ctx, 0f32 as _) };
                     let ev_id = event.event_id;
+                    println!("{:?}", ev_id);
 
                     if unsafe { intrinsics::unlikely(ev_id == MpvEventId::QueueOverflow) } {
                         // The queue needs to be emptied asap to prevent loss of events
@@ -307,7 +341,7 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
                 };
                 // Remove events belonging to this EventIter from observed
                 for outer_ev in &self.local_to_observe {
-                    observed.retain(|inner_ev| !compare_ev(outer_ev, &inner_ev));
+                    observed.retain(|inner_ev| !compare_ev(outer_ev, inner_ev));
                 }
 
                 if !observed.is_empty() {
@@ -321,8 +355,6 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
             if !ret_events.is_empty() {
                 ret_events.shrink_to_fit();
                 return Some(ret_events);
-            } else {
-                continue 'no_events_anchor;
             }
         }
     }

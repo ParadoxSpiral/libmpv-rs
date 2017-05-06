@@ -136,102 +136,87 @@ fn mpv_cstr_to_string(cstr: &CStr) -> String {
     String::from_utf8_lossy(cstr.to_bytes()).into_owned()
 }
 
-#[derive(Clone, Debug, PartialEq)]
 #[allow(missing_docs)]
-/// Data types that are used by the API.
-pub enum Data {
-    String(String),
-    OsdString(String),
-    Flag(bool),
-    Int64(libc::int64_t),
-    Double(libc::c_double),
+/// This trait describes which types are allowed to be passed to the mpv APIs.
+pub unsafe trait Data: Clone {
+    #[doc(hidden)]
+    fn call_as_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(mut self,
+                                                                   mut fun: F)
+                                                                   -> Result<T> {
+        fun(&mut self as *mut Self as _)
+    }
+    #[doc(hidden)]
+    fn get_from_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(mut fun: F) -> Result<Self> {
+        let mut ptr = unsafe { mem::zeroed() };
+        let _ = fun(&mut ptr as *mut Self as _)?;
+        Ok(ptr)
+    }
+    fn get_format() -> Format;
 }
 
-impl Data {
+unsafe impl Data for f64 {
     #[inline]
-    /// Create a `Data`.
-    pub fn new<T: Into<Data>>(val: T) -> Data {
-        val.into()
-    }
-
-    fn format(&self) -> MpvFormat {
-        match *self {
-            Data::String(_) => MpvFormat::String,
-            Data::OsdString(_) => MpvFormat::OsdString,
-            Data::Flag(_) => MpvFormat::Flag,
-            Data::Int64(_) => MpvFormat::Int64,
-            Data::Double(_) => MpvFormat::Double,
-        }
-    }
-
-    fn from_raw(fmt: MpvFormat, ptr: *mut libc::c_void) -> Data {
-        debug_assert!(!ptr.is_null());
-        match fmt {
-            MpvFormat::Flag => Data::Flag(unsafe { *(ptr as *mut libc::int64_t) } != 0),
-            MpvFormat::Int64 => Data::Int64(unsafe { *(ptr as *mut _) }),
-            MpvFormat::Double => Data::Double(unsafe { *(ptr as *mut _) }),
-            _ => unreachable!(),
-        }
+    fn get_format() -> Format {
+        Format::Double
     }
 }
 
-impl From<String> for Data {
+unsafe impl Data for i64 {
     #[inline]
-    fn from(other: String) -> Data {
-        Data::String(other)
+    fn get_format() -> Format {
+        Format::Int64
     }
 }
 
-impl<'a> From<&'a str> for Data {
+unsafe impl Data for bool {
     #[inline]
-    fn from(other: &'a str) -> Data {
-        Data::String(other.to_owned())
+    fn call_as_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(self, mut fun: F) -> Result<T> {
+        let mut cpy: i64 = if self { 1 } else { 0 };
+        fun(&mut cpy as *mut i64 as *mut _)
+    }
+
+    #[inline]
+    fn get_from_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(mut fun: F) -> Result<bool> {
+        let ptr = unsafe { &mut mem::zeroed() } as *mut i64;
+        let _ = fun(ptr as _)?;
+        Ok(match unsafe { *ptr } {
+               0 => false,
+               1 => true,
+               _ => unreachable!(),
+           })
+    }
+
+    #[inline]
+    fn get_format() -> Format {
+        Format::Flag
     }
 }
 
-impl From<bool> for Data {
+unsafe impl<'a> Data for String {
     #[inline]
-    fn from(other: bool) -> Data {
-        Data::Flag(other)
+    fn call_as_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(self, mut fun: F) -> Result<T> {
+        let string = CString::new(self)?;
+        fun((&mut string.as_ptr()) as *mut *const libc::c_char as *mut _)
     }
-}
 
-impl From<i32> for Data {
     #[inline]
-    fn from(other: i32) -> Data {
-        Data::Int64(other as _)
+    fn get_from_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(mut fun: F) -> Result<String> {
+        let ptr = &mut ptr::null();
+        let _ = fun(ptr as *mut *const libc::c_char as _)?;
+
+        let ret = mpv_cstr_to_string(unsafe { CStr::from_ptr(*ptr) });
+        unsafe { mpv_free(*ptr as *mut _) };
+        Ok(ret)
     }
-}
 
-impl From<i64> for Data {
     #[inline]
-    fn from(other: i64) -> Data {
-        Data::Int64(other)
-    }
-}
-
-impl From<u32> for Data {
-    #[inline]
-    fn from(other: u32) -> Data {
-        Data::Int64(other as _)
-    }
-}
-
-impl From<f32> for Data {
-    #[inline]
-    fn from(other: f32) -> Data {
-        Data::Double(other as _)
-    }
-}
-
-impl From<f64> for Data {
-    #[inline]
-    fn from(other: f64) -> Data {
-        Data::Double(other)
+    fn get_format() -> Format {
+        Format::String
     }
 }
 
 #[allow(missing_docs)]
+#[derive(Debug, Clone)]
 /// Subset of `MpvFormat` used by the public API.
 pub enum Format {
     String,
@@ -349,7 +334,7 @@ impl Parent {
 
     #[inline]
     /// Create a new `Parent`, with the given settings set before initialization.
-    pub fn with_options(events: bool, opts: &[(&str, Data)]) -> Result<Parent> {
+    pub fn with_options(events: bool, opts: &[(&str, &Data)]) -> Result<Parent> {
         SET_LC_NUMERIC.call_once(|| {
                                      let c = &*b"c0";
                                      unsafe { libc::setlocale(libc::LC_NUMERIC, c.as_ptr() as _) };
@@ -395,7 +380,7 @@ impl Parent {
             }
         }
 
-        let _ = mpv_err((), unsafe { mpv_initialize(ctx) })
+        mpv_err((), unsafe { mpv_initialize(ctx) })
             .or_else(|err| {
                          unsafe { mpv_terminate_destroy(ctx) };
                          Err(err)
@@ -620,53 +605,21 @@ pub trait MpvInstance: Sized {
 
     #[inline]
     /// Set the value of a property.
-    fn set_property<T: Into<Data>>(&self, name: &str, data: T) -> Result<()> {
+    fn set_property<T: Data>(&self, name: &str, data: T) -> Result<()> {
         internal_set_property(self.ctx(), name, data)
     }
 
     #[inline]
     /// Get the value of a property.
-    fn get_property(&self, name: &str, format: Format) -> Result<Data> {
+    fn get_property<T: Data>(&self, name: &str) -> Result<T> {
         let name = CString::new(name)?;
-        match format {
-            Format::String | Format::OsdString => {
-                let mut ptr = &mut ptr::null();
 
-                let err = mpv_err((), unsafe {
-                    mpv_get_property(self.ctx(),
-                                     name.as_ptr(),
-                                     format.as_mpv_format().as_val(),
-                                     ptr as *mut *const libc::c_char as *mut _)
-                });
-
-                err.or_else(Err)
-                    .and_then(|_| {
-                        let ret = unsafe { CStr::from_ptr(*ptr) };
-
-                        let data = mpv_cstr_to_string(ret);
-
-                        unsafe { mpv_free(*ptr as *mut _) }
-
-                        Ok(match format {
-                               Format::String => Data::String(data),
-                               Format::OsdString => Data::OsdString(data),
-                               _ => unreachable!(),
+        let format = T::get_format().as_mpv_format().as_val();
+        T::get_from_c_void(|ptr| {
+                               mpv_err((), unsafe {
+                mpv_get_property(self.ctx(), name.as_ptr(), format, ptr)
+            })
                            })
-                    })
-            }
-            _ => {
-                let ptr = unsafe { &mut mem::zeroed() } as *mut Data as _;
-
-                mpv_err((), unsafe {
-                    mpv_get_property(self.ctx(),
-                                     name.as_ptr(),
-                                     format.as_mpv_format().as_val(),
-                                     ptr)
-                })
-                        .or_else(Err)
-                        .and_then(|_| Ok(Data::from_raw(format.as_mpv_format(), ptr)))
-            }
-        }
     }
 
     #[inline]
@@ -1066,29 +1019,11 @@ impl<'parent> MpvInstance for Client<'parent> {
 }
 
 #[inline]
-fn internal_set_property<A: Into<Data>>(ctx: *mut MpvHandle, name: &str, data: A) -> Result<()> {
-    let name = CString::new(name)?.into_raw();
-    let mut data = data.into();
-    let format = data.format().as_val();
-    let ret = match data {
-        Data::String(ref v) |
-        Data::OsdString(ref v) => {
-            let data = CString::new(v.as_bytes())?;
-            let ptr: *mut _ = &mut data.as_ptr();
-
-            unsafe { mpv_set_property(ctx, name, format, ptr as *mut _) }
-        }
-        _ => {
-            let data = match data {
-                Data::Flag(ref mut v) => v as *mut bool as *mut libc::c_void,
-                Data::Int64(ref mut v) => v as *mut libc::int64_t as *mut libc::c_void,
-                Data::Double(ref mut v) => v as *mut libc::c_double as *mut libc::c_void,
-                _ => unreachable!(),
-            };
-
-            unsafe { mpv_set_property(ctx, name, format, data) }
-        }
-    };
-    unsafe { CString::from_raw(name) };
-    mpv_err((), ret)
+fn internal_set_property<T: Data>(ctx: *mut MpvHandle, name: &str, data: T) -> Result<()> {
+    let name = CString::new(name)?;
+    let format = T::get_format().as_mpv_format().as_val();
+    data.call_as_c_void(|ptr| {
+                            mpv_err((),
+                                    unsafe { mpv_set_property(ctx, name.as_ptr(), format, ptr) })
+                        })
 }

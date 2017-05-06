@@ -78,8 +78,8 @@ pub fn main() {
         });
         scope.spawn(|| {
             // Here the value of the property is irrelevant: only the name is used.
-            let iter = mpv.observe_events(&[Event::PropertyChange(("volume".into(), 0.into())),
-                                            Event::PropertyChange(("pause".into(), false.into()))])
+            let iter = mpv.observe_events(&[Event::PropertyChange(("volume".into(), 0)),
+                                            Event::PropertyChange(("pause".into(), false))])
                 .unwrap();
 
             for vec in iter {
@@ -103,7 +103,7 @@ pub fn main() {
 
         mpv.set_property("volume", 25).unwrap();
 
-        thread::sleep(Duration::from_secs(20));
+        thread::sleep(Duration::from_secs(2));
 
         // Trigger `Event::EndFile` observed above to quit.
         mpv.playlist_next_force().unwrap();
