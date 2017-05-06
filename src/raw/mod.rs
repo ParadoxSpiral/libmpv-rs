@@ -16,7 +16,7 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-#![allow(dead_code, improper_ctypes, missing_docs, non_camel_case_types)]
+#![allow(improper_ctypes, missing_docs, non_camel_case_types)]
 use libc;
 
 // Used with basically every API call.
@@ -78,36 +78,6 @@ pub enum MpvFormat {
     NodeArray = 7,
     NodeMap = 8,
     ByteArray = 9,
-}
-
-#[repr(C)]
-pub union NodeUnion {
-    pub _char: *mut libc::c_char,
-    pub flag: libc::c_int,
-    pub int64: libc::int64_t,
-    pub double: libc::c_double,
-    pub list: *mut MpvNodeList,
-    pub ba: *mut MpvByteArray,
-}
-
-#[repr(C)]
-pub struct MpvNode {
-    pub u: NodeUnion,
-    pub format: MpvFormat,
-}
-
-#[repr(C)]
-pub struct MpvNodeList {
-    pub num: libc::c_int,
-    pub values: *mut MpvNode,
-    pub keys: *mut *mut libc::c_char,
-}
-
-#[repr(C)]
-#[derive(Debug)]
-pub struct MpvByteArray {
-    pub data: *mut libc::c_void,
-    pub size: libc::size_t,
 }
 
 #[repr(C)]
@@ -180,12 +150,6 @@ pub struct MpvEventEndFile {
 }
 
 #[repr(C)]
-pub struct MpvEventClientMessage {
-    pub num_args: libc::c_int,
-    pub args: *mut *const libc::c_char,
-}
-
-#[repr(C)]
 pub struct MpvEvent {
     pub event_id: MpvEventId,
     pub error: libc::c_int,
@@ -240,12 +204,7 @@ extern "C" {
     pub fn mpv_terminate_destroy(ctx: *mut MpvHandle);
     pub fn mpv_create_client(ctx: *mut MpvHandle, name: *const libc::c_char) -> *mut MpvHandle;
     pub fn mpv_load_config_file(ctx: *mut MpvHandle, filename: *const libc::c_char) -> libc::c_int;
-    pub fn mpv_free_node_contents(node: *mut MpvNode);
     pub fn mpv_command(ctx: *mut MpvHandle, args: *mut *const libc::c_char) -> libc::c_int;
-    pub fn mpv_command_node(ctx: *mut MpvHandle,
-                            args: *mut MpvNode,
-                            result: *mut MpvNode)
-                            -> libc::c_int;
     pub fn mpv_command_string(ctx: *mut MpvHandle, args: *const libc::c_char) -> libc::c_int;
     pub fn mpv_get_time_us(ctx: *mut MpvHandle) -> libc::int64_t;
     pub fn mpv_command_async(ctx: *mut MpvHandle,
