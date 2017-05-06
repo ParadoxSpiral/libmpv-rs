@@ -148,14 +148,6 @@ fn main() {
                         .expect("mpv-build update failed");
                 }
 
-                Command::new("sh")
-                    .arg("-c")
-                    .arg(&format!("cd {} && {0}/clean", path))
-                    .spawn()
-                    .expect("mpv-build clean failed")
-                    .wait()
-                    .expect("mpv-build clean failed");
-
                 mpv_repo
                     .reset(&mpv_repo
                                 .find_object(Oid::from_str(MPV_COMMIT).unwrap(),
@@ -171,12 +163,6 @@ fn main() {
             // TODO: When Cross-compiling to different archs is implemented, this has to be handled.
             env::remove_var("TARGET");
 
-			#[cfg(feature="static_libmpv")]
-            let cmd = format!("cd {} && echo \"--enable-libmpv-static\n--enable-static-build\n--disable-cplayer\" > {0}/mpv_options \
-			  				  && {0}/build -j{}",
-                              path,
-                              num_threads);
-			#[cfg(not(feature="static_libmpv"))]
             let cmd = format!("cd {} && echo \"--enable-libmpv-shared\" > {0}/mpv_options \
 							  && {0}/build -j{}",
                               path,

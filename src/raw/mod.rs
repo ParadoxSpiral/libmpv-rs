@@ -228,8 +228,7 @@ pub struct MpvStreamCbInfo {
     pub close_fn: mpv_stream_cb_close_fn,
 }
 
-#[cfg_attr(not(feature="static_libmpv"), link(name = "mpv"))]
-#[cfg_attr(feature="static_libmpv", link(name = "mpv", kind = "static"))]
+#[link(name = "mpv")]
 extern "C" {
     pub fn mpv_client_api_version() -> u32;
     pub fn mpv_error_string(error: libc::c_int) -> *const libc::c_char;
