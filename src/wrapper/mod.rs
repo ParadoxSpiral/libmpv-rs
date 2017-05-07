@@ -135,6 +135,7 @@ use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
 use std::mem;
+use std::ops::Deref;
 use std::panic::RefUnwindSafe;
 use std::ptr;
 use std::time::Duration;
@@ -252,6 +253,34 @@ unsafe impl<'a> Data for &'a str {
     #[inline]
     fn get_format() -> Format {
         Format::String
+    }
+}
+
+#[derive(Clone)]
+/// An OsdString can only be used by getter functions, and is subject to [property expansion](https://mpv.io/manual/master/#property-expansion).
+pub struct OsdString(String);
+impl Deref for OsdString {
+    type Target = String;
+
+    fn deref(&self) -> &String {
+        &self.0
+    }
+}
+
+unsafe impl<'a> Data for OsdString {
+    #[inline]
+    fn call_as_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(self, fun: F) -> Result<T> {
+        self.0.call_as_c_void(fun)
+    }
+
+    #[inline]
+    fn get_from_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(fun: F) -> Result<OsdString> {
+        Ok(OsdString(String::get_from_c_void(fun)?))
+    }
+
+    #[inline]
+    fn get_format() -> Format {
+        Format::OsdString
     }
 }
 
@@ -374,7 +403,7 @@ impl Parent {
 
     #[inline]
     /// Create a new `Parent`, with the given settings set before initialization.
-    pub fn with_options(events: bool, opts: &[(&str, &Data)]) -> Result<Parent> {
+    pub fn with_options(events: bool, opts: [(&str, &Data)]) -> Result<Parent> {
         SET_LC_NUMERIC.call_once(|| {
                                      let c = &*b"c0";
                                      unsafe { libc::setlocale(libc::LC_NUMERIC, c.as_ptr() as _) };
@@ -410,7 +439,7 @@ impl Parent {
                 (None, None, None, None)
             }
         };
-
+        
         for opt in opts {
             if let Err(err) = internal_set_property(ctx, opt.0, opt.1.clone()) {
                 unsafe {
@@ -513,7 +542,7 @@ impl<'parent> Client<'parent> {
     #[inline]
     /// Returns the name associated with `self`.
     pub fn name<'a>(&'a self) -> Result<&'a str> {
-        mpv_cstr_to_str!(unsafe{CStr::from_ptr(mpv_client_name(self.ctx()))})
+        mpv_cstr_to_str!(unsafe { CStr::from_ptr(mpv_client_name(self.ctx())) })
     }
 }
 
