@@ -291,7 +291,6 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
                 'events: loop {
                     let event = unsafe { &*mpv_wait_event(self.ctx, 0f32 as _) };
                     let ev_id = event.event_id;
-                    println!("{:?}", ev_id);
 
                     if ev_id == MpvEventId::QueueOverflow {
                         // The queue needs to be emptied asap to prevent loss of events

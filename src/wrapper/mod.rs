@@ -398,12 +398,6 @@ impl Parent {
     /// Create a new `Parent`.
     /// The default settings can be probed by running: `$ mpv --show-profile=libmpv`
     pub fn new(events: bool) -> Result<Parent> {
-        Parent::with_options(events, &[])
-    }
-
-    #[inline]
-    /// Create a new `Parent`, with the given settings set before initialization.
-    pub fn with_options(events: bool, opts: [(&str, &Data)]) -> Result<Parent> {
         SET_LC_NUMERIC.call_once(|| {
                                      let c = &*b"c0";
                                      unsafe { libc::setlocale(libc::LC_NUMERIC, c.as_ptr() as _) };
@@ -439,15 +433,6 @@ impl Parent {
                 (None, None, None, None)
             }
         };
-        
-        for opt in opts {
-            if let Err(err) = internal_set_property(ctx, opt.0, opt.1.clone()) {
-                unsafe {
-                    mpv_terminate_destroy(ctx);
-                }
-                return Err(err);
-            }
-        }
 
         mpv_err((), unsafe { mpv_initialize(ctx) })
             .or_else(|err| {
@@ -675,7 +660,13 @@ pub trait MpvInstance: Sized {
     #[inline]
     /// Set the value of a property.
     fn set_property<T: Data>(&self, name: &str, data: T) -> Result<()> {
-        internal_set_property(self.ctx(), name, data)
+        let name = CString::new(name)?;
+        let format = T::get_format().as_mpv_format().as_val();
+        data.call_as_c_void(|ptr| {
+                                mpv_err((), unsafe {
+                mpv_set_property(self.ctx(), name.as_ptr(), format, ptr)
+            })
+                            })
     }
 
     #[inline]
@@ -1085,14 +1076,4 @@ impl<'parent> MpvInstance for Client<'parent> {
     fn ev_observed(&self) -> &Option<Mutex<Vec<Event>>> {
         &self.ev_observed
     }
-}
-
-#[inline]
-fn internal_set_property<T: Data>(ctx: *mut MpvHandle, name: &str, data: T) -> Result<()> {
-    let name = CString::new(name)?;
-    let format = T::get_format().as_mpv_format().as_val();
-    data.call_as_c_void(|ptr| {
-                            mpv_err((),
-                                    unsafe { mpv_set_property(ctx, name.as_ptr(), format, ptr) })
-                        })
 }

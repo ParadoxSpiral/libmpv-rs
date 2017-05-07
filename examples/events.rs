@@ -33,12 +33,11 @@ pub fn main() {
         .expect("Expected path to media as argument, found nil.");
 
     // Create a `Parent` (with events enabled) and set some properties.
-    let mpv = Parent::with_options(true,
-                                   &[("cache-initial", 1.into()),
-                                     ("volume", 10.into()),
-                                     ("vo", "null".into()),
-                                     ("ytdl", true.into())])
-            .unwrap();
+    let mpv = Parent::new(true).unwrap();
+    mpv.set_property("cache-initial", 10).unwrap();
+    mpv.set_property("volume", 0).unwrap();
+    mpv.set_property("vo", "null").unwrap();
+    mpv.set_property("ytdl", true).unwrap();
 
     // Create a crossbeam scope for convenience to use mpv in multiple threads.
     crossbeam::scope(|scope| {
@@ -78,8 +77,10 @@ pub fn main() {
         });
         scope.spawn(|| {
             // Here the value of the property is irrelevant: only the name is used.
-            let iter = mpv.observe_events(&[Event::PropertyChange(("volume".into(), PropertyData::Int64(0))),
-                                            Event::PropertyChange(("pause".into(), PropertyData::Flag(false)))])
+            let iter = mpv.observe_events(&[Event::PropertyChange(("volume".into(),
+                                                                   PropertyData::Int64(0))),
+                                            Event::PropertyChange(("pause".into(),
+                                                                   PropertyData::Flag(false)))])
                 .unwrap();
 
             for vec in iter {
@@ -103,7 +104,7 @@ pub fn main() {
 
         mpv.set_property("volume", 25).unwrap();
 
-        thread::sleep(Duration::from_secs(2));
+        thread::sleep(Duration::from_secs(20));
 
         // Trigger `Event::EndFile` observed above to quit.
         mpv.playlist_next_force().unwrap();

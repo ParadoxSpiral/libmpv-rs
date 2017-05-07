@@ -63,12 +63,12 @@ pub fn main() {
     events.register_custom_event::<Draw>().unwrap();
 
     // Create mpv state
-    let mpv = Parent::with_options(false,
-                                   &[("vo", "opengl-cb".into()),
-                                     ("cache-initial", 1.into()),
-                                     ("volume", 30.into()),
-                                     ("ytdl", true.into())])
-            .unwrap();
+    let mpv = Parent::new(false).unwrap();
+    mpv.set_property("vo", "opengl-cb").unwrap();
+    mpv.set_property("cache-initial", 1).unwrap();
+    mpv.set_property("volume", 30).unwrap();
+    mpv.set_property("ytdl", true).unwrap();
+
     let vs = video_subsystem.clone();
     let mut mpv_ogl = mpv.create_opengl_context(move |name| vs.gl_get_proc_address(name))
         .unwrap();
