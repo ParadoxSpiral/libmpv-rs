@@ -105,7 +105,7 @@ pub fn main() {
                     repeat: false,
                     ..
                 } => {
-                    if let Data::Flag(true) = mpv.get_property("pause", Format::Flag).unwrap() {
+                    if mpv.get_property("pause").unwrap() {
                         mpv.unpause().unwrap();
                     } else {
                         mpv.pause().unwrap();

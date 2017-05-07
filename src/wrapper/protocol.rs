@@ -19,12 +19,11 @@
 //! This allows registering custom protocols, which then can be used via
 //! `PlaylistOp::Loadfiles`.
 
-use alloc::heap;
 use libc;
 use parking_lot::{Mutex, MutexGuard};
 
 use super::*;
-use super::{mpv_err, mpv_cstr_to_string};
+use super::mpv_err;
 use super::super::raw::*;
 
 use std::ffi::{CStr, CString};
@@ -33,9 +32,13 @@ use std::mem;
 use std::panic;
 use std::panic::RefUnwindSafe;
 use std::ptr;
+#[cfg(unix)]
+use std::ffi::OsStr;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 
 /// Return an initialized `T`, panic on errors.
-pub type StreamOpen<T, U> = fn(&mut U, String) -> T;
+pub type StreamOpen<T, U> = fn(&mut U, &str) -> T;
 /// Do any necessary cleanup.
 pub type StreamClose<T> = fn(Box<T>);
 /// Seek to the given offset. Return the new offset, or `MpvError::Generic` if seek failed.
@@ -65,7 +68,7 @@ unsafe extern "C" fn open_wrapper<T, U>(user_data: *mut libc::c_void,
                                       let uri = CStr::from_ptr(uri as *const _);
                                       ptr::write((*data).cookie,
                                                  ((*data).open_fn)(&mut (*data).user_data,
-                                                                   mpv_cstr_to_string(uri)));
+                                                                   mpv_cstr_to_str!(uri).unwrap()));
                                   });
     if ret.is_ok() {
         0
@@ -223,9 +226,7 @@ impl<T: RefUnwindSafe, U: RefUnwindSafe> Protocol<T, U> {
                       size_fn: Option<StreamSize<T>>)
                       -> Protocol<T, U> {
         let data = Box::into_raw(Box::new(ProtocolData {
-                                              cookie: heap::allocate(mem::size_of::<T>(),
-                                                                     mem::align_of::<T>()) as
-                                                      *mut T,
+                                              cookie: allocate(1),
                                               user_data: user_data,
 
                                               open_fn: open_fn,
@@ -260,4 +261,13 @@ impl<T: RefUnwindSafe, U: RefUnwindSafe> Drop for Protocol<T, U> {
             // data.cookie will be consumed by the close callback
         };
     }
+}
+
+// Hack from https://github.com/rust-lang/rust/issues/27700#issuecomment-169014713 to not require
+// nightly.
+fn allocate<T>(count: usize) -> *mut T {
+    let mut v = Vec::with_capacity(count);
+    let ptr = v.as_mut_ptr();
+    mem::forget(v);
+    ptr
 }

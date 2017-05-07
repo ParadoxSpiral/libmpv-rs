@@ -18,7 +18,6 @@
 
 #![deny(missing_docs)]
 #![allow(unknown_lints)]
-#![feature(core_intrinsics, heap_api, alloc)]
 
 //! This crate provides abstractions for [libmpv](https://github.com/mpv-player/mpv/tree/master/libmpv) of the [mpv media player](https://github.com/mpv-player/mpv).
 //!
@@ -41,7 +40,6 @@
 // - update constants in build.rs
 // - run tests and examples to test whether they still work
 
-extern crate alloc;
 extern crate libc;
 extern crate parking_lot;
 #[macro_use]

@@ -16,24 +16,19 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-/// Contains event related abstractions
-pub mod events;
-/// Contains abstractions to define custom protocol handlers.
-pub mod protocol;
-/// Contains abstractions to use the opengl callback interface.
-pub mod opengl_cb;
-
 mod errors {
     #![allow(missing_docs)]
     use super::events::Event;
     use super::super::raw::MpvError;
     use std::ffi::NulError;
+    use std::str::Utf8Error;
 
     // FIXME: Once error_chain issue 134 is solved, this should derive Clone, and use RCs
     // instead of `Box`es. Remove temp impl Clone below then.
     error_chain!{
         foreign_links {
             Nul(NulError);
+            Utf8(Utf8Error);
             Native(MpvError);
         }
 
@@ -56,6 +51,9 @@ mod errors {
             EventsDisabled {
                 description("Events are disabled.")
             }
+            InvalidUtf8 {
+                description("An unspecified error during utf-8 validity checking ocurred.")
+            }
             Null {
                 description("Mpv returned null while creating the core.")
             }
@@ -68,6 +66,7 @@ mod errors {
             match self.kind() {
                 &ErrorKind::Msg(ref e) => ErrorKind::Msg(e.clone()).into(),
                 &ErrorKind::Nul(ref e) => ErrorKind::Nul(e.clone()).into(),
+                &ErrorKind::Utf8(ref e) => ErrorKind::Utf8(e.clone()).into(),
                 &ErrorKind::Native(ref e) => ErrorKind::Native(*e).into(),
                 &ErrorKind::Loadfiles(ref idx, ref err) => {
                     ErrorKind::Loadfiles(*idx, err.clone()).into()
@@ -79,17 +78,53 @@ mod errors {
                 }
                 &ErrorKind::ContextExists => ErrorKind::ContextExists.into(),
                 &ErrorKind::EventsDisabled => ErrorKind::EventsDisabled.into(),
+                &ErrorKind::InvalidUtf8 => ErrorKind::InvalidUtf8.into(),
                 &ErrorKind::Null => ErrorKind::Null.into(),
             }
         }
     }
 }
 
+pub use self::errors::*;
+
+#[cfg(unix)]
+macro_rules! mpv_cstr_to_str {
+    ($cstr: expr) => (
+        if let Some(v) = OsStr::from_bytes($cstr.to_bytes()).to_str() {
+            // Not sure why the type isn't inferred
+            let r: Result<&str> = Ok(v);
+            r
+        } else {
+            Err(ErrorKind::InvalidUtf8.into())
+        }
+    )
+}
+
+#[cfg(windows)]
+macro_rules! mpv_cstr_to_str {
+    ($cstr: expr) => (
+        $cstr.to_str()
+    )
+}
+
+#[cfg(all(not(unix), not(windows)))]
+macro_rules! mpv_cstr_to_str {
+    ($cstr: expr) => (
+        String::from_utf8($cstr.to_bytes())
+    )
+}
+
+/// Contains event related abstractions
+pub mod events;
+/// Contains abstractions to define custom protocol handlers.
+pub mod protocol;
+/// Contains abstractions to use the opengl callback interface.
+pub mod opengl_cb;
+
 use enum_primitive::FromPrimitive;
 use libc;
 use parking_lot::{Condvar, Mutex, Once, ONCE_INIT};
 
-pub use self::errors::*;
 use super::raw::*;
 use events::*;
 use events::event_callback;
@@ -103,6 +138,10 @@ use std::mem;
 use std::panic::RefUnwindSafe;
 use std::ptr;
 use std::time::Duration;
+#[cfg(unix)]
+use std::ffi::OsStr;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 
 static SET_LC_NUMERIC: Once = ONCE_INIT;
 
@@ -112,28 +151,6 @@ fn mpv_err<T>(ret: T, err_val: libc::c_int) -> Result<T> {
     } else {
         Err(ErrorKind::Native(MpvError::from_i32(err_val).unwrap()).into())
     }
-}
-
-#[cfg(unix)]
-fn mpv_cstr_to_string(cstr: &CStr) -> String {
-    use std::ffi::OsStr;
-    use std::os::unix::ffi::OsStrExt;
-
-    OsStr::from_bytes(cstr.to_bytes())
-        .to_string_lossy()
-        .into_owned()
-}
-
-#[cfg(windows)]
-fn mpv_cstr_to_string(cstr: &CStr) -> String {
-    // Mpv returns all strings on windows in UTF-8.
-    cstr.to_str().unwrap().to_owned()
-}
-
-#[cfg(all(not(unix), not(windows)))]
-fn mpv_cstr_to_string(cstr: &CStr) -> String {
-    // Hope that all is well
-    String::from_utf8_lossy(cstr.to_bytes()).into_owned()
 }
 
 #[allow(missing_docs)]
@@ -204,9 +221,32 @@ unsafe impl<'a> Data for String {
         let ptr = &mut ptr::null();
         let _ = fun(ptr as *mut *const libc::c_char as _)?;
 
-        let ret = mpv_cstr_to_string(unsafe { CStr::from_ptr(*ptr) });
+        let ret = mpv_cstr_to_str!(unsafe { CStr::from_ptr(*ptr) });
         unsafe { mpv_free(*ptr as *mut _) };
-        Ok(ret)
+        Ok(ret?.to_owned())
+    }
+
+    #[inline]
+    fn get_format() -> Format {
+        Format::String
+    }
+}
+
+unsafe impl<'a> Data for &'a str {
+    #[inline]
+    fn call_as_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(self, mut fun: F) -> Result<T> {
+        let string = CString::new(self)?;
+        fun((&mut string.as_ptr()) as *mut *const libc::c_char as *mut _)
+    }
+
+    #[inline]
+    fn get_from_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(mut fun: F) -> Result<&'a str> {
+        let ptr = &mut ptr::null();
+        let _ = fun(ptr as *mut *const libc::c_char as _)?;
+
+        let ret = mpv_cstr_to_str!(unsafe { CStr::from_ptr(*ptr) });
+        unsafe { mpv_free(*ptr as *mut _) };
+        ret
     }
 
     #[inline]
@@ -472,8 +512,8 @@ impl Parent {
 impl<'parent> Client<'parent> {
     #[inline]
     /// Returns the name associated with `self`.
-    pub fn name(&self) -> String {
-        unsafe { mpv_cstr_to_string(CStr::from_ptr(mpv_client_name(self.ctx()))) }
+    pub fn name<'a>(&'a self) -> Result<&'a str> {
+        mpv_cstr_to_str!(unsafe{CStr::from_ptr(mpv_client_name(self.ctx()))})
     }
 }
 
