@@ -88,11 +88,11 @@ mod errors {
 pub use self::errors::*;
 
 #[cfg(unix)]
-macro_rules! mpv_cstr_to_str {
+macro_rules! mpv_cstr_to_string {
     ($cstr: expr) => (
         if let Some(v) = OsStr::from_bytes($cstr.to_bytes()).to_str() {
             // Not sure why the type isn't inferred
-            let r: Result<&str> = Ok(v);
+            let r: Result<String> = Ok(v.to_owned());
             r
         } else {
             Err(ErrorKind::InvalidUtf8.into())
@@ -100,15 +100,8 @@ macro_rules! mpv_cstr_to_str {
     )
 }
 
-#[cfg(windows)]
-macro_rules! mpv_cstr_to_str {
-    ($cstr: expr) => (
-        $cstr.to_str()
-    )
-}
-
-#[cfg(all(not(unix), not(windows)))]
-macro_rules! mpv_cstr_to_str {
+#[cfg(all(not(unix)))]
+macro_rules! mpv_cstr_to_string {
     ($cstr: expr) => (
         String::from_utf8($cstr.to_bytes())
     )
@@ -220,32 +213,9 @@ unsafe impl<'a> Data for String {
         let ptr = &mut ptr::null();
         let _ = fun(ptr as *mut *const libc::c_char as _)?;
 
-        let ret = mpv_cstr_to_str!(unsafe { CStr::from_ptr(*ptr) });
+        let ret = mpv_cstr_to_string!(unsafe { CStr::from_ptr(*ptr) });
         unsafe { mpv_free(*ptr as *mut _) };
-        Ok(ret?.to_owned())
-    }
-
-    #[inline]
-    fn get_format() -> Format {
-        Format::String
-    }
-}
-
-unsafe impl<'a> Data for &'a str {
-    #[inline]
-    fn call_as_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(self, mut fun: F) -> Result<T> {
-        let string = CString::new(self)?;
-        fun((&mut string.as_ptr()) as *mut *const libc::c_char as *mut _)
-    }
-
-    #[inline]
-    fn get_from_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(mut fun: F) -> Result<&'a str> {
-        let ptr = &mut ptr::null();
-        let _ = fun(ptr as *mut *const libc::c_char as _)?;
-
-        let ret = mpv_cstr_to_str!(unsafe { CStr::from_ptr(*ptr) });
-        unsafe { mpv_free(*ptr as *mut _) };
-        ret
+        Ok(ret?)
     }
 
     #[inline]
@@ -519,8 +489,8 @@ impl Parent {
 impl<'parent> Client<'parent> {
     #[inline]
     /// Returns the name associated with `self`.
-    pub fn name<'a>(&'a self) -> Result<&'a str> {
-        mpv_cstr_to_str!(unsafe { CStr::from_ptr(mpv_client_name(self.ctx())) })
+    pub fn name(&self) -> Result<String> {
+        mpv_cstr_to_string!(unsafe { CStr::from_ptr(mpv_client_name(self.ctx())) })
     }
 }
 

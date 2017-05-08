@@ -36,7 +36,7 @@ pub fn main() {
     let mpv = Parent::new(true).unwrap();
     mpv.set_property("cache-initial", 10).unwrap();
     mpv.set_property("volume", 0).unwrap();
-    mpv.set_property("vo", "null").unwrap();
+    mpv.set_property("vo", "null".to_owned()).unwrap();
     mpv.set_property("ytdl", true).unwrap();
 
     // Create a crossbeam scope for convenience to use mpv in multiple threads.
@@ -104,7 +104,7 @@ pub fn main() {
 
         mpv.set_property("volume", 25).unwrap();
 
-        thread::sleep(Duration::from_secs(20));
+        thread::sleep(Duration::from_secs(5));
 
         // Trigger `Event::EndFile` observed above to quit.
         mpv.playlist_next_force().unwrap();

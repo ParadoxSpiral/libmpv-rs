@@ -68,7 +68,7 @@ unsafe extern "C" fn open_wrapper<T, U>(user_data: *mut libc::c_void,
                                       let uri = CStr::from_ptr(uri as *const _);
                                       ptr::write((*data).cookie,
                                                  ((*data).open_fn)(&mut (*data).user_data,
-                                                                   mpv_cstr_to_str!(uri).unwrap()));
+                                                                   &mpv_cstr_to_string!(uri).unwrap()));
                                   });
     if ret.is_ok() {
         0
