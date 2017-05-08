@@ -21,8 +21,7 @@
 
 //! This crate provides abstractions for [libmpv](https://github.com/mpv-player/mpv/tree/master/libmpv) of the [mpv media player](https://github.com/mpv-player/mpv).
 //!
-//! Libmpv requires `LC_NUMERIC` to be `C`. This is set once when the first parent is created.
-//! Do not change this during the usage of this crate.
+//! Libmpv requires `LC_NUMERIC` to be `C`, which should be the default value.
 //!
 //! Most of the documentation is paraphrased or even copied from the [mpv manual](https://mpv.io/manual/master/),
 //! if any questions arise it will probably answer them in much more depth than this documentation.

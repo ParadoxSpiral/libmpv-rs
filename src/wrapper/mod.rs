@@ -123,7 +123,7 @@ pub mod opengl_cb;
 
 use enum_primitive::FromPrimitive;
 use libc;
-use parking_lot::{Condvar, Mutex, Once, ONCE_INIT};
+use parking_lot::{Condvar, Mutex};
 
 use super::raw::*;
 use events::*;
@@ -143,8 +143,6 @@ use std::time::Duration;
 use std::ffi::OsStr;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
-
-static SET_LC_NUMERIC: Once = ONCE_INIT;
 
 fn mpv_err<T>(ret: T, err_val: libc::c_int) -> Result<T> {
     if err_val == 0 {
@@ -398,11 +396,6 @@ impl Parent {
     /// Create a new `Parent`.
     /// The default settings can be probed by running: `$ mpv --show-profile=libmpv`
     pub fn new(events: bool) -> Result<Parent> {
-        SET_LC_NUMERIC.call_once(|| {
-                                     let c = &*b"c0";
-                                     unsafe { libc::setlocale(libc::LC_NUMERIC, c.as_ptr() as _) };
-                                 });
-
         let api_version = unsafe { mpv_client_api_version() };
         if super::MPV_CLIENT_API_VERSION != api_version {
             return Err(ErrorKind::VersionMismatch(super::MPV_CLIENT_API_VERSION, api_version)
