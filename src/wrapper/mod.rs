@@ -66,7 +66,7 @@ mod errors {
             match self.kind() {
                 &ErrorKind::Msg(ref e) => ErrorKind::Msg(e.clone()).into(),
                 &ErrorKind::Nul(ref e) => ErrorKind::Nul(e.clone()).into(),
-                &ErrorKind::Utf8(ref e) => ErrorKind::Utf8(e.clone()).into(),
+                &ErrorKind::Utf8(ref e) => ErrorKind::Utf8(*e).into(),
                 &ErrorKind::Native(ref e) => ErrorKind::Native(*e).into(),
                 &ErrorKind::Loadfiles(ref idx, ref err) => {
                     ErrorKind::Loadfiles(*idx, err.clone()).into()
@@ -225,7 +225,7 @@ unsafe impl<'a> Data for String {
 }
 
 #[derive(Clone)]
-/// An OsdString can only be used by getter functions, and is subject to [property expansion](https://mpv.io/manual/master/#property-expansion).
+/// An `OsdString` can only be used by getter functions, and is subject to [property expansion](https://mpv.io/manual/master/#property-expansion).
 pub struct OsdString(String);
 impl Deref for OsdString {
     type Target = String;
