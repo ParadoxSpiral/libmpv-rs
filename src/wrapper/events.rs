@@ -29,8 +29,6 @@ use std::marker::PhantomData;
 use std::ffi::CStr;
 
 pub(crate) unsafe extern "C" fn event_callback(d: *mut libc::c_void) {
-    assert!(!d.is_null());
-    println!("EVENT_CALLBACK_TRIGGERED");
     (*(d as *mut Condvar)).notify_one();
 }
 
@@ -293,9 +291,6 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
                 'events: loop {
                     let event = unsafe { &*mpv_wait_event(self.ctx, 0f32 as _) };
                     let ev_id = event.event_id;
-                    if ev_id != MpvEventId::None {
-                        println!("{:?}", ev_id);
-                    }
 
                     if ev_id == MpvEventId::QueueOverflow {
                         // The queue needs to be emptied asap to prevent loss of events

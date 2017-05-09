@@ -451,6 +451,15 @@ impl Parent {
             }
         };
 
+        for i in 2..24 {
+            if let Err(e) = mpv_err((), unsafe {
+                mpv_request_event(ctx, MpvEventId::from_i32(i).unwrap(), 0)
+            }) {
+                unsafe { mpv_terminate_destroy(ctx) };
+                return Err(e);
+            }
+        }
+
         mpv_err((), unsafe { mpv_initialize(ctx) })
             .or_else(|err| {
                          unsafe { mpv_terminate_destroy(ctx) };
@@ -496,6 +505,15 @@ impl Parent {
                 (None, None, None, None)
             }
         };
+
+        for i in 2..24 {
+            if let Err(e) = mpv_err((), unsafe {
+                mpv_request_event(ctx, MpvEventId::from_i32(i).unwrap(), 0)
+            }) {
+                unsafe { mpv_detach_destroy(ctx) };
+                return Err(e);
+            }
+        }
 
         Ok(Client {
                ctx: ctx,

@@ -66,7 +66,7 @@ pub fn main() {
     let mpv = Parent::new(false).unwrap();
     mpv.set_property("vo", "opengl-cb").unwrap();
     mpv.set_property("cache-initial", 1).unwrap();
-    mpv.set_property("volume", 30).unwrap();
+    mpv.set_property("volume", 25).unwrap();
     mpv.set_property("ytdl", true).unwrap();
 
     let vs = video_subsystem.clone();

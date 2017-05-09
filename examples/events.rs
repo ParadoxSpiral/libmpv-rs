@@ -35,7 +35,7 @@ pub fn main() {
     // Create a `Parent` (with events enabled) and set some properties.
     let mpv = Parent::new(true).unwrap();
     mpv.set_property("cache-initial", 10).unwrap();
-    mpv.set_property("volume", 0).unwrap();
+    mpv.set_property("volume", 15).unwrap();
     mpv.set_property("vo", "null").unwrap();
     mpv.set_property("ytdl", true).unwrap();
 
