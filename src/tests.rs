@@ -44,7 +44,7 @@ fn properties() {
 
     assert_eq!(0i64, mpv.get_property("volume").unwrap());
 
-    let title = mpv.get_property("media-title").unwrap();
+    let title: String = mpv.get_property("media-title").unwrap();
     assert!("Rick Astley - Never Gonna Give You Up [HQ]" == &title ||
             "watch?v=DLzxrzFCyOs" == &title);
 }

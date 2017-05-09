@@ -146,14 +146,8 @@ fn mpv_err<T>(ret: T, err_val: libc::c_int) -> Result<T> {
 }
 
 #[allow(missing_docs)]
-/// This trait describes which types are allowed to be passed to the mpv APIs.
-pub unsafe trait Data: Clone {
-    #[doc(hidden)]
-    fn call_as_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(mut self,
-                                                                   mut fun: F)
-                                                                   -> Result<T> {
-        fun(&mut self as *mut Self as _)
-    }
+/// This trait describes which types are allowed to be passed to getter mpv APIs.
+pub unsafe trait GetData: Clone {
     #[doc(hidden)]
     fn get_from_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(mut fun: F) -> Result<Self> {
         let mut ptr = unsafe { mem::zeroed() };
@@ -163,27 +157,47 @@ pub unsafe trait Data: Clone {
     fn get_format() -> Format;
 }
 
-unsafe impl Data for f64 {
+#[allow(missing_docs)]
+/// This trait describes which types are allowed to be passed to setter mpv APIs.
+pub unsafe trait SetData: Clone {
+    #[doc(hidden)]
+    fn call_as_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(mut self,
+                                                                   mut fun: F)
+                                                                   -> Result<T> {
+        fun(&mut self as *mut Self as _)
+    }
+    fn get_format() -> Format;
+}
+
+unsafe impl GetData for f64 {
     #[inline]
     fn get_format() -> Format {
         Format::Double
     }
 }
 
-unsafe impl Data for i64 {
+unsafe impl SetData for f64 {
+    #[inline]
+    fn get_format() -> Format {
+        Format::Double
+    }
+}
+
+unsafe impl GetData for i64 {
     #[inline]
     fn get_format() -> Format {
         Format::Int64
     }
 }
 
-unsafe impl Data for bool {
+unsafe impl SetData for i64 {
     #[inline]
-    fn call_as_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(self, mut fun: F) -> Result<T> {
-        let mut cpy: i64 = if self { 1 } else { 0 };
-        fun(&mut cpy as *mut i64 as *mut _)
+    fn get_format() -> Format {
+        Format::Int64
     }
+}
 
+unsafe impl GetData for bool {
     #[inline]
     fn get_from_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(mut fun: F) -> Result<bool> {
         let ptr = unsafe { &mut mem::zeroed() } as *mut i64;
@@ -201,13 +215,20 @@ unsafe impl Data for bool {
     }
 }
 
-unsafe impl<'a> Data for String {
+unsafe impl SetData for bool {
     #[inline]
     fn call_as_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(self, mut fun: F) -> Result<T> {
-        let string = CString::new(self)?;
-        fun((&mut string.as_ptr()) as *mut *const libc::c_char as *mut _)
+        let mut cpy: i64 = if self { 1 } else { 0 };
+        fun(&mut cpy as *mut i64 as *mut _)
     }
 
+    #[inline]
+    fn get_format() -> Format {
+        Format::Flag
+    }
+}
+
+unsafe impl GetData for String {
     #[inline]
     fn get_from_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(mut fun: F) -> Result<String> {
         let ptr = &mut ptr::null();
@@ -216,6 +237,32 @@ unsafe impl<'a> Data for String {
         let ret = mpv_cstr_to_string!(unsafe { CStr::from_ptr(*ptr) });
         unsafe { mpv_free(*ptr as *mut _) };
         Ok(ret?)
+    }
+
+    #[inline]
+    fn get_format() -> Format {
+        Format::String
+    }
+}
+
+unsafe impl SetData for String {
+    #[inline]
+    fn call_as_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(self, mut fun: F) -> Result<T> {
+        let string = CString::new(self)?;
+        fun((&mut string.as_ptr()) as *mut *const libc::c_char as *mut _)
+    }
+
+    #[inline]
+    fn get_format() -> Format {
+        Format::String
+    }
+}
+
+unsafe impl<'a> SetData for &'a str {
+    #[inline]
+    fn call_as_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(self, mut fun: F) -> Result<T> {
+        let string = CString::new(self)?;
+        fun((&mut string.as_ptr()) as *mut *const libc::c_char as *mut _)
     }
 
     #[inline]
@@ -235,15 +282,22 @@ impl Deref for OsdString {
     }
 }
 
-unsafe impl<'a> Data for OsdString {
-    #[inline]
-    fn call_as_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(self, fun: F) -> Result<T> {
-        self.0.call_as_c_void(fun)
-    }
-
+unsafe impl<'a> GetData for OsdString {
     #[inline]
     fn get_from_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(fun: F) -> Result<OsdString> {
         Ok(OsdString(String::get_from_c_void(fun)?))
+    }
+
+    #[inline]
+    fn get_format() -> Format {
+        Format::OsdString
+    }
+}
+
+unsafe impl<'a> SetData for OsdString {
+    #[inline]
+    fn call_as_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(self, fun: F) -> Result<T> {
+        self.0.call_as_c_void(fun)
     }
 
     #[inline]
@@ -622,7 +676,7 @@ pub trait MpvInstance: Sized {
 
     #[inline]
     /// Set the value of a property.
-    fn set_property<T: Data>(&self, name: &str, data: T) -> Result<()> {
+    fn set_property<T: SetData>(&self, name: &str, data: T) -> Result<()> {
         let name = CString::new(name)?;
         let format = T::get_format().as_mpv_format().as_val();
         data.call_as_c_void(|ptr| {
@@ -634,7 +688,7 @@ pub trait MpvInstance: Sized {
 
     #[inline]
     /// Get the value of a property.
-    fn get_property<T: Data>(&self, name: &str) -> Result<T> {
+    fn get_property<T: GetData>(&self, name: &str) -> Result<T> {
         let name = CString::new(name)?;
 
         let format = T::get_format().as_mpv_format().as_val();
