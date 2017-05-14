@@ -28,9 +28,9 @@ keywords = ["media", "playback", "mpv", "libmpv"]
 
 [dependencies]
 libc = "0.2"
-parking_lot = {version = "0.4", features = ['nightly']}
 enum_primitive = "0.1"
 error-chain = "0.10"
+parking_lot = "0.4"
 
 [dev-dependencies]
 sdl2 = "0.29"
@@ -47,3 +47,6 @@ events_complex = [] # Enable complex event handling
 custom_protocols = [] # Enable custom protocol callbacks
 opengl_callback = [] # Enable the opengl callback
 build_libmpv = [] # build libmpv automatically at compile time
+
+[badges]
+travis-ci = { repository = "https://github.com/ParadoxSpiral/mpv-rs", branch = "master" } 
