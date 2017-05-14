@@ -33,7 +33,7 @@ pub fn main() {
         .expect("Expected path to media as argument, found nil.");
 
     // Create a `Parent` (with events enabled) and set some properties.
-    let mpv = Parent::new(true).unwrap();
+    let mpv = Parent::new().unwrap();
     mpv.set_property("cache-initial", 10).unwrap();
     mpv.set_property("volume", 15).unwrap();
     mpv.set_property("vo", "null").unwrap();
@@ -56,9 +56,9 @@ pub fn main() {
             for vec in iter {
                 // If any `Event` was an `Endfile`, . . .
                 if let Some(&Event::EndFile {
-                                 reason: ref r,
-                                 error: ref e,
-                             }) =
+                                reason: ref r,
+                                error: ref e,
+                            }) =
                     vec.iter()
                         .find(|ev| if let Event::EndFile { .. } = **ev {
                                   true

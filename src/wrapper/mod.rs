@@ -18,6 +18,7 @@
 
 mod errors {
     #![allow(missing_docs)]
+    #[cfg(feature="events")]
     use super::events::Event;
     use super::super::raw::MpvError;
     use std::ffi::NulError;
@@ -36,6 +37,7 @@ mod errors {
             Loadfiles(index: usize, error: Box<Error>) {
                 description("Command failed during a `loadfiles` call.")
             }
+            #[cfg(feature="events")]
             AlreadyObserved(e: Box<Event>) {
                 description("This event is already being observed by another `EventIter`.")
             }
@@ -47,9 +49,6 @@ mod errors {
             }
             ContextExists {
                 description("An opengl or protocol context has already been created.")
-            }
-            EventsDisabled {
-                description("Events are disabled.")
             }
             InvalidUtf8 {
                 description("An unspecified error during utf-8 validity checking ocurred.")
@@ -71,13 +70,13 @@ mod errors {
                 &ErrorKind::Loadfiles(ref idx, ref err) => {
                     ErrorKind::Loadfiles(*idx, err.clone()).into()
                 }
+                #[cfg(feature="events")]
                 &ErrorKind::AlreadyObserved(ref e) => ErrorKind::AlreadyObserved(e.clone()).into(),
                 &ErrorKind::InvalidArgument => ErrorKind::InvalidArgument.into(),
                 &ErrorKind::VersionMismatch(ref li, ref lo) => {
                     ErrorKind::VersionMismatch(*li, *lo).into()
                 }
                 &ErrorKind::ContextExists => ErrorKind::ContextExists.into(),
-                &ErrorKind::EventsDisabled => ErrorKind::EventsDisabled.into(),
                 &ErrorKind::InvalidUtf8 => ErrorKind::InvalidUtf8.into(),
                 &ErrorKind::Null => ErrorKind::Null.into(),
             }
@@ -116,14 +115,19 @@ pub mod opengl_cb;
 
 use enum_primitive::FromPrimitive;
 use libc;
-use parking_lot::{Condvar, Mutex};
+#[cfg(feature="events")]
+use parking_lot::Condvar;
+use parking_lot::Mutex;
 
 use super::raw::*;
+#[cfg(feature="events")]
 use events::*;
+#[cfg(feature="events")]
 use events::event_callback;
 use protocol::*;
 use opengl_cb::*;
 
+#[cfg(feature="events")]
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
@@ -372,11 +376,14 @@ impl FileState {
 /// An mpv instance from which `Client`s can be spawned.
 pub struct Parent {
     ctx: *mut MpvHandle,
-    events: bool,
-    ev_iter_notification: Option<Box<(Mutex<bool>, Condvar)>>,
-    ev_to_observe: Option<Mutex<Vec<Event>>>,
-    ev_to_observe_properties: Option<Mutex<HashMap<String, libc::uint64_t>>>,
-    ev_observed: Option<Mutex<Vec<Event>>>,
+    #[cfg(feature="events")]
+    ev_iter_notification: Box<(Mutex<bool>, Condvar)>,
+    #[cfg(feature="events")]
+    ev_to_observe: Mutex<Vec<Event>>,
+    #[cfg(feature="events")]
+    ev_to_observe_properties: Mutex<HashMap<String, libc::uint64_t>>,
+    #[cfg(feature="events")]
+    ev_observed: Mutex<Vec<Event>>,
     protocols_guard: Mutex<()>,
     opengl_guard: Mutex<()>,
 }
@@ -384,11 +391,14 @@ pub struct Parent {
 /// A client of a `Parent`.
 pub struct Client<'parent> {
     ctx: *mut MpvHandle,
-    events: bool,
-    ev_iter_notification: Option<Box<(Mutex<bool>, Condvar)>>,
-    ev_to_observe: Option<Mutex<Vec<Event>>>,
-    ev_observed: Option<Mutex<Vec<Event>>>,
-    ev_to_observe_properties: Option<Mutex<HashMap<String, libc::uint64_t>>>,
+    #[cfg(feature="events")]
+    ev_iter_notification: Box<(Mutex<bool>, Condvar)>,
+    #[cfg(feature="events")]
+    ev_to_observe: Mutex<Vec<Event>>,
+    #[cfg(feature="events")]
+    ev_observed: Mutex<Vec<Event>>,
+    #[cfg(feature="events")]
+    ev_to_observe_properties: Mutex<HashMap<String, libc::uint64_t>>,
     _does_not_outlive: PhantomData<&'parent Parent>,
 }
 
@@ -419,7 +429,7 @@ impl Parent {
     #[inline]
     /// Create a new `Parent`.
     /// The default settings can be probed by running: `$ mpv --show-profile=libmpv`
-    pub fn new(events: bool) -> Result<Parent> {
+    pub fn new() -> Result<Parent> {
         let api_version = unsafe { mpv_client_api_version() };
         if super::MPV_CLIENT_API_VERSION != api_version {
             return Err(ErrorKind::VersionMismatch(super::MPV_CLIENT_API_VERSION, api_version)
@@ -431,26 +441,23 @@ impl Parent {
             return Err(ErrorKind::Null.into());
         }
 
+        #[cfg(feature="events")]
         let (ev_iter_notification, ev_to_observe, ev_to_observe_properties, ev_observed) = {
-            if events {
-                let ev_iter_notification = Box::new((Mutex::new(false), Condvar::new()));
-                unsafe {
-                    mpv_set_wakeup_callback(ctx,
-                                            event_callback,
-                                            &ev_iter_notification.1 as *const Condvar as
-                                            *mut Condvar as
-                                            *mut _);
-                }
-
-                (Some(ev_iter_notification),
-                 Some(Mutex::new(Vec::with_capacity(10))),
-                 Some(Mutex::new(HashMap::with_capacity(10))),
-                 Some(Mutex::new(Vec::with_capacity(15))))
-            } else {
-                (None, None, None, None)
+            let ev_iter_notification = Box::new((Mutex::new(false), Condvar::new()));
+            unsafe {
+                mpv_set_wakeup_callback(ctx,
+                                        event_callback,
+                                        &ev_iter_notification.1 as *const Condvar as *mut Condvar as
+                                        *mut _);
             }
+
+            (ev_iter_notification,
+             Mutex::new(Vec::with_capacity(10)),
+             Mutex::new(HashMap::with_capacity(10)),
+             Mutex::new(Vec::with_capacity(15)))
         };
 
+        #[cfg(feature="events")]
         for i in 2..24 {
             if let Err(e) = mpv_err((), unsafe {
                 mpv_request_event(ctx, MpvEventId::from_i32(i).unwrap(), 0)
@@ -466,46 +473,53 @@ impl Parent {
                          Err(err)
                      })?;
 
-        Ok(Parent {
-               ctx: ctx,
-               events: events,
-               ev_iter_notification: ev_iter_notification,
-               ev_to_observe: ev_to_observe,
-               ev_to_observe_properties: ev_to_observe_properties,
-               ev_observed: ev_observed,
-               protocols_guard: Mutex::new(()),
-               opengl_guard: Mutex::new(()),
-           })
+        let parent;
+#[cfg(feature="events")]        {
+            parent = Ok(Parent {
+                            ctx: ctx,
+                            ev_iter_notification: ev_iter_notification,
+                            ev_to_observe: ev_to_observe,
+                            ev_to_observe_properties: ev_to_observe_properties,
+                            ev_observed: ev_observed,
+                            protocols_guard: Mutex::new(()),
+                            opengl_guard: Mutex::new(()),
+                        });
+        }
+#[cfg(not(feature="events"))]        {
+            parent = Ok(Parent {
+                            ctx: ctx,
+                            protocols_guard: Mutex::new(()),
+                            opengl_guard: Mutex::new(()),
+                        });
+        }
+        parent
     }
 
     #[inline]
     /// Create a client with `name`, that is connected to the core of `self`, but has its own queue
     /// for API events and such.
-    pub fn new_client(&self, name: &str, events: bool) -> Result<Client> {
+    pub fn new_client(&self, name: &str) -> Result<Client> {
         let ctx = unsafe {
             let name = CString::new(name)?;
             mpv_create_client(self.ctx(), name.as_ptr())
         };
 
+        #[cfg(feature="events")]
         let (ev_iter_notification, ev_to_observe, ev_to_observe_properties, ev_observed) = {
-            if events {
-                let mut ev_iter_notification = Box::new((Mutex::new(false), Condvar::new()));
-                unsafe {
-                    mpv_set_wakeup_callback(ctx,
-                                            event_callback,
-                                            (&mut ev_iter_notification.1) as *mut Condvar as
-                                            *mut _);
-                }
-
-                (Some(ev_iter_notification),
-                 Some(Mutex::new(Vec::with_capacity(10))),
-                 Some(Mutex::new(HashMap::with_capacity(10))),
-                 Some(Mutex::new(Vec::with_capacity(15))))
-            } else {
-                (None, None, None, None)
+            let mut ev_iter_notification = Box::new((Mutex::new(false), Condvar::new()));
+            unsafe {
+                mpv_set_wakeup_callback(ctx,
+                                        event_callback,
+                                        (&mut ev_iter_notification.1) as *mut Condvar as *mut _);
             }
+
+            (ev_iter_notification,
+             Mutex::new(Vec::with_capacity(10)),
+             Mutex::new(HashMap::with_capacity(10)),
+             Mutex::new(Vec::with_capacity(15)))
         };
 
+        #[cfg(feature="events")]
         for i in 2..24 {
             if let Err(e) = mpv_err((), unsafe {
                 mpv_request_event(ctx, MpvEventId::from_i32(i).unwrap(), 0)
@@ -515,15 +529,26 @@ impl Parent {
             }
         }
 
-        Ok(Client {
-               ctx: ctx,
-               events: events,
-               ev_iter_notification: ev_iter_notification,
-               ev_to_observe: ev_to_observe,
-               ev_to_observe_properties: ev_to_observe_properties,
-               ev_observed: ev_observed,
-               _does_not_outlive: PhantomData::<&Self>,
-           })
+        let client;
+#[cfg(feature="events")]        {
+            client = Ok(Client {
+                            ctx: ctx,
+                            ev_iter_notification: ev_iter_notification,
+                            ev_to_observe: ev_to_observe,
+                            ev_to_observe_properties: ev_to_observe_properties,
+                            ev_observed: ev_observed,
+                            _does_not_outlive: PhantomData::<&Self>,
+                        });
+        }
+#[cfg(not(feature="events"))]        {
+            client = Ok(Client {
+                            ctx: ctx,
+                            _does_not_outlive: PhantomData::<&Self>,
+                        });
+        }
+        client
+
+
     }
 
     #[inline]
@@ -571,11 +596,14 @@ impl<'parent> Client<'parent> {
 pub trait MpvInstance: Sized {
     // FIXME: These can go once `Associated Fields` lands
     fn ctx(&self) -> *mut MpvHandle;
-    fn events(&self) -> bool;
-    fn ev_iter_notification(&self) -> &Option<Box<(Mutex<bool>, Condvar)>>;
-    fn ev_to_observe(&self) -> &Option<Mutex<Vec<Event>>>;
-    fn ev_to_observe_properties(&self) -> &Option<Mutex<HashMap<String, libc::uint64_t>>>;
-    fn ev_observed(&self) -> &Option<Mutex<Vec<Event>>>;
+    #[cfg(feature="events")]
+    fn ev_iter_notification(&self) -> &Box<(Mutex<bool>, Condvar)>;
+    #[cfg(feature="events")]
+    fn ev_to_observe(&self) -> &Mutex<Vec<Event>>;
+    #[cfg(feature="events")]
+    fn ev_to_observe_properties(&self) -> &Mutex<HashMap<String, libc::uint64_t>>;
+    #[cfg(feature="events")]
+    fn ev_observed(&self) -> &Mutex<Vec<Event>>;
 
     #[inline]
     /// Load a configuration file. The path has to be absolute, and a file.
@@ -586,18 +614,12 @@ pub trait MpvInstance: Sized {
         ret
     }
 
+    #[cfg(feature="events")]
     #[inline]
     /// Observe given `Event`s via an `EventIter`.
     fn observe_events(&self, events: &[Event]) -> Result<EventIter<Self>> {
-        if !self.events() {
-            return Err(ErrorKind::EventsDisabled.into());
-        }
-
-        let mut observe = self.ev_to_observe().as_ref().unwrap().lock();
-        let mut properties = self.ev_to_observe_properties()
-            .as_ref()
-            .unwrap()
-            .lock();
+        let mut observe = self.ev_to_observe().lock();
+        let mut properties = self.ev_to_observe_properties().lock();
 
         let len = events.len();
         // FIXME: This can be alloca'ed once the RFC is implemented
@@ -660,11 +682,11 @@ pub trait MpvInstance: Sized {
         Ok(EventIter {
                ctx: self.ctx(),
                first_iteration: true,
-               notification: self.ev_iter_notification().as_ref().unwrap(),
-               all_to_observe: self.ev_to_observe().as_ref().unwrap(),
-               all_to_observe_properties: self.ev_to_observe_properties().as_ref().unwrap(),
+               notification: self.ev_iter_notification(),
+               all_to_observe: self.ev_to_observe(),
+               all_to_observe_properties: self.ev_to_observe_properties(),
                local_to_observe: evs,
-               all_observed: self.ev_observed().as_ref().unwrap(),
+               all_observed: self.ev_observed(),
                _does_not_outlive: PhantomData::<&Self>,
            })
     }
@@ -1075,19 +1097,20 @@ impl MpvInstance for Parent {
     fn ctx(&self) -> *mut MpvHandle {
         self.ctx
     }
-    fn events(&self) -> bool {
-        self.events
-    }
-    fn ev_iter_notification(&self) -> &Option<Box<(Mutex<bool>, Condvar)>> {
+    #[cfg(feature="events")]
+    fn ev_iter_notification(&self) -> &Box<(Mutex<bool>, Condvar)> {
         &self.ev_iter_notification
     }
-    fn ev_to_observe(&self) -> &Option<Mutex<Vec<Event>>> {
+    #[cfg(feature="events")]
+    fn ev_to_observe(&self) -> &Mutex<Vec<Event>> {
         &self.ev_to_observe
     }
-    fn ev_to_observe_properties(&self) -> &Option<Mutex<HashMap<String, libc::uint64_t>>> {
+    #[cfg(feature="events")]
+    fn ev_to_observe_properties(&self) -> &Mutex<HashMap<String, libc::uint64_t>> {
         &self.ev_to_observe_properties
     }
-    fn ev_observed(&self) -> &Option<Mutex<Vec<Event>>> {
+    #[cfg(feature="events")]
+    fn ev_observed(&self) -> &Mutex<Vec<Event>> {
         &self.ev_observed
     }
 }
@@ -1096,19 +1119,20 @@ impl<'parent> MpvInstance for Client<'parent> {
     fn ctx(&self) -> *mut MpvHandle {
         self.ctx
     }
-    fn events(&self) -> bool {
-        self.events
-    }
-    fn ev_iter_notification(&self) -> &Option<Box<(Mutex<bool>, Condvar)>> {
+    #[cfg(feature="events")]
+    fn ev_iter_notification(&self) -> &Box<(Mutex<bool>, Condvar)> {
         &self.ev_iter_notification
     }
-    fn ev_to_observe(&self) -> &Option<Mutex<Vec<Event>>> {
+    #[cfg(feature="events")]
+    fn ev_to_observe(&self) -> &Mutex<Vec<Event>> {
         &self.ev_to_observe
     }
-    fn ev_to_observe_properties(&self) -> &Option<Mutex<HashMap<String, libc::uint64_t>>> {
+    #[cfg(feature="events")]
+    fn ev_to_observe_properties(&self) -> &Mutex<HashMap<String, libc::uint64_t>> {
         &self.ev_to_observe_properties
     }
-    fn ev_observed(&self) -> &Option<Mutex<Vec<Event>>> {
+    #[cfg(feature="events")]
+    fn ev_observed(&self) -> &Mutex<Vec<Event>> {
         &self.ev_observed
     }
 }

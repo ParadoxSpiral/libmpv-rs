@@ -29,7 +29,7 @@ fn version() {
 
 #[test]
 fn properties() {
-    let mpv = Parent::new(false).unwrap();
+    let mpv = Parent::new().unwrap();
     mpv.set_property("cache-initial", 1).unwrap();
     mpv.set_property("volume", 0).unwrap();
     mpv.set_property("vo", "null").unwrap();

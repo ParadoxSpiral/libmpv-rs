@@ -17,6 +17,7 @@
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 use libc;
+#[cfg(feature="events")]
 use parking_lot::{Condvar, Mutex};
 
 use super::*;
@@ -24,10 +25,13 @@ use super::mpv_err;
 use super::super::{LogLevel, EndFileReason};
 use super::super::raw::*;
 
+#[cfg(feature="events")]
 use std::collections::HashMap;
+#[cfg(feature="events")]
 use std::marker::PhantomData;
 use std::ffi::CStr;
 
+#[cfg(feature="events")]
 pub(crate) unsafe extern "C" fn event_callback(d: *mut libc::c_void) {
     (*(d as *mut Condvar)).notify_one();
 }
@@ -67,7 +71,7 @@ impl PropertyData {
 
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
-/// An event returned by `EventIter`.
+/// An event returned by libmpv.
 ///
 /// Equality is implemented as equality between variants, not values.
 pub enum Event {
@@ -208,6 +212,7 @@ impl MpvLogLevel {
     }
 }
 
+#[cfg(feature="events")]
 /// A blocking `Iterator` over some observed events of an mpv instance.
 /// Once the `EventIter` is dropped, it's `Event`s are removed from
 /// the "to be observed" queue, therefore new `Event` invocations won't be observed.
@@ -224,6 +229,7 @@ pub struct EventIter<'parent, P>
     pub(crate) _does_not_outlive: PhantomData<&'parent P>,
 }
 
+#[cfg(feature="events")]
 impl<'parent, P> Drop for EventIter<'parent, P>
     where P: MpvInstance + 'parent
 {
@@ -267,6 +273,7 @@ impl<'parent, P> Drop for EventIter<'parent, P>
     }
 }
 
+#[cfg(feature="events")]
 impl<'parent, P> Iterator for EventIter<'parent, P>
     where P: MpvInstance + 'parent
 {
@@ -278,9 +285,7 @@ impl<'parent, P> Iterator for EventIter<'parent, P>
             let mut observed = self.all_observed.lock();
             if observed.is_empty() && !self.first_iteration {
                 drop(observed);
-                self.notification
-                    .1
-                    .wait(&mut self.notification.0.lock());
+                self.notification.1.wait(&mut self.notification.0.lock());
                 observed = self.all_observed.lock();
             }
 
