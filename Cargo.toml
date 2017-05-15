@@ -41,6 +41,7 @@ hyper = "0.10"
 git2 = "0.6"
 
 [features]
-default = ["events"]
-events = [] # Enable events for all `Parent`s and `Client`s
+default = ["events_complex"]
+events_simple = [] # Enable simple event handling
+events_complex = [] # Enable complex event handling
 build_libmpv = [] # build libmpv automatically at compile time

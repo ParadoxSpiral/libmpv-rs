@@ -18,7 +18,7 @@
 
 mod errors {
     #![allow(missing_docs)]
-    #[cfg(feature="events")]
+    #[cfg(feature="events_complex")]
     use super::events::Event;
     use super::super::raw::MpvError;
     use std::ffi::NulError;
@@ -37,7 +37,7 @@ mod errors {
             Loadfiles(index: usize, error: Box<Error>) {
                 description("Command failed during a `loadfiles` call.")
             }
-            #[cfg(feature="events")]
+            #[cfg(feature="events_complex")]
             AlreadyObserved(e: Box<Event>) {
                 description("This event is already being observed by another `EventIter`.")
             }
@@ -70,7 +70,7 @@ mod errors {
                 &ErrorKind::Loadfiles(ref idx, ref err) => {
                     ErrorKind::Loadfiles(*idx, err.clone()).into()
                 }
-                #[cfg(feature="events")]
+                #[cfg(feature="events_complex")]
                 &ErrorKind::AlreadyObserved(ref e) => ErrorKind::AlreadyObserved(e.clone()).into(),
                 &ErrorKind::InvalidArgument => ErrorKind::InvalidArgument.into(),
                 &ErrorKind::VersionMismatch(ref li, ref lo) => {
@@ -115,20 +115,14 @@ pub mod opengl_cb;
 
 use enum_primitive::FromPrimitive;
 use libc;
-#[cfg(feature="events")]
-use parking_lot::Condvar;
+use parking_lot;
 use parking_lot::Mutex;
 
 use super::raw::*;
-#[cfg(feature="events")]
 use events::*;
-#[cfg(feature="events")]
-use events::event_callback;
 use protocol::*;
 use opengl_cb::*;
 
-#[cfg(feature="events")]
-use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
 use std::mem;
@@ -376,13 +370,13 @@ impl FileState {
 /// An mpv instance from which `Client`s can be spawned.
 pub struct Parent {
     ctx: *mut MpvHandle,
-    #[cfg(feature="events")]
-    ev_iter_notification: Box<(Mutex<bool>, Condvar)>,
-    #[cfg(feature="events")]
+    #[cfg(feature="events_complex")]
+    ev_iter_notification: Box<(Mutex<bool>, parking_lot::Condvar)>,
+    #[cfg(feature="events_complex")]
     ev_to_observe: Mutex<Vec<Event>>,
-    #[cfg(feature="events")]
-    ev_to_observe_properties: Mutex<HashMap<String, libc::uint64_t>>,
-    #[cfg(feature="events")]
+    #[cfg(feature="events_complex")]
+    ev_to_observe_properties: Mutex<::std::collections::HashMap<String, libc::uint64_t>>,
+    #[cfg(feature="events_complex")]
     ev_observed: Mutex<Vec<Event>>,
     protocols_guard: Mutex<()>,
     opengl_guard: Mutex<()>,
@@ -391,14 +385,14 @@ pub struct Parent {
 /// A client of a `Parent`.
 pub struct Client<'parent> {
     ctx: *mut MpvHandle,
-    #[cfg(feature="events")]
-    ev_iter_notification: Box<(Mutex<bool>, Condvar)>,
-    #[cfg(feature="events")]
+    #[cfg(feature="events_complex")]
+    ev_iter_notification: Box<(Mutex<bool>, parking_lot::Condvar)>,
+    #[cfg(feature="events_complex")]
     ev_to_observe: Mutex<Vec<Event>>,
-    #[cfg(feature="events")]
+    #[cfg(feature="events_complex")]
     ev_observed: Mutex<Vec<Event>>,
-    #[cfg(feature="events")]
-    ev_to_observe_properties: Mutex<HashMap<String, libc::uint64_t>>,
+    #[cfg(feature="events_complex")]
+    ev_to_observe_properties: Mutex<::std::collections::HashMap<String, libc::uint64_t>>,
     _does_not_outlive: PhantomData<&'parent Parent>,
 }
 
@@ -441,23 +435,23 @@ impl Parent {
             return Err(ErrorKind::Null.into());
         }
 
-        #[cfg(feature="events")]
+        #[cfg(feature="events_complex")]
         let (ev_iter_notification, ev_to_observe, ev_to_observe_properties, ev_observed) = {
-            let ev_iter_notification = Box::new((Mutex::new(false), Condvar::new()));
+            let ev_iter_notification = Box::new((Mutex::new(false), parking_lot::Condvar::new()));
             unsafe {
                 mpv_set_wakeup_callback(ctx,
-                                        event_callback,
-                                        &ev_iter_notification.1 as *const Condvar as *mut Condvar as
+                                        events_complex::event_callback,
+                                        &ev_iter_notification.1 as *const parking_lot::Condvar as *mut parking_lot::Condvar as
                                         *mut _);
             }
 
             (ev_iter_notification,
              Mutex::new(Vec::with_capacity(10)),
-             Mutex::new(HashMap::with_capacity(10)),
+             Mutex::new(::std::collections::HashMap::with_capacity(10)),
              Mutex::new(Vec::with_capacity(15)))
         };
 
-        #[cfg(feature="events")]
+        #[cfg(feature="events_complex")]
         for i in 2..24 {
             if let Err(e) = mpv_err((), unsafe {
                 mpv_request_event(ctx, MpvEventId::from_i32(i).unwrap(), 0)
@@ -474,7 +468,7 @@ impl Parent {
                      })?;
 
         let parent;
-#[cfg(feature="events")]        {
+#[cfg(feature="events_complex")]        {
             parent = Ok(Parent {
                             ctx: ctx,
                             ev_iter_notification: ev_iter_notification,
@@ -485,7 +479,7 @@ impl Parent {
                             opengl_guard: Mutex::new(()),
                         });
         }
-#[cfg(not(feature="events"))]        {
+#[cfg(not(feature="events_complex"))]        {
             parent = Ok(Parent {
                             ctx: ctx,
                             protocols_guard: Mutex::new(()),
@@ -504,22 +498,22 @@ impl Parent {
             mpv_create_client(self.ctx(), name.as_ptr())
         };
 
-        #[cfg(feature="events")]
+        #[cfg(feature="events_complex")]
         let (ev_iter_notification, ev_to_observe, ev_to_observe_properties, ev_observed) = {
-            let mut ev_iter_notification = Box::new((Mutex::new(false), Condvar::new()));
+            let mut ev_iter_notification = Box::new((Mutex::new(false), parking_lot::Condvar::new()));
             unsafe {
                 mpv_set_wakeup_callback(ctx,
-                                        event_callback,
-                                        (&mut ev_iter_notification.1) as *mut Condvar as *mut _);
+                                        events_complex::event_callback,
+                                        (&mut ev_iter_notification.1) as *mut parking_lot::Condvar as *mut _);
             }
 
             (ev_iter_notification,
              Mutex::new(Vec::with_capacity(10)),
-             Mutex::new(HashMap::with_capacity(10)),
+             Mutex::new(::std::collections::HashMap::with_capacity(10)),
              Mutex::new(Vec::with_capacity(15)))
         };
 
-        #[cfg(feature="events")]
+        #[cfg(feature="events_complex")]
         for i in 2..24 {
             if let Err(e) = mpv_err((), unsafe {
                 mpv_request_event(ctx, MpvEventId::from_i32(i).unwrap(), 0)
@@ -530,7 +524,7 @@ impl Parent {
         }
 
         let client;
-#[cfg(feature="events")]        {
+#[cfg(feature="events_complex")]        {
             client = Ok(Client {
                             ctx: ctx,
                             ev_iter_notification: ev_iter_notification,
@@ -540,7 +534,7 @@ impl Parent {
                             _does_not_outlive: PhantomData::<&Self>,
                         });
         }
-#[cfg(not(feature="events"))]        {
+#[cfg(not(feature="events_complex"))]        {
             client = Ok(Client {
                             ctx: ctx,
                             _does_not_outlive: PhantomData::<&Self>,
@@ -596,13 +590,13 @@ impl<'parent> Client<'parent> {
 pub trait MpvInstance: Sized {
     // FIXME: These can go once `Associated Fields` lands
     fn ctx(&self) -> *mut MpvHandle;
-    #[cfg(feature="events")]
-    fn ev_iter_notification(&self) -> &Box<(Mutex<bool>, Condvar)>;
-    #[cfg(feature="events")]
+    #[cfg(feature="events_complex")]
+    fn ev_iter_notification(&self) -> &Box<(Mutex<bool>, parking_lot::Condvar)>;
+    #[cfg(feature="events_complex")]
     fn ev_to_observe(&self) -> &Mutex<Vec<Event>>;
-    #[cfg(feature="events")]
-    fn ev_to_observe_properties(&self) -> &Mutex<HashMap<String, libc::uint64_t>>;
-    #[cfg(feature="events")]
+    #[cfg(feature="events_complex")]
+    fn ev_to_observe_properties(&self) -> &Mutex<::std::collections::HashMap<String, libc::uint64_t>>;
+    #[cfg(feature="events_complex")]
     fn ev_observed(&self) -> &Mutex<Vec<Event>>;
 
     #[inline]
@@ -612,83 +606,6 @@ pub trait MpvInstance: Sized {
         let ret = mpv_err((), unsafe { mpv_load_config_file(self.ctx(), file) });
         unsafe { CString::from_raw(file) };
         ret
-    }
-
-    #[cfg(feature="events")]
-    #[inline]
-    /// Observe given `Event`s via an `EventIter`.
-    fn observe_events(&self, events: &[Event]) -> Result<EventIter<Self>> {
-        let mut observe = self.ev_to_observe().lock();
-        let mut properties = self.ev_to_observe_properties().lock();
-
-        let len = events.len();
-        // FIXME: This can be alloca'ed once the RFC is implemented
-        let mut ids = Vec::with_capacity(len);
-        let mut evs = Vec::with_capacity(len);
-        let mut props = Vec::with_capacity(len);
-        for elem in events {
-            if let Event::PropertyChange(ref v) = *elem {
-                if properties.contains_key(&v.0) {
-                    return Err(ErrorKind::AlreadyObserved(Box::new(elem.clone())).into());
-                } else {
-                    mpv_err((),
-                            unsafe { mpv_request_event(self.ctx(), elem.as_id(), 1) })?;
-                    props.push(v);
-                    ids.push(elem.as_id());
-                    evs.push(elem.clone());
-                }
-            } else {
-                for id in &*observe {
-                    if elem.as_id() == id.as_id() {
-                        return Err(ErrorKind::AlreadyObserved(Box::new(elem.clone())).into());
-                    }
-                }
-
-                if let Event::LogMessage { level: lvl, .. } = *elem {
-                    let min_level = CString::new(lvl.as_str())?;
-                    mpv_err((),
-                            unsafe { mpv_request_log_messages(self.ctx(), min_level.as_ptr()) })?;
-                }
-
-                mpv_err((),
-                        unsafe { mpv_request_event(self.ctx(), elem.as_id(), 1) })?;
-                ids.push(elem.as_id());
-                evs.push(elem.clone());
-            }
-        }
-
-        let mut props_ins = Vec::with_capacity(len);
-        let start_id = properties.len();
-        for (i, elem) in props.iter().enumerate() {
-            let name = CString::new(&elem.0[..])?;
-            let err = mpv_err((), unsafe {
-                mpv_observe_property(self.ctx(),
-                                     (start_id + i) as _,
-                                     name.as_ptr(),
-                                     elem.1.format() as _)
-            });
-            if err.is_err() {
-                for (_, id) in props_ins {
-                    // Ignore errors.
-                    unsafe { mpv_unobserve_property(self.ctx(), id) };
-                }
-                return Err(err.unwrap_err());
-            }
-            props_ins.push((elem.0.clone(), (start_id + i) as _));
-        }
-        observe.extend(evs.clone());
-        properties.extend(props_ins);
-
-        Ok(EventIter {
-               ctx: self.ctx(),
-               first_iteration: true,
-               notification: self.ev_iter_notification(),
-               all_to_observe: self.ev_to_observe(),
-               all_to_observe_properties: self.ev_to_observe_properties(),
-               local_to_observe: evs,
-               all_observed: self.ev_observed(),
-               _does_not_outlive: PhantomData::<&Self>,
-           })
     }
 
     #[inline]
@@ -1097,19 +1014,19 @@ impl MpvInstance for Parent {
     fn ctx(&self) -> *mut MpvHandle {
         self.ctx
     }
-    #[cfg(feature="events")]
-    fn ev_iter_notification(&self) -> &Box<(Mutex<bool>, Condvar)> {
+    #[cfg(feature="events_complex")]
+    fn ev_iter_notification(&self) -> &Box<(Mutex<bool>, parking_lot::Condvar)> {
         &self.ev_iter_notification
     }
-    #[cfg(feature="events")]
+    #[cfg(feature="events_complex")]
     fn ev_to_observe(&self) -> &Mutex<Vec<Event>> {
         &self.ev_to_observe
     }
-    #[cfg(feature="events")]
-    fn ev_to_observe_properties(&self) -> &Mutex<HashMap<String, libc::uint64_t>> {
+    #[cfg(feature="events_complex")]
+    fn ev_to_observe_properties(&self) -> &Mutex<::std::collections::HashMap<String, libc::uint64_t>> {
         &self.ev_to_observe_properties
     }
-    #[cfg(feature="events")]
+    #[cfg(feature="events_complex")]
     fn ev_observed(&self) -> &Mutex<Vec<Event>> {
         &self.ev_observed
     }
@@ -1119,19 +1036,19 @@ impl<'parent> MpvInstance for Client<'parent> {
     fn ctx(&self) -> *mut MpvHandle {
         self.ctx
     }
-    #[cfg(feature="events")]
-    fn ev_iter_notification(&self) -> &Box<(Mutex<bool>, Condvar)> {
+    #[cfg(feature="events_complex")]
+    fn ev_iter_notification(&self) -> &Box<(Mutex<bool>, parking_lot::Condvar)> {
         &self.ev_iter_notification
     }
-    #[cfg(feature="events")]
+    #[cfg(feature="events_complex")]
     fn ev_to_observe(&self) -> &Mutex<Vec<Event>> {
         &self.ev_to_observe
     }
-    #[cfg(feature="events")]
-    fn ev_to_observe_properties(&self) -> &Mutex<HashMap<String, libc::uint64_t>> {
+    #[cfg(feature="events_complex")]
+    fn ev_to_observe_properties(&self) -> &Mutex<::std::collections::HashMap<String, libc::uint64_t>> {
         &self.ev_to_observe_properties
     }
-    #[cfg(feature="events")]
+    #[cfg(feature="events_complex")]
     fn ev_observed(&self) -> &Mutex<Vec<Event>> {
         &self.ev_observed
     }
