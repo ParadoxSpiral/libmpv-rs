@@ -88,7 +88,7 @@ impl Event {
         }
     }
 
-    pub(crate) fn as_id(&self) -> MpvEventId {
+    fn as_id(&self) -> MpvEventId {
         match *self {
             Event::LogMessage { .. } => MpvEventId::LogMessage,
             Event::StartFile => MpvEventId::StartFile,
@@ -151,7 +151,7 @@ pub enum PropertyData {
 }
 
 impl PropertyData {
-    pub(crate) fn format(&self) -> MpvFormat {
+    fn format(&self) -> MpvFormat {
         match *self {
             PropertyData::String(_) => MpvFormat::String,
             PropertyData::OsdString(_) => MpvFormat::OsdString,
@@ -194,7 +194,7 @@ impl MpvEvent {
 }
 
 impl MpvLogLevel {
-    pub(crate) fn as_str(&self) -> &str {
+    fn as_str(&self) -> &str {
         match *self {
             MpvLogLevel::None => "no",
             MpvLogLevel::Fatal => "fatal",

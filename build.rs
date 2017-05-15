@@ -37,9 +37,8 @@ const WIN_MPV_ARCHIVE_URL: &'static str = "https://mpv.srsfckn.biz/mpv-dev-20170
 fn main() {
 #[cfg(feature="build_libmpv")]    {
         let out_dir = env::var("OUT_DIR").unwrap();
-        let target = env::var("TARGET").unwrap();
 
-        if target.contains("windows") {
+        if env::var("CARGO_CFG_TARGET_OS").unwrap() == "windows" {
             let path = format!("{}/libmpv.7z", out_dir);
             let archive = OpenOptions::new().read(true).write(true).open(&path);
 
@@ -86,10 +85,10 @@ fn main() {
                     .expect("7z execution failed");
             }
 
-            if target.contains("x86_64") {
-                println!("cargo:rustc-link-search=native={}/64/", out_dir);
+            if env::var("CARGO_CFG_TARGET_POINTER_WIDTH").unwrap() == "64" {
+                println!("cargo:rustc-link-search={}/64/", out_dir);
             } else {
-                println!("cargo:rustc-link-search=native={}/32/", out_dir);
+                println!("cargo:rustc-link-search={}/32/", out_dir);
             }
         } else {
             // Assume unix like with sh
@@ -97,12 +96,12 @@ fn main() {
             // `target` (in cfg) doesn't really mean target. It means target(host) of build script,
             // which is a bit confusing because it means the actual `--target` everywhere else.
 #[cfg(target_pointer_width = "64")]            {
-                if !target.contains("x86_64") {
+                if env::var("CARGO_CFG_TARGET_POINTER_WIDTH").unwrap() == "32" {
                     panic!("Cross-compiling to different arch not yet supported");
                 }
             }
 #[cfg(target_pointer_width = "32")]            {
-                if target.contains("x86_64") {
+                if env::var("CARGO_CFG_TARGET_POINTER_WIDTH").unwrap() == "64" {
                     panic!("Cross-compiling to different arch not yet supported");
                 }
             }
@@ -183,7 +182,7 @@ fn main() {
                     .expect("mpv-build build failed");
             }
 
-            println!("cargo:rustc-link-search=native={}/mpv/build/", path);
+            println!("cargo:rustc-link-search={}/mpv/build/", path);
         }
     }
 }
