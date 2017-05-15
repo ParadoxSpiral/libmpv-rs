@@ -369,7 +369,8 @@ impl FileState {
 
 /// An mpv instance from which `Client`s can be spawned.
 pub struct Parent {
-    ctx: *mut MpvHandle,
+    /// The handle to the mpv core
+    pub ctx: *mut MpvHandle,
     #[cfg(feature="events_complex")]
     ev_iter_notification: Box<(Mutex<bool>, parking_lot::Condvar)>,
     #[cfg(feature="events_complex")]
@@ -382,51 +383,27 @@ pub struct Parent {
     opengl_guard: Mutex<()>,
 }
 
-/// A client of a `Parent`.
-pub struct Client<'parent> {
-    ctx: *mut MpvHandle,
-    #[cfg(feature="events_complex")]
-    ev_iter_notification: Box<(Mutex<bool>, parking_lot::Condvar)>,
-    #[cfg(feature="events_complex")]
-    ev_to_observe: Mutex<Vec<Event>>,
-    #[cfg(feature="events_complex")]
-    ev_observed: Mutex<Vec<Event>>,
-    #[cfg(feature="events_complex")]
-    ev_to_observe_properties: Mutex<::std::collections::HashMap<String, libc::uint64_t>>,
-    _does_not_outlive: PhantomData<&'parent Parent>,
-}
-
 unsafe impl Send for Parent {}
 unsafe impl Sync for Parent {}
-unsafe impl<'parent> Send for Client<'parent> {}
-unsafe impl<'parent> Sync for Client<'parent> {}
 
 impl Drop for Parent {
     #[inline]
     fn drop(&mut self) {
         unsafe {
-            mpv_terminate_destroy(self.ctx());
-        }
-    }
-}
-
-impl<'parent> Drop for Client<'parent> {
-    #[inline]
-    fn drop(&mut self) {
-        unsafe {
-            mpv_detach_destroy(self.ctx());
+            mpv_terminate_destroy(self.ctx);
         }
     }
 }
 
 impl Parent {
+    #[cfg(not(feature="events_complex"))]
     #[inline]
     /// Create a new `Parent`.
     /// The default settings can be probed by running: `$ mpv --show-profile=libmpv`
     pub fn new() -> Result<Parent> {
         let api_version = unsafe { mpv_client_api_version() };
-        if super::MPV_CLIENT_API_VERSION != api_version {
-            return Err(ErrorKind::VersionMismatch(super::MPV_CLIENT_API_VERSION, api_version)
+        if ::MPV_CLIENT_API_VERSION != api_version {
+            return Err(ErrorKind::VersionMismatch(::MPV_CLIENT_API_VERSION, api_version)
                            .into());
         }
 
@@ -434,114 +411,17 @@ impl Parent {
         if ctx.is_null() {
             return Err(ErrorKind::Null.into());
         }
-
-        #[cfg(feature="events_complex")]
-        let (ev_iter_notification, ev_to_observe, ev_to_observe_properties, ev_observed) = {
-            let ev_iter_notification = Box::new((Mutex::new(false), parking_lot::Condvar::new()));
-            unsafe {
-                mpv_set_wakeup_callback(ctx,
-                                        events_complex::event_callback,
-                                        &ev_iter_notification.1 as *const parking_lot::Condvar as *mut parking_lot::Condvar as
-                                        *mut _);
-            }
-
-            (ev_iter_notification,
-             Mutex::new(Vec::with_capacity(10)),
-             Mutex::new(::std::collections::HashMap::with_capacity(10)),
-             Mutex::new(Vec::with_capacity(15)))
-        };
-
-        #[cfg(feature="events_complex")]
-        for i in 2..24 {
-            if let Err(e) = mpv_err((), unsafe {
-                mpv_request_event(ctx, MpvEventId::from_i32(i).unwrap(), 0)
-            }) {
-                unsafe { mpv_terminate_destroy(ctx) };
-                return Err(e);
-            }
-        }
-
         mpv_err((), unsafe { mpv_initialize(ctx) })
             .or_else(|err| {
                          unsafe { mpv_terminate_destroy(ctx) };
                          Err(err)
                      })?;
 
-        let parent;
-#[cfg(feature="events_complex")]        {
-            parent = Ok(Parent {
-                            ctx: ctx,
-                            ev_iter_notification: ev_iter_notification,
-                            ev_to_observe: ev_to_observe,
-                            ev_to_observe_properties: ev_to_observe_properties,
-                            ev_observed: ev_observed,
-                            protocols_guard: Mutex::new(()),
-                            opengl_guard: Mutex::new(()),
-                        });
-        }
-#[cfg(not(feature="events_complex"))]        {
-            parent = Ok(Parent {
+            Ok(Parent {
                             ctx: ctx,
                             protocols_guard: Mutex::new(()),
                             opengl_guard: Mutex::new(()),
-                        });
-        }
-        parent
-    }
-
-    #[inline]
-    /// Create a client with `name`, that is connected to the core of `self`, but has its own queue
-    /// for API events and such.
-    pub fn new_client(&self, name: &str) -> Result<Client> {
-        let ctx = unsafe {
-            let name = CString::new(name)?;
-            mpv_create_client(self.ctx(), name.as_ptr())
-        };
-
-        #[cfg(feature="events_complex")]
-        let (ev_iter_notification, ev_to_observe, ev_to_observe_properties, ev_observed) = {
-            let mut ev_iter_notification = Box::new((Mutex::new(false), parking_lot::Condvar::new()));
-            unsafe {
-                mpv_set_wakeup_callback(ctx,
-                                        events_complex::event_callback,
-                                        (&mut ev_iter_notification.1) as *mut parking_lot::Condvar as *mut _);
-            }
-
-            (ev_iter_notification,
-             Mutex::new(Vec::with_capacity(10)),
-             Mutex::new(::std::collections::HashMap::with_capacity(10)),
-             Mutex::new(Vec::with_capacity(15)))
-        };
-
-        #[cfg(feature="events_complex")]
-        for i in 2..24 {
-            if let Err(e) = mpv_err((), unsafe {
-                mpv_request_event(ctx, MpvEventId::from_i32(i).unwrap(), 0)
-            }) {
-                unsafe { mpv_detach_destroy(ctx) };
-                return Err(e);
-            }
-        }
-
-        let client;
-#[cfg(feature="events_complex")]        {
-            client = Ok(Client {
-                            ctx: ctx,
-                            ev_iter_notification: ev_iter_notification,
-                            ev_to_observe: ev_to_observe,
-                            ev_to_observe_properties: ev_to_observe_properties,
-                            ev_observed: ev_observed,
-                            _does_not_outlive: PhantomData::<&Self>,
-                        });
-        }
-#[cfg(not(feature="events_complex"))]        {
-            client = Ok(Client {
-                            ctx: ctx,
-                            _does_not_outlive: PhantomData::<&Self>,
-                        });
-        }
-        client
-
+                        })
 
     }
 
@@ -575,35 +455,12 @@ impl Parent {
             Ok(ProtocolContext::new(self.ctx, capacity, guard.unwrap(), PhantomData::<&Self>))
         }
     }
-}
-
-impl<'parent> Client<'parent> {
-    #[inline]
-    /// Returns the name associated with `self`.
-    pub fn name(&self) -> Result<String> {
-        mpv_cstr_to_string!(unsafe { CStr::from_ptr(mpv_client_name(self.ctx())) })
-    }
-}
-
-#[allow(missing_docs)]
-/// Core functionality that is supported by both `Client` and `Parent`.
-pub trait MpvInstance: Sized {
-    // FIXME: These can go once `Associated Fields` lands
-    fn ctx(&self) -> *mut MpvHandle;
-    #[cfg(feature="events_complex")]
-    fn ev_iter_notification(&self) -> &Box<(Mutex<bool>, parking_lot::Condvar)>;
-    #[cfg(feature="events_complex")]
-    fn ev_to_observe(&self) -> &Mutex<Vec<Event>>;
-    #[cfg(feature="events_complex")]
-    fn ev_to_observe_properties(&self) -> &Mutex<::std::collections::HashMap<String, libc::uint64_t>>;
-    #[cfg(feature="events_complex")]
-    fn ev_observed(&self) -> &Mutex<Vec<Event>>;
 
     #[inline]
     /// Load a configuration file. The path has to be absolute, and a file.
-    fn load_config(&self, path: &str) -> Result<()> {
+    pub fn load_config(&self, path: &str) -> Result<()> {
         let file = CString::new(path)?.into_raw();
-        let ret = mpv_err((), unsafe { mpv_load_config_file(self.ctx(), file) });
+        let ret = mpv_err((), unsafe { mpv_load_config_file(self.ctx, file) });
         unsafe { CString::from_raw(file) };
         ret
     }
@@ -617,7 +474,7 @@ pub trait MpvInstance: Sized {
     ///
     /// # Safety
     /// This method is unsafe because arbitrary code may be executed resulting in UB and more.
-    unsafe fn command(&self, name: &str, args: &[&str]) -> Result<()> {
+    pub unsafe fn command(&self, name: &str, args: &[&str]) -> Result<()> {
         let mut cmd = String::with_capacity(name.len() +
                                             args.iter().fold(0, |acc, e| acc + e.len() + 1));
         cmd.push_str(name);
@@ -628,30 +485,30 @@ pub trait MpvInstance: Sized {
         }
         let raw = CString::new(cmd)?;
 
-        mpv_err((), mpv_command_string(self.ctx(), raw.as_ptr()))
+        mpv_err((), mpv_command_string(self.ctx, raw.as_ptr()))
     }
 
     #[inline]
     /// Set the value of a property.
-    fn set_property<T: SetData>(&self, name: &str, data: T) -> Result<()> {
+    pub fn set_property<T: SetData>(&self, name: &str, data: T) -> Result<()> {
         let name = CString::new(name)?;
         let format = T::get_format().as_mpv_format().as_val();
         data.call_as_c_void(|ptr| {
                                 mpv_err((), unsafe {
-                mpv_set_property(self.ctx(), name.as_ptr(), format, ptr)
+                mpv_set_property(self.ctx, name.as_ptr(), format, ptr)
             })
                             })
     }
 
     #[inline]
     /// Get the value of a property.
-    fn get_property<T: GetData>(&self, name: &str) -> Result<T> {
+    pub fn get_property<T: GetData>(&self, name: &str) -> Result<T> {
         let name = CString::new(name)?;
 
         let format = T::get_format().as_mpv_format().as_val();
         T::get_from_c_void(|ptr| {
                                mpv_err((), unsafe {
-                mpv_get_property(self.ctx(), name.as_ptr(), format, ptr)
+                mpv_get_property(self.ctx, name.as_ptr(), format, ptr)
             })
                            })
     }
@@ -660,8 +517,8 @@ pub trait MpvInstance: Sized {
     /// Internal time in microseconds, this has an arbitrary offset, and will never go backwards.
     ///
     /// This can be called at any time, even if it was stated that no API function should be called.
-    fn get_internal_time(&self) -> i64 {
-        unsafe { mpv_get_time_us(self.ctx()) }
+    pub fn get_internal_time(&self) -> i64 {
+        unsafe { mpv_get_time_us(self.ctx) }
     }
 
     // --- Convenience property functions ---
@@ -669,32 +526,32 @@ pub trait MpvInstance: Sized {
 
     #[inline]
     /// Add -or subtract- any value from a property. Over/underflow clamps to max/min.
-    fn add_property(&self, property: &str, value: isize) -> Result<()> {
+    pub fn add_property(&self, property: &str, value: isize) -> Result<()> {
         unsafe { self.command("add", &[property, &format!("{}", value)]) }
     }
 
     #[inline]
     /// Cycle through a given property. `up` specifies direction. On
     /// overflow, set the property back to the minimum, on underflow set it to the maximum.
-    fn cycle_property(&self, property: &str, up: bool) -> Result<()> {
+    pub fn cycle_property(&self, property: &str, up: bool) -> Result<()> {
         unsafe { self.command("cycle", &[property, if up { "up" } else { "down" }]) }
     }
 
     #[inline]
     /// Multiply any property with any positive factor.
-    fn multiply_property(&self, property: &str, factor: usize) -> Result<()> {
+    pub fn multiply_property(&self, property: &str, factor: usize) -> Result<()> {
         unsafe { self.command("multiply", &[property, &format!("{}", factor)]) }
     }
 
     #[inline]
     /// Pause playback at runtime.
-    fn pause(&self) -> Result<()> {
+    pub fn pause(&self) -> Result<()> {
         self.set_property("pause", true)
     }
 
     #[inline]
     /// Unpause playback at runtime.
-    fn unpause(&self) -> Result<()> {
+    pub fn unpause(&self) -> Result<()> {
         self.set_property("pause", false)
     }
 
@@ -709,19 +566,19 @@ pub trait MpvInstance: Sized {
     /// This is less exact than `seek_absolute`, see [mpv manual]
     /// (https://mpv.io/manual/master/#command-interface-
     /// [relative|absolute|absolute-percent|relative-percent|exact|keyframes]).
-    fn seek_forward(&self, time: &Duration) -> Result<()> {
+    pub fn seek_forward(&self, time: &Duration) -> Result<()> {
         unsafe { self.command("seek", &[&format!("{}", time.as_secs()), "relative"]) }
     }
 
     #[inline]
     /// See `seek_forward`.
-    fn seek_backward(&self, time: &Duration) -> Result<()> {
+    pub fn seek_backward(&self, time: &Duration) -> Result<()> {
         unsafe { self.command("seek", &[&format!("-{}", time.as_secs()), "relative"]) }
     }
 
     #[inline]
     /// Seek to a given absolute time.
-    fn seek_absolute(&self, time: &Duration) -> Result<()> {
+    pub fn seek_absolute(&self, time: &Duration) -> Result<()> {
         unsafe { self.command("seek", &[&format!("{}", time.as_secs()), "absolute"]) }
     }
 
@@ -729,39 +586,39 @@ pub trait MpvInstance: Sized {
     /// Seek to a given relative percent position (may be negative).
     /// If `percent` of the playtime is bigger than the remaining playtime, the next file is played.
     /// out of bounds values are clamped to either 0 or 100.
-    fn seek_percent(&self, percent: isize) -> Result<()> {
+    pub fn seek_percent(&self, percent: isize) -> Result<()> {
         unsafe { self.command("seek", &[&format!("{}", percent), "relative-percent"]) }
     }
 
     #[inline]
     /// Seek to the given percentage of the playtime.
-    fn seek_percent_absolute(&self, percent: usize) -> Result<()> {
+    pub fn seek_percent_absolute(&self, percent: usize) -> Result<()> {
         unsafe { self.command("seek", &[&format!("{}", percent), "relative-percent"]) }
     }
 
     #[inline]
     /// Revert the previous `seek_` call, can also revert itself.
-    fn seek_revert(&self) -> Result<()> {
+    pub fn seek_revert(&self) -> Result<()> {
         unsafe { self.command("revert-seek", &[]) }
     }
 
     #[inline]
     /// Mark the current position as the position that will be seeked to by `seek_revert`.
-    fn seek_revert_mark(&self) -> Result<()> {
+    pub fn seek_revert_mark(&self) -> Result<()> {
         unsafe { self.command("revert-seek", &["mark"]) }
     }
 
     #[inline]
     /// Seek exactly one frame, and pause.
     /// Noop on audio only streams.
-    fn seek_frame(&self) -> Result<()> {
+    pub fn seek_frame(&self) -> Result<()> {
         unsafe { self.command("frame-step", &[]) }
     }
 
     #[inline]
     /// See `seek_frame`.
     /// [Note performance considerations.](https://mpv.io/manual/master/#command-interface-frame-back-step)
-    fn seek_frame_backward(&self) -> Result<()> {
+    pub fn seek_frame_backward(&self) -> Result<()> {
         unsafe { self.command("frame-back-step", &[]) }
     }
 
@@ -777,7 +634,7 @@ pub trait MpvInstance: Sized {
     /// extension is missing or unknown is arbitrary). If the file already exists, it's overwritten.
     /// Like all input command parameters, the filename is subject to property expansion as
     /// described in [Property Expansion](https://mpv.io/manual/master/#property-expansion)."
-    fn screenshot_subtitles<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<()> {
+    pub fn screenshot_subtitles<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<()> {
         if let Some(path) = path.into() {
             unsafe { self.command("screenshot", &[&format!("\"{}\"", path), "subtitles"]) }
         } else {
@@ -788,7 +645,7 @@ pub trait MpvInstance: Sized {
     #[inline]
     /// "Like subtitles, but typically without OSD or subtitles. The exact behavior depends on the selected
     /// video output."
-    fn screenshot_video<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<()> {
+    pub fn screenshot_video<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<()> {
         if let Some(path) = path.into() {
             unsafe { self.command("screenshot", &[&format!("\"{}\"", path), "video"]) }
         } else {
@@ -800,7 +657,7 @@ pub trait MpvInstance: Sized {
     /// "Save the contents of the mpv window. Typically scaled, with OSD and subtitles. The exact
     /// behaviour depends on the selected video output, and if no support is available,
     /// this will act like video.".
-    fn screenshot_window<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<()> {
+    pub fn screenshot_window<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<()> {
         if let Some(path) = path.into() {
             unsafe { self.command("screenshot", &[&format!("\"{}\"", path), "window"]) }
         } else {
@@ -814,26 +671,26 @@ pub trait MpvInstance: Sized {
     #[inline]
     /// Play the next item of the current playlist.
     /// Does nothing if the current item is the last item.
-    fn playlist_next_weak(&self) -> Result<()> {
+    pub fn playlist_next_weak(&self) -> Result<()> {
         unsafe { self.command("playlist-next", &["weak"]) }
     }
 
     #[inline]
     /// Play the next item of the current playlist.
     /// Terminates playback if the current item is the last item.
-    fn playlist_next_force(&self) -> Result<()> {
+    pub fn playlist_next_force(&self) -> Result<()> {
         unsafe { self.command("playlist-next", &["force"]) }
     }
 
     #[inline]
     /// See `playlist_next_weak`.
-    fn playlist_previous_weak(&self) -> Result<()> {
+    pub fn playlist_previous_weak(&self) -> Result<()> {
         unsafe { self.command("playlist-previous", &["weak"]) }
     }
 
     #[inline]
     /// See `playlist_next_force`.
-    fn playlist_previous_force(&self) -> Result<()> {
+    pub fn playlist_previous_force(&self) -> Result<()> {
         unsafe { self.command("playlist-previous", &["force"]) }
     }
 
@@ -849,7 +706,7 @@ pub trait MpvInstance: Sized {
     ///
     /// # Peculiarities
     /// `loadfile` is kind of asynchronous, any additional option is set during loading, [specifics](https://github.com/mpv-player/mpv/issues/4089).
-    fn playlist_load_files<'a, A>(&self, files: &[(&str, FileState, A)]) -> Result<()>
+    pub fn playlist_load_files<'a, A>(&self, files: &[(&str, FileState, A)]) -> Result<()>
         where A: Into<Option<&'a str>> + Clone
     {
         for (i, elem) in files.iter().enumerate() {
@@ -869,7 +726,7 @@ pub trait MpvInstance: Sized {
 
     #[inline]
     /// Load the given playlist file, that either replaces the current playlist, or appends to it.
-    fn playlist_load_list(&self, path: &str, replace: bool) -> Result<()> {
+    pub fn playlist_load_list(&self, path: &str, replace: bool) -> Result<()> {
         if replace {
             unsafe { self.command("loadlist", &[&format!("\"{}\"", path), "replace"]) }
         } else {
@@ -879,31 +736,31 @@ pub trait MpvInstance: Sized {
 
     #[inline]
     /// Remove every, except the current, item from the playlist.
-    fn playlist_clear(&self) -> Result<()> {
+    pub fn playlist_clear(&self) -> Result<()> {
         unsafe { self.command("playlist-clear", &[]) }
     }
 
     #[inline]
     /// Remove the currently selected item from the playlist.
-    fn playlist_remove_current(&self) -> Result<()> {
+    pub fn playlist_remove_current(&self) -> Result<()> {
         unsafe { self.command("playlist-remove", &["current"]) }
     }
 
     #[inline]
     /// Remove item at `position` from the playlist.
-    fn playlist_remove_index(&self, position: usize) -> Result<()> {
+    pub fn playlist_remove_index(&self, position: usize) -> Result<()> {
         unsafe { self.command("playlist-remove", &[&format!("{}", position)]) }
     }
 
     #[inline]
     /// Move item `old` to the position of item `new`.
-    fn playlist_move(&self, old: usize, new: usize) -> Result<()> {
+    pub fn playlist_move(&self, old: usize, new: usize) -> Result<()> {
         unsafe { self.command("playlist-move", &[&format!("{}", new), &format!("{}", old)]) }
     }
 
     #[inline]
     /// Shuffle the playlist.
-    fn playlist_shuffle(&self) -> Result<()> {
+    pub fn playlist_shuffle(&self) -> Result<()> {
         unsafe { self.command("playlist-shuffle", &[]) }
     }
 
@@ -913,7 +770,7 @@ pub trait MpvInstance: Sized {
     #[inline]
     /// Add and select the subtitle immediately.
     /// Specifying a language requires specifying a title.
-    fn subtitle_add_select<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'b str>>>
+    pub fn subtitle_add_select<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'b str>>>
         (&self,
          path: &str,
          title: A,
@@ -938,7 +795,7 @@ pub trait MpvInstance: Sized {
     /// (Or in some special situations, let the default stream selection mechanism decide.)".
     ///
     /// Returns an `Error::InvalidArgument` if a language, but not a title, was provided.
-    fn subtitle_add_auto<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'b str>>>
+    pub fn subtitle_add_auto<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'b str>>>
         (&self,
          path: &str,
          title: A,
@@ -961,14 +818,14 @@ pub trait MpvInstance: Sized {
     /// already added, that one is selected, instead of loading a duplicate entry.
     /// (In this case, title/language are ignored, and if the [sub] was changed since it was loaded,
     /// these changes won't be reflected.)".
-    fn subtitle_add_cached(&self, path: &str) -> Result<()> {
+    pub fn subtitle_add_cached(&self, path: &str) -> Result<()> {
         unsafe { self.command("sub-add", &[&format!("\"{}\"", path), "cached"]) }
     }
 
     #[inline]
     /// "Remove the given subtitle track. If the id argument is missing, remove the current
     /// track. (Works on external subtitle files only.)"
-    fn subtitle_remove<A: Into<Option<usize>>>(&self, index: A) -> Result<()> {
+    pub fn subtitle_remove<A: Into<Option<usize>>>(&self, index: A) -> Result<()> {
         if let Some(idx) = index.into() {
             unsafe { self.command("sub-remove", &[&format!("{}", idx)]) }
         } else {
@@ -979,7 +836,7 @@ pub trait MpvInstance: Sized {
     #[inline]
     /// "Reload the given subtitle track. If the id argument is missing, reload the current
     /// track. (Works on external subtitle files only.)"
-    fn subtitle_reload<A: Into<Option<usize>>>(&self, index: A) -> Result<()> {
+    pub fn subtitle_reload<A: Into<Option<usize>>>(&self, index: A) -> Result<()> {
         if let Some(idx) = index.into() {
             unsafe { self.command("sub-reload", &[&format!("{}", idx)]) }
         } else {
@@ -990,7 +847,7 @@ pub trait MpvInstance: Sized {
     #[inline]
     /// "Change subtitle timing such, that the subtitle event after the next `isize` subtitle
     /// events is displayed. `isize` can be negative to step backwards."
-    fn subtitle_step(&self, skip: isize) -> Result<()> {
+    pub fn subtitle_step(&self, skip: isize) -> Result<()> {
         unsafe { self.command("sub-step", &[&format!("{}", skip)]) }
     }
 
@@ -999,57 +856,13 @@ pub trait MpvInstance: Sized {
     /// audio instead of adjusting the subtitle delay.
     /// For embedded subtitles (like with matroska), this works only with subtitle events that
     /// have already been displayed, or are within a short prefetch range."
-    fn subtitle_seek_forward(&self) -> Result<()> {
+    pub fn subtitle_seek_forward(&self) -> Result<()> {
         unsafe { self.command("sub-seek", &["1"]) }
     }
 
     #[inline]
     /// See `SeekForward`.
-    fn subtitle_seek_backward(&self) -> Result<()> {
+    pub fn subtitle_seek_backward(&self) -> Result<()> {
         unsafe { self.command("sub-seek", &["-1"]) }
-    }
-}
-
-impl MpvInstance for Parent {
-    fn ctx(&self) -> *mut MpvHandle {
-        self.ctx
-    }
-    #[cfg(feature="events_complex")]
-    fn ev_iter_notification(&self) -> &Box<(Mutex<bool>, parking_lot::Condvar)> {
-        &self.ev_iter_notification
-    }
-    #[cfg(feature="events_complex")]
-    fn ev_to_observe(&self) -> &Mutex<Vec<Event>> {
-        &self.ev_to_observe
-    }
-    #[cfg(feature="events_complex")]
-    fn ev_to_observe_properties(&self) -> &Mutex<::std::collections::HashMap<String, libc::uint64_t>> {
-        &self.ev_to_observe_properties
-    }
-    #[cfg(feature="events_complex")]
-    fn ev_observed(&self) -> &Mutex<Vec<Event>> {
-        &self.ev_observed
-    }
-}
-
-impl<'parent> MpvInstance for Client<'parent> {
-    fn ctx(&self) -> *mut MpvHandle {
-        self.ctx
-    }
-    #[cfg(feature="events_complex")]
-    fn ev_iter_notification(&self) -> &Box<(Mutex<bool>, parking_lot::Condvar)> {
-        &self.ev_iter_notification
-    }
-    #[cfg(feature="events_complex")]
-    fn ev_to_observe(&self) -> &Mutex<Vec<Event>> {
-        &self.ev_to_observe
-    }
-    #[cfg(feature="events_complex")]
-    fn ev_to_observe_properties(&self) -> &Mutex<::std::collections::HashMap<String, libc::uint64_t>> {
-        &self.ev_to_observe_properties
-    }
-    #[cfg(feature="events_complex")]
-    fn ev_observed(&self) -> &Mutex<Vec<Event>> {
-        &self.ev_observed
     }
 }

@@ -24,16 +24,73 @@ use super::*;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
-pub(crate) unsafe extern "C" fn event_callback(d: *mut libc::c_void) {
+unsafe extern "C" fn event_callback(d: *mut libc::c_void) {
     (*(d as *mut Condvar)).notify_one();
 }
 
 impl Parent {
+    #[cfg(feature="events_complex")]
+    #[inline]
+    /// Create a new `Parent`.
+    /// The default settings can be probed by running: `$ mpv --show-profile=libmpv`
+    pub fn new() -> Result<Parent> {
+        let api_version = unsafe { mpv_client_api_version() };
+        if ::MPV_CLIENT_API_VERSION != api_version {
+            return Err(ErrorKind::VersionMismatch(::MPV_CLIENT_API_VERSION, api_version)
+                           .into());
+        }
+
+        let ctx = unsafe { mpv_create() };
+        if ctx.is_null() {
+            return Err(ErrorKind::Null.into());
+        }
+
+        let (ev_iter_notification, ev_to_observe, ev_to_observe_properties, ev_observed) = {
+            let ev_iter_notification = Box::new((Mutex::new(false), Condvar::new()));
+            unsafe {
+                mpv_set_wakeup_callback(ctx,
+                                        event_callback,
+                                        &ev_iter_notification.1 as *const Condvar as *mut Condvar as
+                                        *mut _);
+            }
+
+            (ev_iter_notification,
+             Mutex::new(Vec::with_capacity(10)),
+             Mutex::new(HashMap::with_capacity(10)),
+             Mutex::new(Vec::with_capacity(15)))
+        };
+
+        for i in 2..24 {
+            if let Err(e) = mpv_err((), unsafe {
+                mpv_request_event(ctx, MpvEventId::from_i32(i).unwrap(), 0)
+            }) {
+                unsafe { mpv_terminate_destroy(ctx) };
+                return Err(e);
+            }
+        }
+
+        mpv_err((), unsafe { mpv_initialize(ctx) })
+            .or_else(|err| {
+                         unsafe { mpv_terminate_destroy(ctx) };
+                         Err(err)
+                     })?;
+
+        Ok(Parent {
+                            ctx: ctx,
+                            ev_iter_notification: ev_iter_notification,
+                            ev_to_observe: ev_to_observe,
+                            ev_to_observe_properties: ev_to_observe_properties,
+                            ev_observed: ev_observed,
+                            protocols_guard: Mutex::new(()),
+                            opengl_guard: Mutex::new(()),
+                        })
+    }
+
     #[inline]
     /// Observe given `Event`s via an `EventIter`.
-    pub fn observe_events(&self, events: &[Event]) -> Result<EventIter<Self>> {
-        let mut observe = self.ev_to_observe().lock();
-        let mut properties = self.ev_to_observe_properties().lock();
+    pub fn observe_events(&self, events: &[Event]) -> Result<EventIter> {
+        let mut observe = self.ev_to_observe.lock();
+        let mut properties = self.ev_to_observe_properties.lock();
 
         let len = events.len();
         // FIXME: This can be alloca'ed once the RFC is implemented
@@ -46,7 +103,7 @@ impl Parent {
                     return Err(ErrorKind::AlreadyObserved(Box::new(elem.clone())).into());
                 } else {
                     mpv_err((),
-                            unsafe { mpv_request_event(self.ctx(), elem.as_id(), 1) })?;
+                            unsafe { mpv_request_event(self.ctx, elem.as_id(), 1) })?;
                     props.push(v);
                     ids.push(elem.as_id());
                     evs.push(elem.clone());
@@ -61,11 +118,11 @@ impl Parent {
                 if let Event::LogMessage { level: lvl, .. } = *elem {
                     let min_level = CString::new(lvl.as_str())?;
                     mpv_err((),
-                            unsafe { mpv_request_log_messages(self.ctx(), min_level.as_ptr()) })?;
+                            unsafe { mpv_request_log_messages(self.ctx, min_level.as_ptr()) })?;
                 }
 
                 mpv_err((),
-                        unsafe { mpv_request_event(self.ctx(), elem.as_id(), 1) })?;
+                        unsafe { mpv_request_event(self.ctx, elem.as_id(), 1) })?;
                 ids.push(elem.as_id());
                 evs.push(elem.clone());
             }
@@ -76,7 +133,7 @@ impl Parent {
         for (i, elem) in props.iter().enumerate() {
             let name = CString::new(&elem.0[..])?;
             let err = mpv_err((), unsafe {
-                mpv_observe_property(self.ctx(),
+                mpv_observe_property(self.ctx,
                                      (start_id + i) as _,
                                      name.as_ptr(),
                                      elem.1.format() as _)
@@ -84,7 +141,7 @@ impl Parent {
             if err.is_err() {
                 for (_, id) in props_ins {
                     // Ignore errors.
-                    unsafe { mpv_unobserve_property(self.ctx(), id) };
+                    unsafe { mpv_unobserve_property(self.ctx, id) };
                 }
                 return Err(err.unwrap_err());
             }
@@ -94,13 +151,13 @@ impl Parent {
         properties.extend(props_ins);
 
         Ok(EventIter {
-               ctx: self.ctx(),
+               ctx: self.ctx,
                first_iteration: true,
-               notification: self.ev_iter_notification(),
-               all_to_observe: self.ev_to_observe(),
-               all_to_observe_properties: self.ev_to_observe_properties(),
+               notification: &self.ev_iter_notification,
+               all_to_observe: &self.ev_to_observe,
+               all_to_observe_properties: &self.ev_to_observe_properties,
                local_to_observe: evs,
-               all_observed: self.ev_observed(),
+               all_observed: &self.ev_observed,
                _does_not_outlive: PhantomData::<&Self>,
            })
     }
@@ -109,9 +166,7 @@ impl Parent {
 /// A blocking `Iterator` over some observed events of an mpv instance.
 /// Once the `EventIter` is dropped, it's `Event`s are removed from
 /// the "to be observed" queue, therefore new `Event` invocations won't be observed.
-pub struct EventIter<'parent, P>
-    where P: MpvInstance + 'parent
-{
+pub struct EventIter<'parent> {
     pub(crate) ctx: *mut MpvHandle,
     pub(crate) first_iteration: bool,
     pub(crate) notification: &'parent (Mutex<bool>, Condvar),
@@ -119,12 +174,10 @@ pub struct EventIter<'parent, P>
     pub(crate) all_to_observe_properties: &'parent Mutex<HashMap<String, libc::uint64_t>>,
     pub(crate) local_to_observe: Vec<Event>,
     pub(crate) all_observed: &'parent Mutex<Vec<Event>>,
-    pub(crate) _does_not_outlive: PhantomData<&'parent P>,
+    pub(crate) _does_not_outlive: PhantomData<&'parent Parent>,
 }
 
-impl<'parent, P> Drop for EventIter<'parent, P>
-    where P: MpvInstance + 'parent
-{
+impl<'parent> Drop for EventIter<'parent> {
     fn drop(&mut self) {
         let mut all_to_observe = self.all_to_observe.lock();
         let mut all_observed = self.all_observed.lock();
@@ -165,9 +218,7 @@ impl<'parent, P> Drop for EventIter<'parent, P>
     }
 }
 
-impl<'parent, P> Iterator for EventIter<'parent, P>
-    where P: MpvInstance + 'parent
-{
+impl<'parent> Iterator for EventIter<'parent> {
     type Item = Vec<Event>;
 
     fn next(&mut self) -> Option<Self::Item> {
