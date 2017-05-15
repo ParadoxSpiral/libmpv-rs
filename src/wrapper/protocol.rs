@@ -47,11 +47,12 @@ impl Mpv {
         where T: RefUnwindSafe,
               U: RefUnwindSafe
     {
-    	if self.protocols_guard.compare_and_swap(false, true, Ordering::AcqRel) {
-    		None
-    	} else {
-    	    Some(ProtocolContext::new(self.ctx, capacity, PhantomData::<&Self>))
-    	}
+        if self.protocols_guard
+               .compare_and_swap(false, true, Ordering::AcqRel) {
+            None
+        } else {
+            Some(ProtocolContext::new(self.ctx, capacity, PhantomData::<&Self>))
+        }
     }
 }
 
@@ -194,9 +195,9 @@ unsafe impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> Sync for ProtocolContex
 
 impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> ProtocolContext<'parent, T, U> {
     fn new(ctx: *mut MpvHandle,
-                      capacity: usize,
-                      marker: PhantomData<&'parent Mpv>)
-                      -> ProtocolContext<'parent, T, U> {
+           capacity: usize,
+           marker: PhantomData<&'parent Mpv>)
+           -> ProtocolContext<'parent, T, U> {
         ProtocolContext {
             ctx,
             protocols: Mutex::new(Vec::with_capacity(capacity)),

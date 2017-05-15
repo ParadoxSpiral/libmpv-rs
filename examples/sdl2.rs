@@ -52,12 +52,11 @@ pub fn main() {
         .opengl()
         .build()
         .unwrap();
-    let renderer = window
-        .renderer()
+    let canvas = window
+        .into_canvas()
         .index(driver_index as _)
         .build()
         .expect("Failed to create renderer with given parameters");
-    let wref = renderer.window().unwrap();
     let mut event_pump = sdl.event_pump().unwrap();
     let events = sdl.event().unwrap();
     events.register_custom_event::<Draw>().unwrap();
@@ -86,11 +85,11 @@ pub fn main() {
         for event in event_pump.wait_iter() {
             if event.is_user_event() {
                 // The only user event is `Draw`, we don't have to check.
-                let (width, height) = wref.size();
+                let (width, height) = canvas.window().size();
                 unsafe {
                     mpv_ogl.draw(0, width as _, -(height as isize)).unwrap();
                 }
-                wref.gl_swap_window();
+                canvas.window().gl_swap_window();
                 continue;
             }
 

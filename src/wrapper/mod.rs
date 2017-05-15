@@ -401,8 +401,7 @@ impl Mpv {
     pub fn new() -> Result<Mpv> {
         let api_version = unsafe { mpv_client_api_version() };
         if ::MPV_CLIENT_API_VERSION != api_version {
-            return Err(ErrorKind::VersionMismatch(::MPV_CLIENT_API_VERSION, api_version)
-                           .into());
+            return Err(ErrorKind::VersionMismatch(::MPV_CLIENT_API_VERSION, api_version).into());
         }
 
         let ctx = unsafe { mpv_create() };
@@ -415,13 +414,11 @@ impl Mpv {
                          Err(err)
                      })?;
 
-            Ok(Mpv {
-                            ctx,
-                            #[cfg(feature="custom_protocols")]
-                            protocols_guard: AtomicBool::new(false),
-                            #[cfg(feature="opengl_callback")]
-                            opengl_guard: AtomicBool::new(false),
-                        })
+        Ok(Mpv {
+               ctx,
+               protocols_guard: AtomicBool::new(false),
+               opengl_guard: AtomicBool::new(false),
+           })
 
     }
 

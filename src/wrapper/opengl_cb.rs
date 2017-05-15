@@ -37,7 +37,8 @@ impl Mpv {
     pub fn create_opengl_context<F, V>(&self, procaddr: F) -> Result<OpenGlContext<V>>
         where F: for<'a> Fn(&'a str) -> *const () + 'static
     {
-        if self.opengl_guard.compare_and_swap(false, true, Ordering::AcqRel) {
+        if self.opengl_guard
+               .compare_and_swap(false, true, Ordering::AcqRel) {
             bail!("Context already exists")
         } else {
             OpenGlContext::new(self.ctx, procaddr, PhantomData::<&Self>)
@@ -95,9 +96,9 @@ impl<'parent, V> Drop for OpenGlContext<'parent, V> {
 
 impl<'parent, V> OpenGlContext<'parent, V> {
     fn new<F>(mpv_ctx: *mut MpvHandle,
-                         mut proc_addr: F,
-                         parent: PhantomData<&'parent Mpv>)
-                         -> Result<OpenGlContext<'parent, V>>
+              mut proc_addr: F,
+              parent: PhantomData<&'parent Mpv>)
+              -> Result<OpenGlContext<'parent, V>>
         where F: for<'a> Fn(&'a str) -> *const () + 'static
     {
         let api_ctx =

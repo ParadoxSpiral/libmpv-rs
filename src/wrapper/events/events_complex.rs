@@ -36,8 +36,7 @@ impl Mpv {
     pub fn new() -> Result<Mpv> {
         let api_version = unsafe { mpv_client_api_version() };
         if ::MPV_CLIENT_API_VERSION != api_version {
-            return Err(ErrorKind::VersionMismatch(::MPV_CLIENT_API_VERSION, api_version)
-                           .into());
+            return Err(ErrorKind::VersionMismatch(::MPV_CLIENT_API_VERSION, api_version).into());
         }
 
         let ctx = unsafe { mpv_create() };
@@ -76,16 +75,14 @@ impl Mpv {
                      })?;
 
         Ok(Mpv {
-                            ctx,
-                            ev_iter_notification,
-                            ev_to_observe,
-                            ev_to_observe_properties,
-                            ev_observed,
-                            #[cfg(feature="custom_protocols")]
-                            protocols_guard: AtomicBool::new(false),
-                            #[cfg(feature="opengl_callback")]
-                            opengl_guard: AtomicBool::new(false),
-                        })
+               ctx,
+               ev_iter_notification,
+               ev_to_observe,
+               ev_to_observe_properties,
+               ev_observed,
+               protocols_guard: AtomicBool::new(false),
+               opengl_guard: AtomicBool::new(false),
+           })
     }
 
     #[inline]
@@ -104,8 +101,7 @@ impl Mpv {
                 if properties.contains_key(&v.0) {
                     return Err(ErrorKind::AlreadyObserved(Box::new(elem.clone())).into());
                 } else {
-                    mpv_err((),
-                            unsafe { mpv_request_event(self.ctx, elem.as_id(), 1) })?;
+                    mpv_err((), unsafe { mpv_request_event(self.ctx, elem.as_id(), 1) })?;
                     props.push(v);
                     ids.push(elem.as_id());
                     evs.push(elem.clone());
@@ -123,8 +119,7 @@ impl Mpv {
                             unsafe { mpv_request_log_messages(self.ctx, min_level.as_ptr()) })?;
                 }
 
-                mpv_err((),
-                        unsafe { mpv_request_event(self.ctx, elem.as_id(), 1) })?;
+                mpv_err((), unsafe { mpv_request_event(self.ctx, elem.as_id(), 1) })?;
                 ids.push(elem.as_id());
                 evs.push(elem.clone());
             }

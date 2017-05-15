@@ -33,7 +33,7 @@ error-chain = "0.10"
 parking_lot = "0.4"
 
 [dev-dependencies]
-sdl2 = "0.29"
+sdl2 = "0.30"
 crossbeam = "0.2"
 
 [build-dependencies]
