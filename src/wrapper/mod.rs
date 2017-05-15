@@ -363,8 +363,8 @@ impl FileState {
     }
 }
 
-/// An mpv instance from which `Client`s can be spawned.
-pub struct Parent {
+/// TODO
+pub struct Mpv {
     /// The handle to the mpv core
     pub ctx: *mut MpvHandle,
     #[cfg(feature="events_complex")]
@@ -381,10 +381,10 @@ pub struct Parent {
     opengl_guard: AtomicBool,
 }
 
-unsafe impl Send for Parent {}
-unsafe impl Sync for Parent {}
+unsafe impl Send for Mpv {}
+unsafe impl Sync for Mpv {}
 
-impl Drop for Parent {
+impl Drop for Mpv {
     #[inline]
     fn drop(&mut self) {
         unsafe {
@@ -393,12 +393,12 @@ impl Drop for Parent {
     }
 }
 
-impl Parent {
+impl Mpv {
     #[cfg(not(feature="events_complex"))]
     #[inline]
-    /// Create a new `Parent`.
+    /// Create a new `Mpv`.
     /// The default settings can be probed by running: `$ mpv --show-profile=libmpv`
-    pub fn new() -> Result<Parent> {
+    pub fn new() -> Result<Mpv> {
         let api_version = unsafe { mpv_client_api_version() };
         if ::MPV_CLIENT_API_VERSION != api_version {
             return Err(ErrorKind::VersionMismatch(::MPV_CLIENT_API_VERSION, api_version)
@@ -415,7 +415,7 @@ impl Parent {
                          Err(err)
                      })?;
 
-            Ok(Parent {
+            Ok(Mpv {
                             ctx,
                             #[cfg(feature="custom_protocols")]
                             protocols_guard: AtomicBool::new(false),

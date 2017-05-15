@@ -38,7 +38,7 @@ use std::ffi::OsStr;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 
-impl Parent {
+impl Mpv {
     #[inline]
     /// Create a context with which custom protocols can be registered.
     ///
@@ -182,11 +182,11 @@ struct ProtocolData<T, U> {
 }
 
 /// This context holds state relevant to custom protocols.
-/// It is created by calling `Parent::create_protocol_context`.
+/// It is created by calling `Mpv::create_protocol_context`.
 pub struct ProtocolContext<'parent, T: RefUnwindSafe, U: RefUnwindSafe> {
     ctx: *mut MpvHandle,
     protocols: Mutex<Vec<Protocol<T, U>>>,
-    _does_not_outlive: PhantomData<&'parent Parent>,
+    _does_not_outlive: PhantomData<&'parent Mpv>,
 }
 
 unsafe impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> Send for ProtocolContext<'parent, T, U> {}
@@ -195,7 +195,7 @@ unsafe impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> Sync for ProtocolContex
 impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> ProtocolContext<'parent, T, U> {
     fn new(ctx: *mut MpvHandle,
                       capacity: usize,
-                      marker: PhantomData<&'parent Parent>)
+                      marker: PhantomData<&'parent Mpv>)
                       -> ProtocolContext<'parent, T, U> {
         ProtocolContext {
             ctx,
@@ -204,8 +204,8 @@ impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> ProtocolContext<'parent, T, U>
         }
     }
 
-    /// Register a custom `Protocol`. Once a protocol has been registered, it lives as long as the
-    /// `Parent`.
+    /// Register a custom `Protocol`. Once a protocol has been registered, it lives as long as
+    /// `Mpv`.
     ///
     /// Returns `Error::Mpv(MpvError::InvalidParameter)` if a protocol with the same name has
     /// already been registered.

@@ -63,7 +63,7 @@ pub fn main() {
     events.register_custom_event::<Draw>().unwrap();
 
     // Create mpv state
-    let mpv = Parent::new().unwrap();
+    let mpv = Mpv::new().unwrap();
     mpv.set_property("vo", "opengl-cb").unwrap();
     mpv.set_property("cache-initial", 1).unwrap();
     mpv.set_property("volume", 25).unwrap();

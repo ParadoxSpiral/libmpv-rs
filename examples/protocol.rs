@@ -75,7 +75,7 @@ pub fn main() {
                       Some(size))
     };
 
-    let mpv = Parent::new().unwrap();
+    let mpv = Mpv::new().unwrap();
     mpv.set_property("volume", 25).unwrap();
 
     let proto_ctx = mpv.create_protocol_context(1).unwrap();

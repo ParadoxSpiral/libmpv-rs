@@ -29,7 +29,7 @@ use std::panic::{AssertUnwindSafe, RefUnwindSafe};
 use std::ptr;
 use std::sync::atomic::Ordering;
 
-impl Parent {
+impl Mpv {
     #[inline]
     /// Create a context with which opengl callback functions can be used.
     ///
@@ -81,7 +81,7 @@ unsafe extern "C" fn callback_update_wrapper<F, V>(cb_ctx: *mut libc::c_void)
 pub struct OpenGlContext<'parent, V> {
     api_ctx: *mut MpvOpenGlCbContext,
     update_callback_data: Option<V>,
-    _does_not_outlive: PhantomData<&'parent Parent>,
+    _does_not_outlive: PhantomData<&'parent Mpv>,
 }
 
 unsafe impl<'parent, V> Send for OpenGlContext<'parent, V> {}
@@ -96,7 +96,7 @@ impl<'parent, V> Drop for OpenGlContext<'parent, V> {
 impl<'parent, V> OpenGlContext<'parent, V> {
     fn new<F>(mpv_ctx: *mut MpvHandle,
                          mut proc_addr: F,
-                         parent: PhantomData<&'parent Parent>)
+                         parent: PhantomData<&'parent Mpv>)
                          -> Result<OpenGlContext<'parent, V>>
         where F: for<'a> Fn(&'a str) -> *const () + 'static
     {

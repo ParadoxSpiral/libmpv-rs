@@ -32,8 +32,8 @@ pub fn main() {
         .nth(1)
         .expect("Expected path to media as argument, found nil.");
 
-    // Create a `Parent` (with events enabled) and set some properties.
-    let mpv = Parent::new().unwrap();
+    // Create an `Mpv` and set some properties.
+    let mpv = Mpv::new().unwrap();
     mpv.set_property("cache-initial", 10).unwrap();
     mpv.set_property("volume", 15).unwrap();
     mpv.set_property("vo", "null").unwrap();

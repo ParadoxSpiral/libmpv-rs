@@ -28,12 +28,12 @@ unsafe extern "C" fn event_callback(d: *mut libc::c_void) {
     (*(d as *mut Condvar)).notify_one();
 }
 
-impl Parent {
+impl Mpv {
     #[cfg(feature="events_complex")]
     #[inline]
-    /// Create a new `Parent`.
+    /// Create a new `Mpv`.
     /// The default settings can be probed by running: `$ mpv --show-profile=libmpv`
-    pub fn new() -> Result<Parent> {
+    pub fn new() -> Result<Mpv> {
         let api_version = unsafe { mpv_client_api_version() };
         if ::MPV_CLIENT_API_VERSION != api_version {
             return Err(ErrorKind::VersionMismatch(::MPV_CLIENT_API_VERSION, api_version)
@@ -75,7 +75,7 @@ impl Parent {
                          Err(err)
                      })?;
 
-        Ok(Parent {
+        Ok(Mpv {
                             ctx,
                             ev_iter_notification,
                             ev_to_observe,
@@ -165,7 +165,7 @@ impl Parent {
     }
 }
 
-/// A blocking `Iterator` over some observed events of an mpv instance.
+/// A blocking `Iterator` over some observed events of an `Mpv` instance.
 /// Once the `EventIter` is dropped, it's `Event`s are removed from
 /// the "to be observed" queue, therefore new `Event` invocations won't be observed.
 pub struct EventIter<'parent> {
@@ -176,7 +176,7 @@ pub struct EventIter<'parent> {
     all_to_observe_properties: &'parent Mutex<HashMap<String, libc::uint64_t>>,
     local_to_observe: Vec<Event>,
     all_observed: &'parent Mutex<Vec<Event>>,
-    _does_not_outlive: PhantomData<&'parent Parent>,
+    _does_not_outlive: PhantomData<&'parent Mpv>,
 }
 
 impl<'parent> Drop for EventIter<'parent> {

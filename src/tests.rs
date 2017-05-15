@@ -30,7 +30,7 @@ fn version() {
 
 #[test]
 fn properties() {
-    let mpv = Parent::new().unwrap();
+    let mpv = Mpv::new().unwrap();
     mpv.set_property("cache-initial", 1).unwrap();
     if env::var("CI_BUILD").is_err() {
         mpv.set_property("volume", 0).unwrap();
