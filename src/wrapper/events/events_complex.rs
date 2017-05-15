@@ -76,13 +76,15 @@ impl Parent {
                      })?;
 
         Ok(Parent {
-                            ctx: ctx,
-                            ev_iter_notification: ev_iter_notification,
-                            ev_to_observe: ev_to_observe,
-                            ev_to_observe_properties: ev_to_observe_properties,
-                            ev_observed: ev_observed,
-                            protocols_guard: Mutex::new(()),
-                            opengl_guard: Mutex::new(()),
+                            ctx,
+                            ev_iter_notification,
+                            ev_to_observe,
+                            ev_to_observe_properties,
+                            ev_observed,
+                            #[cfg(feature="custom_protocols")]
+                            protocols_guard: AtomicBool::new(false),
+                            #[cfg(feature="opengl_callback")]
+                            opengl_guard: AtomicBool::new(false),
                         })
     }
 
@@ -167,14 +169,14 @@ impl Parent {
 /// Once the `EventIter` is dropped, it's `Event`s are removed from
 /// the "to be observed" queue, therefore new `Event` invocations won't be observed.
 pub struct EventIter<'parent> {
-    pub(crate) ctx: *mut MpvHandle,
-    pub(crate) first_iteration: bool,
-    pub(crate) notification: &'parent (Mutex<bool>, Condvar),
-    pub(crate) all_to_observe: &'parent Mutex<Vec<Event>>,
-    pub(crate) all_to_observe_properties: &'parent Mutex<HashMap<String, libc::uint64_t>>,
-    pub(crate) local_to_observe: Vec<Event>,
-    pub(crate) all_observed: &'parent Mutex<Vec<Event>>,
-    pub(crate) _does_not_outlive: PhantomData<&'parent Parent>,
+    ctx: *mut MpvHandle,
+    first_iteration: bool,
+    notification: &'parent (Mutex<bool>, Condvar),
+    all_to_observe: &'parent Mutex<Vec<Event>>,
+    all_to_observe_properties: &'parent Mutex<HashMap<String, libc::uint64_t>>,
+    local_to_observe: Vec<Event>,
+    all_observed: &'parent Mutex<Vec<Event>>,
+    _does_not_outlive: PhantomData<&'parent Parent>,
 }
 
 impl<'parent> Drop for EventIter<'parent> {

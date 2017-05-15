@@ -17,7 +17,6 @@
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 use libc;
-use parking_lot::MutexGuard;
 
 use super::*;
 use super::mpv_err;
@@ -28,6 +27,23 @@ use std::marker::PhantomData;
 use std::panic;
 use std::panic::{AssertUnwindSafe, RefUnwindSafe};
 use std::ptr;
+use std::sync::atomic::Ordering;
+
+impl Parent {
+    #[inline]
+    /// Create a context with which opengl callback functions can be used.
+    ///
+    /// `vo` has to be set to `opengl-cb` for this to work properly.
+    pub fn create_opengl_context<F, V>(&self, procaddr: F) -> Result<OpenGlContext<V>>
+        where F: for<'a> Fn(&'a str) -> *const () + 'static
+    {
+        if self.opengl_guard.compare_and_swap(false, true, Ordering::AcqRel) {
+            bail!("Context already exists")
+        } else {
+            OpenGlContext::new(self.ctx, procaddr, PhantomData::<&Self>)
+        }
+    }
+}
 
 unsafe extern "C" fn get_proc_addr_wrapper<F>(cookie: *mut libc::c_void,
                                               name: *const libc::c_char)
@@ -62,28 +78,26 @@ unsafe extern "C" fn callback_update_wrapper<F, V>(cb_ctx: *mut libc::c_void)
 ///
 /// # Safety
 /// Mpv relies on correct and initialized OpenGL state.
-pub struct OpenGlState<'parent, V> {
+pub struct OpenGlContext<'parent, V> {
     api_ctx: *mut MpvOpenGlCbContext,
     update_callback_data: Option<V>,
-    _guard: MutexGuard<'parent, ()>,
     _does_not_outlive: PhantomData<&'parent Parent>,
 }
 
-unsafe impl<'parent, V> Send for OpenGlState<'parent, V> {}
-unsafe impl<'parent, V> Sync for OpenGlState<'parent, V> {}
+unsafe impl<'parent, V> Send for OpenGlContext<'parent, V> {}
+unsafe impl<'parent, V> Sync for OpenGlContext<'parent, V> {}
 
-impl<'parent, V> Drop for OpenGlState<'parent, V> {
+impl<'parent, V> Drop for OpenGlContext<'parent, V> {
     fn drop(&mut self) {
         unsafe { mpv_opengl_cb_uninit_gl(self.api_ctx) };
     }
 }
 
-impl<'parent, V> OpenGlState<'parent, V> {
-    pub(crate) fn new<F>(mpv_ctx: *mut MpvHandle,
+impl<'parent, V> OpenGlContext<'parent, V> {
+    fn new<F>(mpv_ctx: *mut MpvHandle,
                          mut proc_addr: F,
-                         guard: MutexGuard<'parent, ()>,
                          parent: PhantomData<&'parent Parent>)
-                         -> Result<OpenGlState<'parent, V>>
+                         -> Result<OpenGlContext<'parent, V>>
         where F: for<'a> Fn(&'a str) -> *const () + 'static
     {
         let api_ctx =
@@ -92,10 +106,9 @@ impl<'parent, V> OpenGlState<'parent, V> {
 
         let proc_addr_ptr = &mut proc_addr as *mut F;
 
-        mpv_err(OpenGlState {
-                    api_ctx: api_ctx,
+        mpv_err(OpenGlContext {
+                    api_ctx,
                     update_callback_data: None,
-                    _guard: guard,
                     _does_not_outlive: parent,
                 },
                 unsafe {

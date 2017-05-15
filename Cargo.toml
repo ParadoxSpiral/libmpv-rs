@@ -41,7 +41,9 @@ hyper = "0.10"
 git2 = "0.6"
 
 [features]
-default = ["events_complex"]
+default = ["events_complex", "custom_protocols", "opengl_callback"]
 events_simple = [] # Enable simple event handling
 events_complex = [] # Enable complex event handling
+custom_protocols = [] # Enable custom protocol callbacks
+opengl_callback = [] # Enable the opengl callback
 build_libmpv = [] # build libmpv automatically at compile time

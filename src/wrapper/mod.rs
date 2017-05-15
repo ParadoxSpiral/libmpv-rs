@@ -47,9 +47,6 @@ mod errors {
             VersionMismatch(linked: u32, loaded: u32) {
                 description("The library was compiled against a different mpv version than what is present on the system.")
             }
-            ContextExists {
-                description("An opengl or protocol context has already been created.")
-            }
             InvalidUtf8 {
                 description("An unspecified error during utf-8 validity checking ocurred.")
             }
@@ -76,7 +73,6 @@ mod errors {
                 &ErrorKind::VersionMismatch(ref li, ref lo) => {
                     ErrorKind::VersionMismatch(*li, *lo).into()
                 }
-                &ErrorKind::ContextExists => ErrorKind::ContextExists.into(),
                 &ErrorKind::InvalidUtf8 => ErrorKind::InvalidUtf8.into(),
                 &ErrorKind::Null => ErrorKind::Null.into(),
             }
@@ -108,8 +104,10 @@ macro_rules! mpv_cstr_to_string {
 
 /// Contains event related abstractions
 pub mod events;
+#[cfg(feature="custom_protocols")]
 /// Contains abstractions to define custom protocol handlers.
 pub mod protocol;
+#[cfg(feature="opengl_callback")]
 /// Contains abstractions to use the opengl callback interface.
 pub mod opengl_cb;
 
@@ -120,15 +118,13 @@ use parking_lot::Mutex;
 
 use super::raw::*;
 use events::*;
-use protocol::*;
-use opengl_cb::*;
 
 use std::ffi::{CStr, CString};
-use std::marker::PhantomData;
 use std::mem;
 use std::ops::Deref;
-use std::panic::RefUnwindSafe;
 use std::ptr;
+#[cfg(any(feature="custom_protocols", feature="opengl_callback"))]
+use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 #[cfg(unix)]
 use std::ffi::OsStr;
@@ -379,8 +375,10 @@ pub struct Parent {
     ev_to_observe_properties: Mutex<::std::collections::HashMap<String, libc::uint64_t>>,
     #[cfg(feature="events_complex")]
     ev_observed: Mutex<Vec<Event>>,
-    protocols_guard: Mutex<()>,
-    opengl_guard: Mutex<()>,
+    #[cfg(feature="custom_protocols")]
+    protocols_guard: AtomicBool,
+    #[cfg(feature="opengl_callback")]
+    opengl_guard: AtomicBool,
 }
 
 unsafe impl Send for Parent {}
@@ -418,42 +416,13 @@ impl Parent {
                      })?;
 
             Ok(Parent {
-                            ctx: ctx,
-                            protocols_guard: Mutex::new(()),
-                            opengl_guard: Mutex::new(()),
+                            ctx,
+                            #[cfg(feature="custom_protocols")]
+                            protocols_guard: AtomicBool::new(false),
+                            #[cfg(feature="opengl_callback")]
+                            opengl_guard: AtomicBool::new(false),
                         })
 
-    }
-
-    #[inline]
-    /// Create a context with which opengl callback functions can be used.
-    ///
-    /// `vo` has to be set to `opengl-cb` for this to work properly.
-    pub fn create_opengl_context<F, V>(&self, procaddr: F) -> Result<OpenGlState<V>>
-        where F: for<'a> Fn(&'a str) -> *const () + 'static
-    {
-        let guard = self.opengl_guard.try_lock();
-
-        if guard.is_none() {
-            Err(ErrorKind::ContextExists.into())
-        } else {
-            Ok(OpenGlState::new(self.ctx, procaddr, guard.unwrap(), PhantomData::<&Self>)?)
-        }
-    }
-
-    #[inline]
-    /// Create a context with which custom protocols can be registered.
-    pub fn create_protocol_context<T, U>(&self, capacity: usize) -> Result<ProtocolContext<T, U>>
-        where T: RefUnwindSafe,
-              U: RefUnwindSafe
-    {
-        let guard = self.protocols_guard.try_lock();
-
-        if guard.is_none() {
-            Err(ErrorKind::ContextExists.into())
-        } else {
-            Ok(ProtocolContext::new(self.ctx, capacity, guard.unwrap(), PhantomData::<&Self>))
-        }
     }
 
     #[inline]

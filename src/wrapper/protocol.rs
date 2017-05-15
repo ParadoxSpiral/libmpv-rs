@@ -20,7 +20,7 @@
 //! `PlaylistOp::Loadfiles`.
 
 use libc;
-use parking_lot::{Mutex, MutexGuard};
+use parking_lot::Mutex;
 
 use super::*;
 use super::mpv_err;
@@ -32,10 +32,28 @@ use std::mem;
 use std::panic;
 use std::panic::RefUnwindSafe;
 use std::ptr;
+use std::sync::atomic::Ordering;
 #[cfg(unix)]
 use std::ffi::OsStr;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
+
+impl Parent {
+    #[inline]
+    /// Create a context with which custom protocols can be registered.
+    ///
+    /// Returns `None` if a context already exists
+    pub fn create_protocol_context<T, U>(&self, capacity: usize) -> Option<ProtocolContext<T, U>>
+        where T: RefUnwindSafe,
+              U: RefUnwindSafe
+    {
+    	if self.protocols_guard.compare_and_swap(false, true, Ordering::AcqRel) {
+    		None
+    	} else {
+    	    Some(ProtocolContext::new(self.ctx, capacity, PhantomData::<&Self>))
+    	}
+    }
+}
 
 /// Return an initialized `T`, panic on errors.
 pub type StreamOpen<T, U> = fn(&mut U, &str) -> T;
@@ -168,7 +186,6 @@ struct ProtocolData<T, U> {
 pub struct ProtocolContext<'parent, T: RefUnwindSafe, U: RefUnwindSafe> {
     ctx: *mut MpvHandle,
     protocols: Mutex<Vec<Protocol<T, U>>>,
-    _guard: MutexGuard<'parent, ()>,
     _does_not_outlive: PhantomData<&'parent Parent>,
 }
 
@@ -176,15 +193,13 @@ unsafe impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> Send for ProtocolContex
 unsafe impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> Sync for ProtocolContext<'parent, T, U> {}
 
 impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> ProtocolContext<'parent, T, U> {
-    pub(crate) fn new(ctx: *mut MpvHandle,
+    fn new(ctx: *mut MpvHandle,
                       capacity: usize,
-                      guard: MutexGuard<'parent, ()>,
                       marker: PhantomData<&'parent Parent>)
                       -> ProtocolContext<'parent, T, U> {
         ProtocolContext {
-            ctx: ctx,
+            ctx,
             protocols: Mutex::new(Vec::with_capacity(capacity)),
-            _guard: guard,
             _does_not_outlive: marker,
         }
     }
@@ -243,7 +258,7 @@ impl<T: RefUnwindSafe, U: RefUnwindSafe> Protocol<T, U> {
         }
     }
 
-    pub(crate) fn register(&self, ctx: *mut MpvHandle) -> Result<()> {
+    fn register(&self, ctx: *mut MpvHandle) -> Result<()> {
         let name = CString::new(&self.name[..])?;
         unsafe {
             mpv_err((),
