@@ -23,14 +23,14 @@ pub mod events_complex;
 /// TODO
 pub mod events_simple;
 
-use libc;
+use raw::*;
 
 use super::*;
 use super::mpv_err;
 use super::super::{LogLevel, EndFileReason};
-use super::super::raw::*;
 
 use std::ffi::CStr;
+use std::os::raw as ctype;
 
 #[derive(Debug, Clone)]
 #[allow(missing_docs)]
@@ -88,32 +88,50 @@ impl Event {
         }
     }
 
-    fn as_id(&self) -> MpvEventId {
+    fn as_id(&self) -> mpv_event_id {
         match *self {
-            Event::LogMessage { .. } => MpvEventId::LogMessage,
-            Event::StartFile => MpvEventId::StartFile,
-            Event::EndFile { .. } => MpvEventId::EndFile,
-            Event::FileLoaded => MpvEventId::FileLoaded,
-            Event::Idle => MpvEventId::Idle,
-            Event::Tick => MpvEventId::Tick,
-            Event::VideoReconfig => MpvEventId::VideoReconfig,
-            Event::AudioReconfig => MpvEventId::AudioReconfig,
-            Event::Seek => MpvEventId::Seek,
-            Event::PlaybackRestart => MpvEventId::PlaybackRestart,
-            Event::PropertyChange(_) => MpvEventId::PropertyChange,
+            Event::LogMessage { .. } => mpv_event_id::MPV_EVENT_LOG_MESSAGE,
+            Event::StartFile => mpv_event_id::MPV_EVENT_START_FILE,
+            Event::EndFile { .. } => mpv_event_id::MPV_EVENT_END_FILE,
+            Event::FileLoaded => mpv_event_id::MPV_EVENT_FILE_LOADED,
+            Event::Idle => mpv_event_id::MPV_EVENT_IDLE,
+            Event::Tick => mpv_event_id::MPV_EVENT_TICK,
+            Event::VideoReconfig => mpv_event_id::MPV_EVENT_VIDEO_RECONFIG,
+            Event::AudioReconfig => mpv_event_id::MPV_EVENT_AUDIO_RECONFIG,
+            Event::Seek => mpv_event_id::MPV_EVENT_SEEK,
+            Event::PlaybackRestart => mpv_event_id::MPV_EVENT_PLAYBACK_RESTART,
+            Event::PropertyChange(_) => mpv_event_id::MPV_EVENT_PROPERTY_CHANGE,
         }
     }
 
-    fn endfile_from_raw(raw: *mut libc::c_void) -> Event {
+    fn from_raw(raw: &mpv_event) -> Event {
+        debug_assert!(mpv_err((), raw.error).is_ok());
+        match raw.event_id {
+            mpv_event_id::MPV_EVENT_LOG_MESSAGE => Event::logmessage_from_raw(raw.data),
+            mpv_event_id::MPV_EVENT_START_FILE => Event::StartFile,
+            mpv_event_id::MPV_EVENT_END_FILE => Event::endfile_from_raw(raw.data),
+            mpv_event_id::MPV_EVENT_FILE_LOADED => Event::FileLoaded,
+            mpv_event_id::MPV_EVENT_IDLE => Event::Idle,
+            mpv_event_id::MPV_EVENT_TICK => Event::Tick,
+            mpv_event_id::MPV_EVENT_VIDEO_RECONFIG => Event::VideoReconfig,
+            mpv_event_id::MPV_EVENT_AUDIO_RECONFIG => Event::AudioReconfig,
+            mpv_event_id::MPV_EVENT_SEEK => Event::Seek,
+            mpv_event_id::MPV_EVENT_PLAYBACK_RESTART => Event::PlaybackRestart,
+            mpv_event_id::MPV_EVENT_PROPERTY_CHANGE => Event::property_from_raw(raw.data),
+            _ => unreachable!(),
+        }
+    }
+
+    fn endfile_from_raw(raw: *mut ctype::c_void) -> Event {
         debug_assert!(!raw.is_null());
-        let raw = unsafe { &mut *(raw as *mut MpvEventEndFile) };
+        let raw = unsafe { &mut *(raw as *mut mpv_event_end_file) };
 
         Event::EndFile {
-            reason: raw.reason,
+            reason: mpv_end_file_reason::from(raw.reason as u32),
             error: {
-                let err = MpvError::from_i32(raw.error).unwrap();
-                if err != MpvError::Success {
-                    Some(err.into())
+                let err = mpv_err((), raw.error);
+                if err.is_err() {
+                    Some(err.unwrap_err())
                 } else {
                     None
                 }
@@ -121,9 +139,9 @@ impl Event {
         }
     }
 
-    fn logmessage_from_raw(raw: *mut libc::c_void) -> Event {
+    fn logmessage_from_raw(raw: *mut ctype::c_void) -> Event {
         debug_assert!(!raw.is_null());
-        let raw = unsafe { &mut *(raw as *mut MpvEventLogMessage) };
+        let raw = unsafe { &mut *(raw as *mut mpv_event_log_message) };
         Event::LogMessage {
             prefix: unsafe { CStr::from_ptr(raw.prefix).to_str().unwrap().into() },
             level: raw.log_level,
@@ -131,9 +149,9 @@ impl Event {
         }
     }
 
-    fn property_from_raw(raw: *mut libc::c_void) -> Event {
+    fn property_from_raw(raw: *mut ctype::c_void) -> Event {
         debug_assert!(!raw.is_null());
-        let raw = unsafe { &mut *(raw as *mut MpvEventProperty) };
+        let raw = unsafe { &mut *(raw as *mut mpv_event_property) };
         Event::PropertyChange((unsafe { CStr::from_ptr(raw.name).to_str().unwrap().into() },
                                PropertyData::from_raw(raw.format, raw.data)))
     }
@@ -146,64 +164,42 @@ pub enum PropertyData {
     String(String),
     OsdString(String),
     Flag(bool),
-    Int64(libc::int64_t),
-    Double(libc::c_double),
+    Int64(i64),
+    Double(ctype::c_double),
 }
 
 impl PropertyData {
-    fn format(&self) -> MpvFormat {
+    fn format(&self) -> mpv_format {
         match *self {
-            PropertyData::String(_) => MpvFormat::String,
-            PropertyData::OsdString(_) => MpvFormat::OsdString,
-            PropertyData::Flag(_) => MpvFormat::Flag,
-            PropertyData::Int64(_) => MpvFormat::Int64,
-            PropertyData::Double(_) => MpvFormat::Double,
+            PropertyData::String(_) => mpv_format::MPV_FORMAT_STRING,
+            PropertyData::OsdString(_) => mpv_format::MPV_FORMAT_OSD_STRING,
+            PropertyData::Flag(_) => mpv_format::MPV_FORMAT_FLAG,
+            PropertyData::Int64(_) => mpv_format::MPV_FORMAT_INT64,
+            PropertyData::Double(_) => mpv_format::MPV_FORMAT_DOUBLE,
         }
     }
 
-    fn from_raw(fmt: MpvFormat, ptr: *mut libc::c_void) -> PropertyData {
+    fn from_raw(fmt: mpv_format, ptr: *mut ctype::c_void) -> PropertyData {
         debug_assert!(!ptr.is_null());
         match fmt {
-            MpvFormat::Flag => PropertyData::Flag(unsafe { *(ptr as *mut libc::int64_t) } != 0),
-            MpvFormat::Int64 => PropertyData::Int64(unsafe { *(ptr as *mut _) }),
-            MpvFormat::Double => PropertyData::Double(unsafe { *(ptr as *mut _) }),
+            mpv_format::MPV_FORMAT_FLAG => PropertyData::Flag(unsafe { *(ptr as *mut i64) } != 0),
+            mpv_format::MPV_FORMAT_INT64 => PropertyData::Int64(unsafe { *(ptr as *mut _) }),
+            mpv_format::MPV_FORMAT_DOUBLE => PropertyData::Double(unsafe { *(ptr as *mut _) }),
             _ => unreachable!(),
         }
     }
 }
 
-impl MpvEvent {
-    // WARNING: This ignores the error value, as it is only used for asynchronous calls
-    fn as_owned(&self) -> Event {
-        debug_assert!(mpv_err((), self.error).is_ok());
-        match self.event_id {
-            MpvEventId::LogMessage => Event::logmessage_from_raw(self.data),
-            MpvEventId::StartFile => Event::StartFile,
-            MpvEventId::EndFile => Event::endfile_from_raw(self.data),
-            MpvEventId::FileLoaded => Event::FileLoaded,
-            MpvEventId::Idle => Event::Idle,
-            MpvEventId::Tick => Event::Tick,
-            MpvEventId::VideoReconfig => Event::VideoReconfig,
-            MpvEventId::AudioReconfig => Event::AudioReconfig,
-            MpvEventId::Seek => Event::Seek,
-            MpvEventId::PlaybackRestart => Event::PlaybackRestart,
-            MpvEventId::PropertyChange => Event::property_from_raw(self.data),
-            _ => unreachable!(),
-        }
-    }
-}
-
-impl MpvLogLevel {
-    fn as_str(&self) -> &str {
-        match *self {
-            MpvLogLevel::None => "no",
-            MpvLogLevel::Fatal => "fatal",
-            MpvLogLevel::Error => "error",
-            MpvLogLevel::Warn => "warn",
-            MpvLogLevel::Info => "info",
-            MpvLogLevel::V => "v",
-            MpvLogLevel::Debug => "debug",
-            MpvLogLevel::Trace => "trace",
-        }
+// TODO: How to do this more nicely? Coherence doesn't make this easy
+fn mpv_log_level_as_str(lvl: mpv_log_level) -> &'static str {
+    match lvl {
+        mpv_log_level::MPV_LOG_LEVEL_NONE => "no",
+        mpv_log_level::MPV_LOG_LEVEL_FATAL => "fatal",
+        mpv_log_level::MPV_LOG_LEVEL_ERROR => "error",
+        mpv_log_level::MPV_LOG_LEVEL_WARN => "warn",
+        mpv_log_level::MPV_LOG_LEVEL_INFO => "info",
+        mpv_log_level::MPV_LOG_LEVEL_V => "v",
+        mpv_log_level::MPV_LOG_LEVEL_DEBUG => "debug",
+        mpv_log_level::MPV_LOG_LEVEL_TRACE => "trace",
     }
 }

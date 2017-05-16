@@ -39,28 +39,27 @@
 // - update constants in build.rs
 // - run tests and examples to test whether they still work
 
-extern crate libc;
+extern crate mpv_sys as raw;
 extern crate parking_lot;
-#[macro_use]
-extern crate enum_primitive;
 #[macro_use]
 extern crate error_chain;
 
+use std::os::raw as ctype;
+
 /// Contains FFI bindings to libmpv functions and data structures.
-pub mod raw;
-pub use raw::MpvLogLevel as LogLevel;
+pub use raw::mpv_log_level as LogLevel;
 /// The reason an `Event::EndFile` was fired.
-pub use raw::MpvEndFileReason as EndFileReason;
+pub use raw::mpv_end_file_reason as EndFileReason;
 mod wrapper;
 pub use wrapper::*;
 #[cfg(test)]
 mod tests;
 
 #[allow(missing_docs)]
-pub const MPV_CLIENT_API_MAJOR: u32 = 1;
+pub const MPV_CLIENT_API_MAJOR: ctype::c_ulong = 1;
 #[allow(missing_docs)]
-pub const MPV_CLIENT_API_MINOR: u32 = 24;
+pub const MPV_CLIENT_API_MINOR: ctype::c_ulong = 24;
 #[allow(missing_docs)]
-pub const MPV_CLIENT_API_VERSION: u32 = {
+pub const MPV_CLIENT_API_VERSION: ctype::c_ulong = {
     MPV_CLIENT_API_MAJOR << 16 | MPV_CLIENT_API_MINOR
 };

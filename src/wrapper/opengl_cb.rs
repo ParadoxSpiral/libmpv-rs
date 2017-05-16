@@ -16,8 +16,6 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-use libc;
-
 use super::*;
 use super::mpv_err;
 use super::super::raw::*;
@@ -27,6 +25,7 @@ use std::marker::PhantomData;
 use std::panic;
 use std::panic::{AssertUnwindSafe, RefUnwindSafe};
 use std::ptr;
+use std::os::raw as ctype;
 use std::sync::atomic::Ordering;
 
 impl Mpv {
@@ -46,9 +45,9 @@ impl Mpv {
     }
 }
 
-unsafe extern "C" fn get_proc_addr_wrapper<F>(cookie: *mut libc::c_void,
-                                              name: *const libc::c_char)
-                                              -> *mut libc::c_void
+unsafe extern "C" fn get_proc_addr_wrapper<F>(cookie: *mut ctype::c_void,
+                                              name: *const ctype::c_char)
+                                              -> *mut ctype::c_void
     where F: for<'a> Fn(&'a str) -> *const ()
 {
     let fun = cookie as *mut F;
@@ -56,7 +55,7 @@ unsafe extern "C" fn get_proc_addr_wrapper<F>(cookie: *mut libc::c_void,
     let ret = panic::catch_unwind(AssertUnwindSafe(|| {
                                                        let name =
                                                            CStr::from_ptr(name).to_str().unwrap();
-                                                       (*fun)(name) as *mut () as *mut libc::c_void
+                                                       (*fun)(name) as *mut () as *mut ctype::c_void
                                                    }));
     if ret.is_ok() {
         ret.unwrap()
@@ -66,7 +65,7 @@ unsafe extern "C" fn get_proc_addr_wrapper<F>(cookie: *mut libc::c_void,
 }
 
 #[allow(unused_must_use)]
-unsafe extern "C" fn callback_update_wrapper<F, V>(cb_ctx: *mut libc::c_void)
+unsafe extern "C" fn callback_update_wrapper<F, V>(cb_ctx: *mut ctype::c_void)
     where F: for<'a> Fn(&'a V) + RefUnwindSafe + 'static,
           V: RefUnwindSafe
 {
@@ -80,7 +79,7 @@ unsafe extern "C" fn callback_update_wrapper<F, V>(cb_ctx: *mut libc::c_void)
 /// # Safety
 /// Mpv relies on correct and initialized OpenGL state.
 pub struct OpenGlContext<'parent, V> {
-    api_ctx: *mut MpvOpenGlCbContext,
+    api_ctx: *mut mpv_opengl_cb_context,
     update_callback_data: Option<V>,
     _does_not_outlive: PhantomData<&'parent Mpv>,
 }
@@ -95,14 +94,16 @@ impl<'parent, V> Drop for OpenGlContext<'parent, V> {
 }
 
 impl<'parent, V> OpenGlContext<'parent, V> {
-    fn new<F>(mpv_ctx: *mut MpvHandle,
+    fn new<F>(mpv_ctx: *mut mpv_handle,
               mut proc_addr: F,
               parent: PhantomData<&'parent Mpv>)
               -> Result<OpenGlContext<'parent, V>>
         where F: for<'a> Fn(&'a str) -> *const () + 'static
     {
-        let api_ctx =
-            unsafe { mpv_get_sub_api(mpv_ctx, MpvSubApi::OpenglCb) as *mut MpvOpenGlCbContext };
+        let api_ctx = unsafe {
+            mpv_get_sub_api(mpv_ctx, mpv_sub_api::MPV_SUB_API_OPENGL_CB) as
+            *mut mpv_opengl_cb_context
+        };
         debug_assert!(!api_ctx.is_null());
 
         let proc_addr_ptr = &mut proc_addr as *mut F;
@@ -115,8 +116,8 @@ impl<'parent, V> OpenGlContext<'parent, V> {
                 unsafe {
                     mpv_opengl_cb_init_gl(api_ctx,
                                           ptr::null(),
-                                          get_proc_addr_wrapper::<F>,
-                                          proc_addr_ptr as *mut libc::c_void)
+                                          Some(get_proc_addr_wrapper::<F>),
+                                          proc_addr_ptr as *mut ctype::c_void)
                 })
     }
 
@@ -124,7 +125,7 @@ impl<'parent, V> OpenGlContext<'parent, V> {
     /// Set the fbo that mpv will draw on, and start rendering.
     /// Passing `0` as `w` or `h` will choose the size of the fbo.
     /// If `h` is negative, the coordinate system is flipped.
-    pub unsafe fn draw(&self, fbo: libc::c_int, w: usize, h: isize) -> Result<()> {
+    pub unsafe fn draw(&self, fbo: ctype::c_int, w: usize, h: isize) -> Result<()> {
         mpv_err((), mpv_opengl_cb_draw(self.api_ctx, fbo, w as _, h as _))
     }
 
@@ -148,10 +149,10 @@ impl<'parent, V> OpenGlContext<'parent, V> {
               V: RefUnwindSafe
     {
         mpv_opengl_cb_set_update_callback(self.api_ctx,
-                                          callback_update_wrapper::<F, V>,
+                                          Some(callback_update_wrapper::<F, V>),
                                           &mut (&callback as *const F, &mut data as *mut V) as
                                           *mut (*const F, *mut V) as
-                                          *mut libc::c_void);
+                                          *mut ctype::c_void);
 
         self.update_callback_data = Some(data);
     }

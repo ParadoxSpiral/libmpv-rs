@@ -19,18 +19,18 @@
 //! This allows registering custom protocols, which then can be used via
 //! `PlaylistOp::Loadfiles`.
 
-use libc;
 use parking_lot::Mutex;
+use raw::*;
 
 use super::*;
 use super::mpv_err;
-use super::super::raw::*;
 
 use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
 use std::mem;
 use std::panic;
 use std::panic::RefUnwindSafe;
+use std::os::raw as ctype;
 use std::ptr;
 use std::sync::atomic::Ordering;
 #[cfg(unix)]
@@ -64,24 +64,24 @@ pub type StreamClose<T> = fn(Box<T>);
 pub type StreamSeek<T> = fn(&mut T, i64) -> i64;
 /// Read nbytes into the given buffer.
 /// Return either the number of read bytes, `0` on EOF, `-1` on error.
-pub type StreamRead<T> = fn(&mut T, *mut libc::c_char, u64) -> i64;
+pub type StreamRead<T> = fn(&mut T, *mut ctype::c_char, u64) -> i64;
 /// Return the total size of the stream in bytes.
 pub type StreamSize<T> = fn(&mut T) -> i64;
 
-unsafe extern "C" fn open_wrapper<T, U>(user_data: *mut libc::c_void,
-                                        uri: *mut libc::c_char,
-                                        info: *mut MpvStreamCbInfo)
-                                        -> libc::c_int
+unsafe extern "C" fn open_wrapper<T, U>(user_data: *mut ctype::c_void,
+                                        uri: *mut ctype::c_char,
+                                        info: *mut mpv_stream_cb_info)
+                                        -> ctype::c_int
     where T: RefUnwindSafe,
           U: RefUnwindSafe
 {
     let data = user_data as *mut ProtocolData<T, U>;
 
     (*info).cookie = user_data;
-    (*info).read_fn = read_wrapper::<T, U>;
-    (*info).seek_fn = seek_wrapper::<T, U>;
-    (*info).size_fn = size_wrapper::<T, U>;
-    (*info).close_fn = close_wrapper::<T, U>;
+    (*info).read_fn = Some(read_wrapper::<T, U>);
+    (*info).seek_fn = Some(seek_wrapper::<T, U>);
+    (*info).size_fn = Some(size_wrapper::<T, U>);
+    (*info).close_fn = Some(close_wrapper::<T, U>);
 
     let ret = panic::catch_unwind(|| {
                                       let uri = CStr::from_ptr(uri as *const _);
@@ -92,14 +92,14 @@ unsafe extern "C" fn open_wrapper<T, U>(user_data: *mut libc::c_void,
     if ret.is_ok() {
         0
     } else {
-        MpvError::Generic as libc::c_int
+        mpv_error::MPV_ERROR_GENERIC as _
     }
 }
 
-unsafe extern "C" fn read_wrapper<T, U>(cookie: *mut libc::c_void,
-                                        buf: *mut libc::c_char,
-                                        nbytes: libc::uint64_t)
-                                        -> libc::int64_t
+unsafe extern "C" fn read_wrapper<T, U>(cookie: *mut ctype::c_void,
+                                        buf: *mut ctype::c_char,
+                                        nbytes: u64)
+                                        -> i64
     where T: RefUnwindSafe,
           U: RefUnwindSafe
 {
@@ -112,16 +112,14 @@ unsafe extern "C" fn read_wrapper<T, U>(cookie: *mut libc::c_void,
     if ret.is_ok() { ret.unwrap() } else { -1 }
 }
 
-unsafe extern "C" fn seek_wrapper<T, U>(cookie: *mut libc::c_void,
-                                        offset: libc::int64_t)
-                                        -> libc::int64_t
+unsafe extern "C" fn seek_wrapper<T, U>(cookie: *mut ctype::c_void, offset: i64) -> i64
     where T: RefUnwindSafe,
           U: RefUnwindSafe
 {
     let data = cookie as *mut ProtocolData<T, U>;
 
     if (*data).seek_fn.is_none() {
-        return MpvError::Unsupported as libc::int64_t;
+        return mpv_error::MPV_ERROR_UNSUPPORTED as _;
     }
 
     let ret = panic::catch_unwind(|| {
@@ -132,18 +130,18 @@ unsafe extern "C" fn seek_wrapper<T, U>(cookie: *mut libc::c_void,
     if ret.is_ok() {
         ret.unwrap()
     } else {
-        MpvError::Generic as libc::int64_t
+        mpv_error::MPV_ERROR_GENERIC as _
     }
 }
 
-unsafe extern "C" fn size_wrapper<T, U>(cookie: *mut libc::c_void) -> libc::int64_t
+unsafe extern "C" fn size_wrapper<T, U>(cookie: *mut ctype::c_void) -> i64
     where T: RefUnwindSafe,
           U: RefUnwindSafe
 {
     let data = cookie as *mut ProtocolData<T, U>;
 
     if (*data).size_fn.is_none() {
-        return MpvError::Unsupported as libc::int64_t;
+        return mpv_error::MPV_ERROR_UNSUPPORTED as _;
     }
 
     let ret = panic::catch_unwind(|| {
@@ -153,12 +151,12 @@ unsafe extern "C" fn size_wrapper<T, U>(cookie: *mut libc::c_void) -> libc::int6
     if ret.is_ok() {
         ret.unwrap()
     } else {
-        MpvError::Unsupported as libc::int64_t
+        mpv_error::MPV_ERROR_UNSUPPORTED as _
     }
 }
 
 #[allow(unused_must_use)]
-unsafe extern "C" fn close_wrapper<T, U>(cookie: *mut libc::c_void)
+unsafe extern "C" fn close_wrapper<T, U>(cookie: *mut ctype::c_void)
     where T: RefUnwindSafe,
           U: RefUnwindSafe
 {
@@ -184,7 +182,7 @@ struct ProtocolData<T, U> {
 /// This context holds state relevant to custom protocols.
 /// It is created by calling `Mpv::create_protocol_context`.
 pub struct ProtocolContext<'parent, T: RefUnwindSafe, U: RefUnwindSafe> {
-    ctx: *mut MpvHandle,
+    ctx: *mut mpv_handle,
     protocols: Mutex<Vec<Protocol<T, U>>>,
     _does_not_outlive: PhantomData<&'parent Mpv>,
 }
@@ -193,7 +191,7 @@ unsafe impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> Send for ProtocolContex
 unsafe impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> Sync for ProtocolContext<'parent, T, U> {}
 
 impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> ProtocolContext<'parent, T, U> {
-    fn new(ctx: *mut MpvHandle,
+    fn new(ctx: *mut mpv_handle,
            capacity: usize,
            marker: PhantomData<&'parent Mpv>)
            -> ProtocolContext<'parent, T, U> {
@@ -258,14 +256,14 @@ impl<T: RefUnwindSafe, U: RefUnwindSafe> Protocol<T, U> {
         }
     }
 
-    fn register(&self, ctx: *mut MpvHandle) -> Result<()> {
+    fn register(&self, ctx: *mut mpv_handle) -> Result<()> {
         let name = CString::new(&self.name[..])?;
         unsafe {
             mpv_err((),
                     mpv_stream_cb_add_ro(ctx,
                                          name.as_ptr(),
                                          self.data as *mut _,
-                                         open_wrapper::<T, U> as _))
+                                         Some(open_wrapper::<T, U>)))
         }
     }
 }

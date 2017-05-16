@@ -16,15 +16,15 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-use libc;
 use parking_lot::{Condvar, Mutex};
 
 use super::*;
 
 use std::collections::HashMap;
 use std::marker::PhantomData;
+use std::os::raw as ctype;
 
-unsafe extern "C" fn event_callback(d: *mut libc::c_void) {
+unsafe extern "C" fn event_callback(d: *mut ctype::c_void) {
     (*(d as *mut Condvar)).notify_one();
 }
 
@@ -48,7 +48,7 @@ impl Mpv {
             let ev_iter_notification = Box::new((Mutex::new(false), Condvar::new()));
             unsafe {
                 mpv_set_wakeup_callback(ctx,
-                                        event_callback,
+                                        Some(event_callback),
                                         &ev_iter_notification.1 as *const Condvar as *mut Condvar as
                                         *mut _);
             }
@@ -60,9 +60,8 @@ impl Mpv {
         };
 
         for i in 2..24 {
-            if let Err(e) = mpv_err((), unsafe {
-                mpv_request_event(ctx, MpvEventId::from_i32(i).unwrap(), 0)
-            }) {
+            if let Err(e) = mpv_err((),
+                                    unsafe { mpv_request_event(ctx, mpv_event_id::from(i), 0) }) {
                 unsafe { mpv_terminate_destroy(ctx) };
                 return Err(e);
             }
@@ -148,7 +147,7 @@ impl Mpv {
                 }
 
                 if let Event::LogMessage { level: lvl, .. } = *elem {
-                    let min_level = CString::new(lvl.as_str())?;
+                    let min_level = CString::new(mpv_log_level_as_str(lvl))?;
                     mpv_err((),
                             unsafe { mpv_request_log_messages(self.ctx, min_level.as_ptr()) })?;
                 }
@@ -198,11 +197,11 @@ impl Mpv {
 /// Once the `EventIter` is dropped, it's `Event`s are removed from
 /// the "to be observed" queue, therefore new `Event` invocations won't be observed.
 pub struct EventIter<'parent> {
-    ctx: *mut MpvHandle,
+    ctx: *mut mpv_handle,
     first_iteration: bool,
     notification: &'parent (Mutex<bool>, Condvar),
     all_to_observe: &'parent Mutex<Vec<Event>>,
-    all_to_observe_properties: &'parent Mutex<HashMap<String, libc::uint64_t>>,
+    all_to_observe_properties: &'parent Mutex<HashMap<String, u64>>,
     local_to_observe: Vec<Event>,
     all_observed: &'parent Mutex<Vec<Event>>,
     _does_not_outlive: PhantomData<&'parent Mpv>,
@@ -228,8 +227,8 @@ impl<'parent> Drop for EventIter<'parent> {
                         }
                         return true;
                     }
-                } else if MpvEventId::LogMessage == outer_ev.as_id() && outer_ev == inner_ev {
-                    debug_assert_eq!("no", MpvLogLevel::None.as_str());
+                } else if mpv_event_id::MPV_EVENT_LOG_MESSAGE == outer_ev.as_id() &&
+                          outer_ev == inner_ev {
                     let min_level = &*b"no\0";
                     unsafe { mpv_request_log_messages(self.ctx, min_level.as_ptr() as _) };
                     return true;
@@ -270,11 +269,11 @@ impl<'parent> Iterator for EventIter<'parent> {
                     let event = unsafe { &*mpv_wait_event(self.ctx, 0f32 as _) };
                     let ev_id = event.event_id;
 
-                    if ev_id == MpvEventId::QueueOverflow {
+                    if ev_id == mpv_event_id::MPV_EVENT_QUEUE_OVERFLOW {
                         // The queue needs to be emptied asap to prevent loss of events
                         // This should happen very rarely, as the queue size is 1k (2016-10-12)
                         break;
-                    } else if ev_id == MpvEventId::None {
+                    } else if ev_id == mpv_event_id::MPV_EVENT_NONE {
                         if last {
                             break;
                         } else {
@@ -284,13 +283,13 @@ impl<'parent> Iterator for EventIter<'parent> {
                     }
                     for local_ob_ev in &self.local_to_observe {
                         if ev_id == local_ob_ev.as_id() {
-                            ret_events.push(event.as_owned());
+                            ret_events.push(Event::from_raw(event));
                             continue 'events;
                         }
                     }
                     for all_ob_ev in &*all_to_observe {
                         if ev_id == all_ob_ev.as_id() {
-                            observed.push(event.as_owned());
+                            observed.push(Event::from_raw(event));
                             continue 'events;
                         }
                     }

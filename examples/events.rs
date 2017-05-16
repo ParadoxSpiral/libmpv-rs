@@ -48,7 +48,7 @@ pub fn main() {
                                             Event::Seek,
                                             Event::PlaybackRestart,
                                             Event::EndFile {
-                                                reason: EndFileReason::Eof,
+                                                reason: EndFileReason::MPV_END_FILE_REASON_EOF,
                                                 error: None,
                                             }])
                 .unwrap();
@@ -88,13 +88,13 @@ pub fn main() {
             }
         });
         scope.spawn(|| {
-                        let iter = mpv.observe_events(&[Event::empty_logmessage(LogLevel::Info)])
-                            .unwrap();
+            let iter = mpv.observe_events(&[Event::empty_logmessage(LogLevel::MPV_LOG_LEVEL_INFO)])
+                .unwrap();
 
-                        for vec in iter {
-                            println!("log: {:#?}", vec);
-                        }
-                    });
+            for vec in iter {
+                println!("log: {:#?}", vec);
+            }
+        });
 
         // Add a file to play, ytdl was set to true for this.
         mpv.playlist_load_files(&[(&path, FileState::AppendPlay, None)])

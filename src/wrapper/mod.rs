@@ -20,8 +20,9 @@ mod errors {
     #![allow(missing_docs)]
     #[cfg(feature="events_complex")]
     use super::events::Event;
-    use super::super::raw::MpvError;
+    use raw::mpv_error;
     use std::ffi::NulError;
+    use std::os::raw as ctype;
     use std::str::Utf8Error;
 
     // FIXME: Once error_chain issue 134 is solved, this should derive Clone, and use RCs
@@ -30,7 +31,7 @@ mod errors {
         foreign_links {
             Nul(NulError);
             Utf8(Utf8Error);
-            Native(MpvError);
+            Native(mpv_error);
         }
 
         errors {
@@ -44,7 +45,7 @@ mod errors {
             InvalidArgument {
                 description("An invalid argument was passed to an mpv API")
             }
-            VersionMismatch(linked: u32, loaded: u32) {
+            VersionMismatch(linked: ctype::c_ulong, loaded: ctype::c_ulong) {
                 description("The library was compiled against a different mpv version than what is present on the system.")
             }
             InvalidUtf8 {
@@ -111,17 +112,16 @@ pub mod protocol;
 /// Contains abstractions to use the opengl callback interface.
 pub mod opengl_cb;
 
-use enum_primitive::FromPrimitive;
-use libc;
 use parking_lot;
 use parking_lot::Mutex;
+use raw::*;
 
-use super::raw::*;
 use events::*;
 
 use std::ffi::{CStr, CString};
 use std::mem;
 use std::ops::Deref;
+use std::os::raw as ctype;
 use std::ptr;
 #[cfg(any(feature="custom_protocols", feature="opengl_callback"))]
 use std::sync::atomic::AtomicBool;
@@ -131,11 +131,11 @@ use std::ffi::OsStr;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 
-fn mpv_err<T>(ret: T, err_val: libc::c_int) -> Result<T> {
+fn mpv_err<T>(ret: T, err_val: ctype::c_int) -> Result<T> {
     if err_val == 0 {
         Ok(ret)
     } else {
-        Err(ErrorKind::Native(MpvError::from_i32(err_val).unwrap()).into())
+        Err(ErrorKind::Native(mpv_error::from(err_val)).into())
     }
 }
 
@@ -143,7 +143,7 @@ fn mpv_err<T>(ret: T, err_val: libc::c_int) -> Result<T> {
 /// This trait describes which types are allowed to be passed to getter mpv APIs.
 pub unsafe trait GetData: Sized {
     #[doc(hidden)]
-    fn get_from_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(mut fun: F) -> Result<Self> {
+    fn get_from_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(mut fun: F) -> Result<Self> {
         let mut ptr = unsafe { mem::zeroed() };
         let _ = fun(&mut ptr as *mut Self as _)?;
         Ok(ptr)
@@ -155,9 +155,9 @@ pub unsafe trait GetData: Sized {
 /// This trait describes which types are allowed to be passed to setter mpv APIs.
 pub unsafe trait SetData: Sized {
     #[doc(hidden)]
-    fn call_as_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(mut self,
-                                                                   mut fun: F)
-                                                                   -> Result<T> {
+    fn call_as_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(mut self,
+                                                                    mut fun: F)
+                                                                    -> Result<T> {
         fun(&mut self as *mut Self as _)
     }
     fn get_format() -> Format;
@@ -193,7 +193,7 @@ unsafe impl SetData for i64 {
 
 unsafe impl GetData for bool {
     #[inline]
-    fn get_from_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(mut fun: F) -> Result<bool> {
+    fn get_from_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(mut fun: F) -> Result<bool> {
         let ptr = unsafe { &mut mem::zeroed() } as *mut i64;
         let _ = fun(ptr as _)?;
         Ok(match unsafe { *ptr } {
@@ -211,7 +211,7 @@ unsafe impl GetData for bool {
 
 unsafe impl SetData for bool {
     #[inline]
-    fn call_as_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(self, mut fun: F) -> Result<T> {
+    fn call_as_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(self, mut fun: F) -> Result<T> {
         let mut cpy: i64 = if self { 1 } else { 0 };
         fun(&mut cpy as *mut i64 as *mut _)
     }
@@ -224,9 +224,9 @@ unsafe impl SetData for bool {
 
 unsafe impl GetData for String {
     #[inline]
-    fn get_from_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(mut fun: F) -> Result<String> {
+    fn get_from_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(mut fun: F) -> Result<String> {
         let ptr = &mut ptr::null();
-        let _ = fun(ptr as *mut *const libc::c_char as _)?;
+        let _ = fun(ptr as *mut *const ctype::c_char as _)?;
 
         let ret = mpv_cstr_to_str!(unsafe { CStr::from_ptr(*ptr) })?
             .to_owned();
@@ -242,9 +242,9 @@ unsafe impl GetData for String {
 
 unsafe impl SetData for String {
     #[inline]
-    fn call_as_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(self, mut fun: F) -> Result<T> {
+    fn call_as_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(self, mut fun: F) -> Result<T> {
         let string = CString::new(self)?;
-        fun((&mut string.as_ptr()) as *mut *const libc::c_char as *mut _)
+        fun((&mut string.as_ptr()) as *mut *const ctype::c_char as *mut _)
     }
 
     #[inline]
@@ -270,10 +270,10 @@ impl<'a> Drop for MpvStr<'a> {
 
 unsafe impl<'a> GetData for MpvStr<'a> {
     #[inline]
-    fn get_from_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(mut fun: F)
-                                                                    -> Result<MpvStr<'a>> {
+    fn get_from_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(mut fun: F)
+                                                                     -> Result<MpvStr<'a>> {
         let ptr = &mut ptr::null();
-        let _ = fun(ptr as *mut *const libc::c_char as _)?;
+        let _ = fun(ptr as *mut *const ctype::c_char as _)?;
 
         Ok(MpvStr(mpv_cstr_to_str!(unsafe { CStr::from_ptr(*ptr) })?))
     }
@@ -286,9 +286,9 @@ unsafe impl<'a> GetData for MpvStr<'a> {
 
 unsafe impl<'a> SetData for &'a str {
     #[inline]
-    fn call_as_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(self, mut fun: F) -> Result<T> {
+    fn call_as_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(self, mut fun: F) -> Result<T> {
         let string = CString::new(self)?;
-        fun((&mut string.as_ptr()) as *mut *const libc::c_char as *mut _)
+        fun((&mut string.as_ptr()) as *mut *const ctype::c_char as *mut _)
     }
 
     #[inline]
@@ -310,7 +310,7 @@ impl Deref for OsdString {
 
 unsafe impl<'a> GetData for OsdString {
     #[inline]
-    fn get_from_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(fun: F) -> Result<OsdString> {
+    fn get_from_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(fun: F) -> Result<OsdString> {
         Ok(OsdString(String::get_from_c_void(fun)?))
     }
 
@@ -322,7 +322,7 @@ unsafe impl<'a> GetData for OsdString {
 
 unsafe impl<'a> SetData for OsdString {
     #[inline]
-    fn call_as_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(self, fun: F) -> Result<T> {
+    fn call_as_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(self, fun: F) -> Result<T> {
         self.0.call_as_c_void(fun)
     }
 
@@ -334,7 +334,7 @@ unsafe impl<'a> SetData for OsdString {
 
 #[allow(missing_docs)]
 #[derive(Debug, Clone)]
-/// Subset of `MpvFormat` used by the public API.
+/// Subset of `mpv_format` used by the public API.
 pub enum Format {
     String,
     OsdString,
@@ -344,33 +344,14 @@ pub enum Format {
 }
 
 impl Format {
-    fn as_mpv_format(&self) -> MpvFormat {
+    fn as_mpv_format(&self) -> mpv_format {
         match *self {
-            Format::String => MpvFormat::String,
-            Format::OsdString => MpvFormat::OsdString,
-            Format::Flag => MpvFormat::Flag,
-            Format::Int64 => MpvFormat::Int64,
-            Format::Double => MpvFormat::Double,
+            Format::String => mpv_format::MPV_FORMAT_STRING,
+            Format::OsdString => mpv_format::MPV_FORMAT_OSD_STRING,
+            Format::Flag => mpv_format::MPV_FORMAT_FLAG,
+            Format::Int64 => mpv_format::MPV_FORMAT_INT64,
+            Format::Double => mpv_format::MPV_FORMAT_DOUBLE,
         }
-    }
-}
-
-impl MpvError {
-    fn as_val(&self) -> libc::c_int {
-        *self as libc::c_int
-    }
-
-    #[inline]
-    /// Returns the associated error string.
-    pub fn error_string(&self) -> &str {
-        let raw = unsafe { mpv_error_string(self.as_val()) };
-        unsafe { CStr::from_ptr(raw) }.to_str().unwrap()
-    }
-}
-
-impl MpvFormat {
-    fn as_val(self) -> libc::c_int {
-        self as _
     }
 }
 
@@ -398,13 +379,13 @@ impl FileState {
 /// TODO
 pub struct Mpv {
     /// The handle to the mpv core
-    pub ctx: *mut MpvHandle,
+    pub ctx: *mut mpv_handle,
     #[cfg(feature="events_complex")]
     ev_iter_notification: Box<(Mutex<bool>, parking_lot::Condvar)>,
     #[cfg(feature="events_complex")]
     ev_to_observe: Mutex<Vec<Event>>,
     #[cfg(feature="events_complex")]
-    ev_to_observe_properties: Mutex<::std::collections::HashMap<String, libc::uint64_t>>,
+    ev_to_observe_properties: Mutex<::std::collections::HashMap<String, u64>>,
     #[cfg(feature="events_complex")]
     ev_observed: Mutex<Vec<Event>>,
     #[cfg(feature="custom_protocols")]
@@ -509,7 +490,7 @@ impl Mpv {
     /// Set the value of a property.
     pub fn set_property<T: SetData>(&self, name: &str, data: T) -> Result<()> {
         let name = CString::new(name)?;
-        let format = T::get_format().as_mpv_format().as_val();
+        let format = T::get_format().as_mpv_format() as _;
         data.call_as_c_void(|ptr| {
                                 mpv_err((), unsafe {
                 mpv_set_property(self.ctx, name.as_ptr(), format, ptr)
@@ -522,7 +503,7 @@ impl Mpv {
     pub fn get_property<T: GetData>(&self, name: &str) -> Result<T> {
         let name = CString::new(name)?;
 
-        let format = T::get_format().as_mpv_format().as_val();
+        let format = T::get_format().as_mpv_format() as _;
         T::get_from_c_void(|ptr| {
                                mpv_err((), unsafe {
                 mpv_get_property(self.ctx, name.as_ptr(), format, ptr)
