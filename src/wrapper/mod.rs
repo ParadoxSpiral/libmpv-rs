@@ -19,14 +19,14 @@
 mod errors {
     #![allow(missing_docs)]
     #[cfg(feature="events_complex")]
-    use super::events::Event;
+    use super::events::events_complex::Event;
     use raw::mpv_error;
     use std::ffi::NulError;
     use std::os::raw as ctype;
     use std::str::Utf8Error;
 
-    // FIXME: Once error_chain issue 134 is solved, this should derive Clone, and use RCs
-    // instead of `Box`es. Remove temp impl Clone below then.
+    // FIXME: Once error_chain issue 134 is solved, this should derive Clone + PartialEq,
+    // and use RCs instead of `Box`es. Remove temp impl Clone below then.
     error_chain!{
         foreign_links {
             Nul(NulError);
@@ -46,7 +46,8 @@ mod errors {
                 description("An invalid argument was passed to an mpv API")
             }
             VersionMismatch(linked: ctype::c_ulong, loaded: ctype::c_ulong) {
-                description("The library was compiled against a different mpv version than what is present on the system.")
+                description("The library was compiled against a different mpv version than \
+                            what is present on the system.")
             }
             InvalidUtf8 {
                 description("An unspecified error during utf-8 validity checking ocurred.")
@@ -79,6 +80,29 @@ mod errors {
             }
         }
     }
+
+    impl PartialEq for Error {
+        fn eq(&self, rhs: &Error) -> bool {
+            match (self.kind(), rhs.kind()) {
+                (&ErrorKind::Msg(ref e1), &ErrorKind::Msg(ref e2)) => e1 == e2,
+                (&ErrorKind::Nul(ref e1), &ErrorKind::Nul(ref e2)) => e1 == e2,
+                (&ErrorKind::Utf8(ref e1), &ErrorKind::Utf8(ref e2)) => e1 == e2,
+                (&ErrorKind::Native(ref e1), &ErrorKind::Native(ref e2)) => e1 == e2,
+                (&ErrorKind::Loadfiles(ref idx1, ref err1),
+                 &ErrorKind::Loadfiles(ref idx2, ref err2)) => idx1 == idx2 && err1 == err2,
+                #[cfg(feature="events_complex")]
+                (&ErrorKind::AlreadyObserved(ref e1), &ErrorKind::AlreadyObserved(ref e2)) => {
+                    e1 == e2
+                }
+                (&ErrorKind::InvalidArgument, &ErrorKind::InvalidArgument) => true,
+                (&ErrorKind::VersionMismatch(ref li1, ref lo1),
+                 &ErrorKind::VersionMismatch(ref li2, ref lo2)) => li1 == li2 && lo1 == lo2,
+                (&ErrorKind::InvalidUtf8, &ErrorKind::InvalidUtf8) => true,
+                (&ErrorKind::Null, &ErrorKind::Null) => true,
+                (_, _) => false,
+            }
+        }
+    }
 }
 
 pub use self::errors::*;
@@ -96,7 +120,7 @@ macro_rules! mpv_cstr_to_str {
     )
 }
 
-#[cfg(all(not(unix)))]
+#[cfg(not(unix))]
 macro_rules! mpv_cstr_to_str {
     ($cstr: expr) => (
         str::from_utf8($cstr.to_bytes())
@@ -112,11 +136,13 @@ pub mod protocol;
 /// Contains abstractions to use the opengl callback interface.
 pub mod opengl_cb;
 
+use super::*;
+
+#[cfg(feature="events_complex")]
 use parking_lot;
+#[cfg(feature="events_complex")]
 use parking_lot::Mutex;
 use raw::*;
-
-use events::*;
 
 use std::ffi::{CStr, CString};
 use std::mem;
@@ -345,11 +371,11 @@ pub struct Mpv {
     #[cfg(feature="events_complex")]
     ev_iter_notification: Box<(Mutex<bool>, parking_lot::Condvar)>,
     #[cfg(feature="events_complex")]
-    ev_to_observe: Mutex<Vec<Event>>,
+    ev_to_observe: Mutex<Vec<events::events_complex::Event>>,
     #[cfg(feature="events_complex")]
     ev_to_observe_properties: Mutex<::std::collections::HashMap<String, u64>>,
     #[cfg(feature="events_complex")]
-    ev_observed: Mutex<Vec<Event>>,
+    ev_observed: Mutex<Vec<events::events_complex::Event>>,
     #[cfg(feature="custom_protocols")]
     protocols_guard: AtomicBool,
     #[cfg(feature="opengl_callback")]
@@ -518,6 +544,53 @@ impl Mpv {
     // --- Convenience command functions ---
     //
 
+    #[inline]
+    /// Enable an event.
+    pub fn enable_event(&self, ev: mpv_event_id) -> Result<()> {
+        mpv_err((), unsafe { mpv_request_event(self.ctx, ev, 1) })
+    }
+
+    #[inline]
+    /// Enable all, except deprecated, events.
+    pub fn enable_all_events(&self) -> Result<()> {
+        for i in (2..9)
+                .chain(11..12)
+                .chain(14..15)
+                .chain(16..19)
+                .chain(20..23) {
+            let _ = self.enable_event(mpv_event_id::from(i))?;
+        }
+        Ok(())
+    }
+
+    #[inline]
+    /// Disable an event.
+    pub fn disable_event(&self, ev: mpv_event_id) -> Result<()> {
+        mpv_err((), unsafe { mpv_request_event(self.ctx, ev, 0) })
+    }
+
+    #[inline]
+    /// Diable all deprecated events.
+    pub fn disable_deprecated_events(&self) -> Result<()> {
+        let _ = self.disable_event(EventId::MPV_EVENT_TRACKS_CHANGED)?;
+        let _ = self.disable_event(EventId::MPV_EVENT_TRACK_SWITCHED)?;
+        let _ = self.disable_event(EventId::MPV_EVENT_PAUSE)?;
+        let _ = self.disable_event(EventId::MPV_EVENT_UNPAUSE)?;
+        let _ = self.disable_event(EventId::MPV_EVENT_SCRIPT_INPUT_DISPATCH)?;
+        let _ = self.disable_event(EventId::MPV_EVENT_METADATA_UPDATE)?;
+        let _ = self.disable_event(EventId::MPV_EVENT_CHAPTER_CHANGE)?;
+        Ok(())
+    }
+
+    #[inline]
+    /// Diable all events.
+    pub fn disable_all_events(&self) -> Result<()> {
+        for i in 2..24 {
+            let _ = self.disable_event(mpv_event_id::from(i))?;
+        }
+        Ok(())
+    }
+
     // --- Seek functions ---
     //
 
@@ -603,8 +676,8 @@ impl Mpv {
     }
 
     #[inline]
-    /// "Like subtitles, but typically without OSD or subtitles. The exact behavior depends on the selected
-    /// video output."
+    /// "Like subtitles, but typically without OSD or subtitles. The exact behavior
+    /// depends on the selected video output."
     pub fn screenshot_video<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<()> {
         if let Some(path) = path.into() {
             unsafe { self.command("screenshot", &[&format!("\"{}\"", path), "video"]) }
@@ -665,7 +738,8 @@ impl Mpv {
     ///     * an optional string slice - any additional options that will be set for this file
     ///
     /// # Peculiarities
-    /// `loadfile` is kind of asynchronous, any additional option is set during loading, [specifics](https://github.com/mpv-player/mpv/issues/4089).
+    /// `loadfile` is kind of asynchronous, any additional option is set during loading,
+    /// [specifics](https://github.com/mpv-player/mpv/issues/4089).
     pub fn playlist_load_files<'a, A>(&self, files: &[(&str, FileState, A)]) -> Result<()>
         where A: Into<Option<&'a str>> + Clone
     {

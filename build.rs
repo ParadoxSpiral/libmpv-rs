@@ -34,10 +34,6 @@ const MPV_COMMIT: &'static str = "d276a01ac3fd8655a48c4a39d3d8574c25e83027";
 const WIN_MPV_ARCHIVE_SIZE: usize = 109615618;
 const WIN_MPV_ARCHIVE_URL: &'static str = "https://mpv.srsfckn.biz/mpv-dev-20170212.7z";
 
-// TODO: Once compile_error hits stable, enable this
-//#[cfg(all(feature="events_simple", feature="events_complex"))]
-//compile_error!("\"events_simple\" and \"events_complex\" are mutually exclusive for thread-safety reasons.");
-
 #[cfg(not(feature="build_libmpv"))]
 fn main() {}
 
@@ -102,12 +98,12 @@ fn main() {
 
         // `target` (in cfg) doesn't really mean target. It means target(host) of build script,
         // which is a bit confusing because it means the actual `--target` everywhere else.
-#[cfg(target_pointer_width = "64")]            {
+#[cfg(target_pointer_width = "64")]        {
             if env::var("CARGO_CFG_TARGET_POINTER_WIDTH").unwrap() == "32" {
                 panic!("Cross-compiling to different arch not yet supported");
             }
         }
-#[cfg(target_pointer_width = "32")]            {
+#[cfg(target_pointer_width = "32")]        {
             if env::var("CARGO_CFG_TARGET_POINTER_WIDTH").unwrap() == "64" {
                 panic!("Cross-compiling to different arch not yet supported");
             }
@@ -144,8 +140,7 @@ fn main() {
 
             // If repo is older version cloned by older build script, update
             if mpv_repo
-                   .find_object(Oid::from_str(MPV_COMMIT).unwrap(),
-                                Some(ObjectType::Commit))
+                   .find_object(Oid::from_str(MPV_COMMIT).unwrap(), Some(ObjectType::Commit))
                    .is_err() {
                 needs_rebuild = true;
                 Command::new("sh")

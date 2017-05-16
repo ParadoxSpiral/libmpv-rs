@@ -29,7 +29,7 @@ use std::rc::Rc;
 
 struct Draw {}
 
-pub fn main() {
+fn main() {
     let path = env::args()
         .nth(1)
         .expect("Expected path to media as argument, found nil.");

@@ -40,7 +40,7 @@ hyper = "0.10"
 git2 = "0.6"
 
 [features]
-default = ["events_complex", "custom_protocols", "opengl_callback"]
+default = ["events_simple", "custom_protocols", "opengl_callback"]
 events_simple = [] # Enable simple event handling
 events_complex = [] # Enable complex event handling
 custom_protocols = [] # Enable custom protocol callbacks

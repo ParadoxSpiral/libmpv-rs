@@ -19,15 +19,21 @@
 extern crate mpv;
 extern crate crossbeam;
 
-use mpv::*;
-use mpv::events::*;
+#[cfg(not(feature="events_complex"))]
+fn main() {
+    panic!("complex events not enabled!");
+}
 
-use std::env;
-use std::process;
-use std::time::Duration;
-use std::thread;
+#[cfg(feature="events_complex")]
+fn main() {
+    use mpv::*;
+    use mpv::events::events_complex::*;
 
-pub fn main() {
+    use std::env;
+    use std::process;
+    use std::time::Duration;
+    use std::thread;
+
     let path = env::args()
         .nth(1)
         .expect("Expected path to media as argument, found nil.");

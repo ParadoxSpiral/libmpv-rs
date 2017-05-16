@@ -59,7 +59,7 @@ fn size(cookie: &mut File) -> i64 {
     cookie.metadata().unwrap().len() as _
 }
 
-pub fn main() {
+fn main() {
     let path = format!("filereader://{}",
                        env::args()
                            .nth(1)

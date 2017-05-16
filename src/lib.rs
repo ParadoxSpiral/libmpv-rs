@@ -19,11 +19,14 @@
 #![deny(missing_docs)]
 #![allow(unknown_lints)]
 
-//! This crate provides abstractions for [libmpv](https://github.com/mpv-player/mpv/tree/master/libmpv) of the [mpv media player](https://github.com/mpv-player/mpv).
+//! This crate provides abstractions for
+//! [libmpv](https://github.com/mpv-player/mpv/tree/master/libmpv) of the
+//! [mpv media player](https://github.com/mpv-player/mpv).
 //!
 //! Libmpv requires `LC_NUMERIC` to be `C`, which should be the default value.
 //!
-//! Most of the documentation is paraphrased or even copied from the [mpv manual](https://mpv.io/manual/master/),
+//! Most of the documentation is paraphrased or even copied from the
+//! [mpv manual](https://mpv.io/manual/master/),
 //! if any questions arise it will probably answer them in much more depth than this documentation.
 //!
 //! # Examples
@@ -46,7 +49,9 @@ extern crate error_chain;
 
 use std::os::raw as ctype;
 
-/// Contains FFI bindings to libmpv functions and data structures.
+/// All Event ids, not all APIs might use all ids.
+pub use raw::mpv_event_id as EventId;
+/// Verbosity level of log events.
 pub use raw::mpv_log_level as LogLevel;
 /// The reason an `Event::EndFile` was fired.
 pub use raw::mpv_end_file_reason as EndFileReason;
