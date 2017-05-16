@@ -32,9 +32,7 @@ fn version() {
 fn properties() {
     let mpv = Mpv::new().unwrap();
     mpv.set_property("cache-initial", 1).unwrap();
-    if env::var("CI_BUILD").is_err() {
-        mpv.set_property("volume", 0).unwrap();
-    }
+    mpv.set_property("volume", 0).unwrap();
     mpv.set_property("vo", "null").unwrap();
     mpv.set_property("ytdl", true).unwrap();
 
@@ -45,11 +43,9 @@ fn properties() {
 
     thread::sleep(Duration::from_millis(250));
 
-    if env::var("CI_BUILD").is_err() {
-        assert_eq!(0i64, mpv.get_property("volume").unwrap());
-    }
+    assert_eq!(0i64, mpv.get_property("volume").unwrap());
 
-    let title: String = mpv.get_property("media-title").unwrap();
-    assert!("Rick Astley - Never Gonna Give You Up [HQ]" == &title ||
-            "watch?v=DLzxrzFCyOs" == &title);
+    let title: MpvStr = mpv.get_property("media-title").unwrap();
+    assert!("Rick Astley - Never Gonna Give You Up [HQ]" == &*title ||
+            "watch?v=DLzxrzFCyOs" == &*title);
 }

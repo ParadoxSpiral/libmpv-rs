@@ -83,11 +83,11 @@ mod errors {
 pub use self::errors::*;
 
 #[cfg(unix)]
-macro_rules! mpv_cstr_to_string {
+macro_rules! mpv_cstr_to_str {
     ($cstr: expr) => (
         if let Some(v) = OsStr::from_bytes($cstr.to_bytes()).to_str() {
             // Not sure why the type isn't inferred
-            let r: Result<String> = Ok(v.to_owned());
+            let r: Result<&str> = Ok(v);
             r
         } else {
             Err(ErrorKind::InvalidUtf8.into())
@@ -96,9 +96,9 @@ macro_rules! mpv_cstr_to_string {
 }
 
 #[cfg(all(not(unix)))]
-macro_rules! mpv_cstr_to_string {
+macro_rules! mpv_cstr_to_str {
     ($cstr: expr) => (
-        String::from_utf8($cstr.to_bytes())
+        str::from_utf8($cstr.to_bytes())
     )
 }
 
@@ -141,7 +141,7 @@ fn mpv_err<T>(ret: T, err_val: libc::c_int) -> Result<T> {
 
 #[allow(missing_docs)]
 /// This trait describes which types are allowed to be passed to getter mpv APIs.
-pub unsafe trait GetData: Clone {
+pub unsafe trait GetData: Sized {
     #[doc(hidden)]
     fn get_from_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(mut fun: F) -> Result<Self> {
         let mut ptr = unsafe { mem::zeroed() };
@@ -153,7 +153,7 @@ pub unsafe trait GetData: Clone {
 
 #[allow(missing_docs)]
 /// This trait describes which types are allowed to be passed to setter mpv APIs.
-pub unsafe trait SetData: Clone {
+pub unsafe trait SetData: Sized {
     #[doc(hidden)]
     fn call_as_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(mut self,
                                                                    mut fun: F)
@@ -228,9 +228,10 @@ unsafe impl GetData for String {
         let ptr = &mut ptr::null();
         let _ = fun(ptr as *mut *const libc::c_char as _)?;
 
-        let ret = mpv_cstr_to_string!(unsafe { CStr::from_ptr(*ptr) });
+        let ret = mpv_cstr_to_str!(unsafe { CStr::from_ptr(*ptr) })?
+            .to_owned();
         unsafe { mpv_free(*ptr as *mut _) };
-        Ok(ret?)
+        Ok(ret)
     }
 
     #[inline]
@@ -244,6 +245,37 @@ unsafe impl SetData for String {
     fn call_as_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(self, mut fun: F) -> Result<T> {
         let string = CString::new(self)?;
         fun((&mut string.as_ptr()) as *mut *const libc::c_char as *mut _)
+    }
+
+    #[inline]
+    fn get_format() -> Format {
+        Format::String
+    }
+}
+
+/// Wrapper around an `&str` returned by mpv, that properly deallocates it with mpv's allocator.
+pub struct MpvStr<'a>(&'a str);
+impl<'a> Deref for MpvStr<'a> {
+    type Target = str;
+
+    fn deref(&self) -> &str {
+        self.0
+    }
+}
+impl<'a> Drop for MpvStr<'a> {
+    fn drop(&mut self) {
+        unsafe { mpv_free(self.0.as_ptr() as *mut u8 as _) };
+    }
+}
+
+unsafe impl<'a> GetData for MpvStr<'a> {
+    #[inline]
+    fn get_from_c_void<T, F: FnMut(*mut libc::c_void) -> Result<T>>(mut fun: F)
+                                                                    -> Result<MpvStr<'a>> {
+        let ptr = &mut ptr::null();
+        let _ = fun(ptr as *mut *const libc::c_char as _)?;
+
+        Ok(MpvStr(mpv_cstr_to_str!(unsafe { CStr::from_ptr(*ptr) })?))
     }
 
     #[inline]
