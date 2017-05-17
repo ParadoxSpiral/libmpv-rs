@@ -34,6 +34,7 @@ fn properties() {
     mpv.set_property("volume", 0).unwrap();
     mpv.set_property("vo", "null").unwrap();
     mpv.set_property("ytdl", true).unwrap();
+    mpv.set_property("sub-gauss", 0.6).unwrap();
 
     mpv.playlist_load_files(&[("https://www.youtube.com/watch?v=DLzxrzFCyOs",
                                 FileState::AppendPlay,
@@ -43,7 +44,11 @@ fn properties() {
     thread::sleep(Duration::from_millis(250));
 
     assert_eq!(0i64, mpv.get_property("volume").unwrap());
-
+    let vo: MpvStr = mpv.get_property("vo").unwrap();
+    assert_eq!("null", &*vo);
+    assert_eq!(true, mpv.get_property("ytdl").unwrap());
+    let subg: f64 = mpv.get_property("sub-gauss").unwrap();
+    assert_eq!(0.6, f64::round(subg * f64::powi(10.0, 4)) / f64::powi(10.0, 4));
     let title: MpvStr = mpv.get_property("media-title").unwrap();
     assert!("Rick Astley - Never Gonna Give You Up [HQ]" == &*title ||
             "watch?v=DLzxrzFCyOs" == &*title);

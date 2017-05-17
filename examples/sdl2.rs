@@ -26,7 +26,6 @@ use sdl2::keyboard::Keycode;
 use std::env;
 use std::panic::AssertUnwindSafe;
 use std::rc::Rc;
-use std::time::Duration;
 
 struct Draw {}
 
@@ -115,7 +114,7 @@ pub fn main() {
                     repeat: false,
                     ..
                 } => {
-                    mpv.seek_forward(&Duration::from_secs(10)).unwrap();
+                    mpv.seek_forward(10.).unwrap();
                 }
                 _ => {}
             }

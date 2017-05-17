@@ -86,7 +86,7 @@ pub fn main() {
 
     thread::sleep(Duration::from_secs(10));
 
-    mpv.seek_forward(&Duration::from_secs(15)).unwrap();
+    mpv.seek_forward(15.).unwrap();
 
     thread::sleep(Duration::from_secs(5));
 }

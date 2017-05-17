@@ -125,7 +125,6 @@ use std::os::raw as ctype;
 use std::ptr;
 #[cfg(any(feature="custom_protocols", feature="opengl_callback"))]
 use std::sync::atomic::AtomicBool;
-use std::time::Duration;
 #[cfg(unix)]
 use std::ffi::OsStr;
 #[cfg(unix)]
@@ -297,47 +296,11 @@ unsafe impl<'a> SetData for &'a str {
     }
 }
 
-#[derive(Clone)]
-/// An `OsdString` can only be used by getter functions, and is subject to [property expansion](https://mpv.io/manual/master/#property-expansion).
-pub struct OsdString(String);
-impl Deref for OsdString {
-    type Target = String;
-
-    fn deref(&self) -> &String {
-        &self.0
-    }
-}
-
-unsafe impl<'a> GetData for OsdString {
-    #[inline]
-    fn get_from_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(fun: F) -> Result<OsdString> {
-        Ok(OsdString(String::get_from_c_void(fun)?))
-    }
-
-    #[inline]
-    fn get_format() -> Format {
-        Format::OsdString
-    }
-}
-
-unsafe impl<'a> SetData for OsdString {
-    #[inline]
-    fn call_as_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(self, fun: F) -> Result<T> {
-        self.0.call_as_c_void(fun)
-    }
-
-    #[inline]
-    fn get_format() -> Format {
-        Format::OsdString
-    }
-}
-
 #[allow(missing_docs)]
 #[derive(Debug, Clone)]
 /// Subset of `mpv_format` used by the public API.
 pub enum Format {
     String,
-    OsdString,
     Flag,
     Int64,
     Double,
@@ -347,7 +310,6 @@ impl Format {
     fn as_mpv_format(&self) -> mpv_format {
         match *self {
             Format::String => mpv_format::MPV_FORMAT_STRING,
-            Format::OsdString => mpv_format::MPV_FORMAT_OSD_STRING,
             Format::Flag => mpv_format::MPV_FORMAT_FLAG,
             Format::Int64 => mpv_format::MPV_FORMAT_INT64,
             Format::Double => mpv_format::MPV_FORMAT_DOUBLE,
@@ -560,24 +522,24 @@ impl Mpv {
     //
 
     #[inline]
-    /// Seek forward relatively from current position at runtime.
+    /// Seek forward relatively from current position in seconds.
     /// This is less exact than `seek_absolute`, see [mpv manual]
     /// (https://mpv.io/manual/master/#command-interface-
     /// [relative|absolute|absolute-percent|relative-percent|exact|keyframes]).
-    pub fn seek_forward(&self, time: &Duration) -> Result<()> {
-        unsafe { self.command("seek", &[&format!("{}", time.as_secs()), "relative"]) }
+    pub fn seek_forward(&self, secs: ctype::c_double) -> Result<()> {
+        unsafe { self.command("seek", &[&format!("{}", secs), "relative"]) }
     }
 
     #[inline]
     /// See `seek_forward`.
-    pub fn seek_backward(&self, time: &Duration) -> Result<()> {
-        unsafe { self.command("seek", &[&format!("-{}", time.as_secs()), "relative"]) }
+    pub fn seek_backward(&self, secs: ctype::c_double) -> Result<()> {
+        unsafe { self.command("seek", &[&format!("-{}", secs), "relative"]) }
     }
 
     #[inline]
-    /// Seek to a given absolute time.
-    pub fn seek_absolute(&self, time: &Duration) -> Result<()> {
-        unsafe { self.command("seek", &[&format!("{}", time.as_secs()), "absolute"]) }
+    /// Seek to a given absolute secs.
+    pub fn seek_absolute(&self, secs: ctype::c_double) -> Result<()> {
+        unsafe { self.command("seek", &[&format!("{}", secs), "absolute"]) }
     }
 
     #[inline]
