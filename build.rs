@@ -34,87 +34,120 @@ const MPV_COMMIT: &'static str = "d276a01ac3fd8655a48c4a39d3d8574c25e83027";
 const WIN_MPV_ARCHIVE_SIZE: usize = 109615618;
 const WIN_MPV_ARCHIVE_URL: &'static str = "https://mpv.srsfckn.biz/mpv-dev-20170212.7z";
 
+// TODO: Once compile_error hits stable, enable this
+//#[cfg(all(feature="events_simple", feature="events_complex"))]
+//compile_error!("\"events_simple\" and \"events_complex\" are mutually exclusive for thread-safety reasons.");
+
+#[cfg(not(feature="build_libmpv"))]
+fn main() {}
+
+#[cfg(feature="build_libmpv")]
 fn main() {
-#[cfg(feature="build_libmpv")]    {
-        let out_dir = env::var("OUT_DIR").unwrap();
+    let out_dir = env::var("OUT_DIR").unwrap();
 
-        if env::var("CARGO_CFG_TARGET_OS").unwrap() == "windows" {
-            let path = format!("{}/libmpv.7z", out_dir);
-            let archive = OpenOptions::new().read(true).write(true).open(&path);
+    if env::var("CARGO_CFG_TARGET_OS").unwrap() == "windows" {
+        let path = format!("{}/libmpv.7z", out_dir);
+        let archive = OpenOptions::new().read(true).write(true).open(&path);
 
-            let dummy_err = Error::last_os_error();
-            let legacy = archive
-                .as_ref()
-                .and_then(|v| {
-                              if v.metadata().unwrap().len() != WIN_MPV_ARCHIVE_SIZE as u64 {
-                                  Ok(&dummy_err)
-                              } else {
-                                  // The returned error does not matter
-                                  Err(&dummy_err)
-                              }
-                          })
-                .is_ok();
+        let dummy_err = Error::last_os_error();
+        let legacy = archive
+            .as_ref()
+            .and_then(|v| {
+                          if v.metadata().unwrap().len() != WIN_MPV_ARCHIVE_SIZE as u64 {
+                              Ok(&dummy_err)
+                          } else {
+                              // The returned error does not matter
+                              Err(&dummy_err)
+                          }
+                      })
+            .is_ok();
 
-            if archive.is_err() || legacy {
-                let mut buf = Vec::with_capacity(WIN_MPV_ARCHIVE_SIZE);
+        if archive.is_err() || legacy {
+            let mut buf = Vec::with_capacity(WIN_MPV_ARCHIVE_SIZE);
 
-                hyper::Client::new()
-                    .get(WIN_MPV_ARCHIVE_URL)
-                    .send()
-                    .expect("retrieving libmpv failed")
-                    .read_to_end(&mut buf)
-                    .unwrap();
+            hyper::Client::new()
+                .get(WIN_MPV_ARCHIVE_URL)
+                .send()
+                .expect("retrieving libmpv failed")
+                .read_to_end(&mut buf)
+                .unwrap();
 
-                if legacy {
-                    archive.as_ref().unwrap().set_len(0).unwrap();
-                    archive.unwrap().write_all(&buf).unwrap();
-                } else {
-                    File::create(&path)
-                        .expect("failed to create file")
-                        .write_all(&buf)
-                        .unwrap();
-                }
-
-                Command::new("7z")
-                    .arg("x")
-                    .arg(&format!("-o{}", out_dir))
-                    .arg(path)
-                    .spawn()
-                    .expect("7z execution failed")
-                    .wait()
-                    .expect("7z execution failed");
-            }
-
-            if env::var("CARGO_CFG_TARGET_POINTER_WIDTH").unwrap() == "64" {
-                println!("cargo:rustc-link-search={}/64/", out_dir);
+            if legacy {
+                archive.as_ref().unwrap().set_len(0).unwrap();
+                archive.unwrap().write_all(&buf).unwrap();
             } else {
-                println!("cargo:rustc-link-search={}/32/", out_dir);
+                File::create(&path)
+                    .expect("failed to create file")
+                    .write_all(&buf)
+                    .unwrap();
             }
+
+            Command::new("7z")
+                .arg("x")
+                .arg(&format!("-o{}", out_dir))
+                .arg(path)
+                .spawn()
+                .expect("7z execution failed")
+                .wait()
+                .expect("7z execution failed");
+        }
+
+        if env::var("CARGO_CFG_TARGET_POINTER_WIDTH").unwrap() == "64" {
+            println!("cargo:rustc-link-search={}/64/", out_dir);
         } else {
-            // Assume unix like with sh
+            println!("cargo:rustc-link-search={}/32/", out_dir);
+        }
+    } else {
+        // Assume unix like with sh
 
-            // `target` (in cfg) doesn't really mean target. It means target(host) of build script,
-            // which is a bit confusing because it means the actual `--target` everywhere else.
+        // `target` (in cfg) doesn't really mean target. It means target(host) of build script,
+        // which is a bit confusing because it means the actual `--target` everywhere else.
 #[cfg(target_pointer_width = "64")]            {
-                if env::var("CARGO_CFG_TARGET_POINTER_WIDTH").unwrap() == "32" {
-                    panic!("Cross-compiling to different arch not yet supported");
-                }
+            if env::var("CARGO_CFG_TARGET_POINTER_WIDTH").unwrap() == "32" {
+                panic!("Cross-compiling to different arch not yet supported");
             }
+        }
 #[cfg(target_pointer_width = "32")]            {
-                if env::var("CARGO_CFG_TARGET_POINTER_WIDTH").unwrap() == "64" {
-                    panic!("Cross-compiling to different arch not yet supported");
-                }
+            if env::var("CARGO_CFG_TARGET_POINTER_WIDTH").unwrap() == "64" {
+                panic!("Cross-compiling to different arch not yet supported");
             }
+        }
 
-            let url = "https://github.com/mpv-player/mpv-build";
-            let path = format!("{}/mpv-build", out_dir);
-            let num_threads = env::var("NUM_JOBS").unwrap();
-            let needs_rebuild;
+        let url = "https://github.com/mpv-player/mpv-build";
+        let path = format!("{}/mpv-build", out_dir);
+        let num_threads = env::var("NUM_JOBS").unwrap();
+        let needs_rebuild;
 
-            if !Path::new(&path).exists() {
+        if !Path::new(&path).exists() {
+            needs_rebuild = true;
+            Repository::clone(url, &path).expect("failed to clone mpv-build");
+
+            Command::new("sh")
+                .arg("-c")
+                .arg(&format!("cd {} && {0}/update", path))
+                .spawn()
+                .expect("mpv-build update failed")
+                .wait()
+                .expect("mpv-build update failed");
+
+            let mpv_repo = Repository::open(&format!("{}/mpv/", path)).unwrap();
+            mpv_repo
+                .reset(&mpv_repo
+                            .find_object(Oid::from_str(MPV_COMMIT).unwrap(),
+                                         Some(ObjectType::Commit))
+                            .unwrap(),
+                       ResetType::Soft,
+                       None)
+                .unwrap();
+        } else {
+            let mpv_repo = Repository::open(&format!("{}/mpv/", path)).unwrap();
+
+            // If repo is older version cloned by older build script, update
+            if mpv_repo
+                   .find_object(Oid::from_str(MPV_COMMIT).unwrap(),
+                                Some(ObjectType::Commit))
+                   .is_err() {
                 needs_rebuild = true;
-                Repository::clone(url, &path).expect("failed to clone mpv-build");
-
                 Command::new("sh")
                     .arg("-c")
                     .arg(&format!("cd {} && {0}/update", path))
@@ -122,67 +155,40 @@ fn main() {
                     .expect("mpv-build update failed")
                     .wait()
                     .expect("mpv-build update failed");
-
-                let mpv_repo = Repository::open(&format!("{}/mpv/", path)).unwrap();
-                mpv_repo
-                    .reset(&mpv_repo
-                                .find_object(Oid::from_str(MPV_COMMIT).unwrap(),
-                                             Some(ObjectType::Commit))
-                                .unwrap(),
-                           ResetType::Soft,
-                           None)
-                    .unwrap();
             } else {
-                let mpv_repo = Repository::open(&format!("{}/mpv/", path)).unwrap();
-
-                // If repo is older version cloned by older build script, update
-                if mpv_repo
-                       .find_object(Oid::from_str(MPV_COMMIT).unwrap(),
-                                    Some(ObjectType::Commit))
-                       .is_err() {
-                    needs_rebuild = true;
-                    Command::new("sh")
-                        .arg("-c")
-                        .arg(&format!("cd {} && {0}/update", path))
-                        .spawn()
-                        .expect("mpv-build update failed")
-                        .wait()
-                        .expect("mpv-build update failed");
-                } else {
-                    needs_rebuild = false;
-                }
-
-                mpv_repo
-                    .reset(&mpv_repo
-                                .find_object(Oid::from_str(MPV_COMMIT).unwrap(),
-                                             Some(ObjectType::Commit))
-                                .unwrap(),
-                           ResetType::Hard,
-                           None)
-                    .unwrap();
+                needs_rebuild = false;
             }
 
-            // The mpv build script interprets the TARGET env var, which is set by cargo to e.g.
-            // x86_64-unknown-linux-gnu, thus the script can't find the compiler.
-            // TODO: When Cross-compiling to different archs is implemented, this has to be handled.
-            env::remove_var("TARGET");
-
-            let cmd = format!("cd {} && echo \"--enable-libmpv-shared\" > {0}/mpv_options \
-							  && {0}/build -j{}",
-                              path,
-                              num_threads);
-
-            if needs_rebuild {
-                Command::new("sh")
-                    .arg("-c")
-                    .arg(&cmd)
-                    .spawn()
-                    .expect("mpv-build build failed")
-                    .wait()
-                    .expect("mpv-build build failed");
-            }
-
-            println!("cargo:rustc-link-search={}/mpv/build/", path);
+            mpv_repo
+                .reset(&mpv_repo
+                            .find_object(Oid::from_str(MPV_COMMIT).unwrap(),
+                                         Some(ObjectType::Commit))
+                            .unwrap(),
+                       ResetType::Hard,
+                       None)
+                .unwrap();
         }
+
+        // The mpv build script interprets the TARGET env var, which is set by cargo to e.g.
+        // x86_64-unknown-linux-gnu, thus the script can't find the compiler.
+        // TODO: When Cross-compiling to different archs is implemented, this has to be handled.
+        env::remove_var("TARGET");
+
+        let cmd = format!("cd {} && echo \"--enable-libmpv-shared\" > {0}/mpv_options \
+						  && {0}/build -j{}",
+                          path,
+                          num_threads);
+
+        if needs_rebuild {
+            Command::new("sh")
+                .arg("-c")
+                .arg(&cmd)
+                .spawn()
+                .expect("mpv-build build failed")
+                .wait()
+                .expect("mpv-build build failed");
+        }
+
+        println!("cargo:rustc-link-search={}/mpv/build/", path);
     }
 }
