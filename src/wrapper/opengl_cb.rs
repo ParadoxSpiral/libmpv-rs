@@ -75,6 +75,7 @@ unsafe extern "C" fn callback_update_wrapper<F, V>(cb_ctx: *mut ctype::c_void)
 }
 
 /// Holds all state relevant to opengl callback functions.
+/// It is created by calling `Mpv::create_opengl_context`.
 ///
 /// # Safety
 /// Mpv relies on correct and initialized OpenGL state.
@@ -125,6 +126,9 @@ impl<'parent, V> OpenGlContext<'parent, V> {
     /// Set the fbo that mpv will draw on, and start rendering.
     /// Passing `0` as `w` or `h` will choose the size of the fbo.
     /// If `h` is negative, the coordinate system is flipped.
+    ///
+    /// # Safety
+    /// See [OpenGlContext](struct.OpenGlContext.html).
     pub unsafe fn draw(&self, fbo: ctype::c_int, w: usize, h: isize) -> Result<()> {
         mpv_err((), mpv_opengl_cb_draw(self.api_ctx, fbo, w as _, h as _))
     }
@@ -134,6 +138,9 @@ impl<'parent, V> OpenGlContext<'parent, V> {
     ///
     /// Note that calling this at least once informs libmpv that you will use this
     /// function. If you use it inconsistently, expect bad video playback.
+    ///
+    /// # Safety
+    /// See [OpenGlContext](struct.OpenGlContext.html).
     pub unsafe fn report_flip(&self) -> Result<()> {
         mpv_err((), mpv_opengl_cb_report_flip(self.api_ctx, 0))
     }

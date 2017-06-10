@@ -127,8 +127,8 @@ impl Mpv {
     /// or `MPV_EVENT_PROPERTY_CHANGE` event failed, or if `MPV_EVENT_END_FILE` reported an error.
     ///
     /// # Unsafety
-    /// Do not call this function more than once simultaneosly, be very careful when using with
-    /// `EventIter` at the same time.
+    /// Calling this function simultaneosly multiple times may result in data races. Internally,
+    /// `EventIter` also uses `wait_event`, do not combine the two.
     pub unsafe fn wait_event(&self, timeout: f64) -> Option<Result<Event>> {
         let event = &*mpv_wait_event(self.ctx, timeout);
 

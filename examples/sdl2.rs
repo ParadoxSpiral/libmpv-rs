@@ -35,11 +35,9 @@ fn main() {
         .expect("Expected path to media as argument, found nil.");
 
     // Check for driver availability
-    let driver_index = if let Some(i) = sdl2::render::drivers().position(|e| e.name == "opengl") {
-        i
-    } else {
-        panic!("OpenGl driver not found!")
-    };
+    let driver_index = sdl2::render::drivers()
+        .position(|e| e.name == "opengl")
+        .expect("OpenGl driver not found!");
 
     // Create SDL state
     let sdl = sdl2::init().unwrap();

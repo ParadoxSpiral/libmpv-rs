@@ -457,10 +457,7 @@ impl Mpv {
     /// (https://mpv.io/manual/master/#list-of-input-commands).
     ///
     /// Note that you may have to escape strings with `""` when they contain spaces.
-    ///
-    /// # Safety
-    /// This method is unsafe because arbitrary code may be executed resulting in UB and more.
-    pub unsafe fn command(&self, name: &str, args: &[&str]) -> Result<()> {
+    pub fn command(&self, name: &str, args: &[&str]) -> Result<()> {
         let mut cmd = String::with_capacity(name.len() +
                                             args.iter().fold(0, |acc, e| acc + e.len() + 1));
         cmd.push_str(name);
@@ -471,7 +468,7 @@ impl Mpv {
         }
         let raw = CString::new(cmd)?;
 
-        mpv_err((), mpv_command_string(self.ctx, raw.as_ptr()))
+        mpv_err((), unsafe { mpv_command_string(self.ctx, raw.as_ptr()) })
     }
 
     #[inline]
@@ -513,20 +510,20 @@ impl Mpv {
     #[inline]
     /// Add -or subtract- any value from a property. Over/underflow clamps to max/min.
     pub fn add_property(&self, property: &str, value: isize) -> Result<()> {
-        unsafe { self.command("add", &[property, &format!("{}", value)]) }
+        self.command("add", &[property, &format!("{}", value)])
     }
 
     #[inline]
     /// Cycle through a given property. `up` specifies direction. On
     /// overflow, set the property back to the minimum, on underflow set it to the maximum.
     pub fn cycle_property(&self, property: &str, up: bool) -> Result<()> {
-        unsafe { self.command("cycle", &[property, if up { "up" } else { "down" }]) }
+        self.command("cycle", &[property, if up { "up" } else { "down" }])
     }
 
     #[inline]
     /// Multiply any property with any positive factor.
     pub fn multiply_property(&self, property: &str, factor: usize) -> Result<()> {
-        unsafe { self.command("multiply", &[property, &format!("{}", factor)]) }
+        self.command("multiply", &[property, &format!("{}", factor)])
     }
 
     #[inline]
@@ -600,19 +597,19 @@ impl Mpv {
     /// (https://mpv.io/manual/master/#command-interface-
     /// [relative|absolute|absolute-percent|relative-percent|exact|keyframes]).
     pub fn seek_forward(&self, secs: ctype::c_double) -> Result<()> {
-        unsafe { self.command("seek", &[&format!("{}", secs), "relative"]) }
+        self.command("seek", &[&format!("{}", secs), "relative"])
     }
 
     #[inline]
     /// See `seek_forward`.
     pub fn seek_backward(&self, secs: ctype::c_double) -> Result<()> {
-        unsafe { self.command("seek", &[&format!("-{}", secs), "relative"]) }
+        self.command("seek", &[&format!("-{}", secs), "relative"])
     }
 
     #[inline]
     /// Seek to a given absolute secs.
     pub fn seek_absolute(&self, secs: ctype::c_double) -> Result<()> {
-        unsafe { self.command("seek", &[&format!("{}", secs), "absolute"]) }
+        self.command("seek", &[&format!("{}", secs), "absolute"])
     }
 
     #[inline]
@@ -620,39 +617,39 @@ impl Mpv {
     /// If `percent` of the playtime is bigger than the remaining playtime, the next file is played.
     /// out of bounds values are clamped to either 0 or 100.
     pub fn seek_percent(&self, percent: isize) -> Result<()> {
-        unsafe { self.command("seek", &[&format!("{}", percent), "relative-percent"]) }
+        self.command("seek", &[&format!("{}", percent), "relative-percent"])
     }
 
     #[inline]
     /// Seek to the given percentage of the playtime.
     pub fn seek_percent_absolute(&self, percent: usize) -> Result<()> {
-        unsafe { self.command("seek", &[&format!("{}", percent), "relative-percent"]) }
+        self.command("seek", &[&format!("{}", percent), "relative-percent"])
     }
 
     #[inline]
     /// Revert the previous `seek_` call, can also revert itself.
     pub fn seek_revert(&self) -> Result<()> {
-        unsafe { self.command("revert-seek", &[]) }
+        self.command("revert-seek", &[])
     }
 
     #[inline]
     /// Mark the current position as the position that will be seeked to by `seek_revert`.
     pub fn seek_revert_mark(&self) -> Result<()> {
-        unsafe { self.command("revert-seek", &["mark"]) }
+        self.command("revert-seek", &["mark"])
     }
 
     #[inline]
     /// Seek exactly one frame, and pause.
     /// Noop on audio only streams.
     pub fn seek_frame(&self) -> Result<()> {
-        unsafe { self.command("frame-step", &[]) }
+        self.command("frame-step", &[])
     }
 
     #[inline]
     /// See `seek_frame`.
     /// [Note performance considerations.](https://mpv.io/manual/master/#command-interface-frame-back-step)
     pub fn seek_frame_backward(&self) -> Result<()> {
-        unsafe { self.command("frame-back-step", &[]) }
+        self.command("frame-back-step", &[])
     }
 
     // --- Screenshot functions ---
@@ -669,9 +666,9 @@ impl Mpv {
     /// described in [Property Expansion](https://mpv.io/manual/master/#property-expansion)."
     pub fn screenshot_subtitles<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<()> {
         if let Some(path) = path.into() {
-            unsafe { self.command("screenshot", &[&format!("\"{}\"", path), "subtitles"]) }
+            self.command("screenshot", &[&format!("\"{}\"", path), "subtitles"])
         } else {
-            unsafe { self.command("screenshot", &["subtitles"]) }
+            self.command("screenshot", &["subtitles"])
         }
     }
 
@@ -680,9 +677,9 @@ impl Mpv {
     /// depends on the selected video output."
     pub fn screenshot_video<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<()> {
         if let Some(path) = path.into() {
-            unsafe { self.command("screenshot", &[&format!("\"{}\"", path), "video"]) }
+            self.command("screenshot", &[&format!("\"{}\"", path), "video"])
         } else {
-            unsafe { self.command("screenshot", &["video"]) }
+            self.command("screenshot", &["video"])
         }
     }
 
@@ -692,9 +689,9 @@ impl Mpv {
     /// this will act like video.".
     pub fn screenshot_window<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<()> {
         if let Some(path) = path.into() {
-            unsafe { self.command("screenshot", &[&format!("\"{}\"", path), "window"]) }
+            self.command("screenshot", &[&format!("\"{}\"", path), "window"])
         } else {
-            unsafe { self.command("screenshot", &["window"]) }
+            self.command("screenshot", &["window"])
         }
     }
 
@@ -705,26 +702,26 @@ impl Mpv {
     /// Play the next item of the current playlist.
     /// Does nothing if the current item is the last item.
     pub fn playlist_next_weak(&self) -> Result<()> {
-        unsafe { self.command("playlist-next", &["weak"]) }
+        self.command("playlist-next", &["weak"])
     }
 
     #[inline]
     /// Play the next item of the current playlist.
     /// Terminates playback if the current item is the last item.
     pub fn playlist_next_force(&self) -> Result<()> {
-        unsafe { self.command("playlist-next", &["force"]) }
+        self.command("playlist-next", &["force"])
     }
 
     #[inline]
     /// See `playlist_next_weak`.
     pub fn playlist_previous_weak(&self) -> Result<()> {
-        unsafe { self.command("playlist-previous", &["weak"]) }
+        self.command("playlist-previous", &["weak"])
     }
 
     #[inline]
     /// See `playlist_next_force`.
     pub fn playlist_previous_force(&self) -> Result<()> {
-        unsafe { self.command("playlist-previous", &["force"]) }
+        self.command("playlist-previous", &["force"])
     }
 
     #[inline]
@@ -746,10 +743,8 @@ impl Mpv {
         for (i, elem) in files.iter().enumerate() {
             let args = elem.2.clone().into().unwrap_or("");
 
-            let ret = unsafe {
-                self.command("loadfile",
-                             &[&format!("\"{}\"", elem.0), elem.1.val(), args])
-            };
+            let ret = self.command("loadfile",
+                                   &[&format!("\"{}\"", elem.0), elem.1.val(), args]);
 
             if ret.is_err() {
                 return Err(ErrorKind::Loadfiles(i, Box::new(ret.unwrap_err())).into());
@@ -762,40 +757,40 @@ impl Mpv {
     /// Load the given playlist file, that either replaces the current playlist, or appends to it.
     pub fn playlist_load_list(&self, path: &str, replace: bool) -> Result<()> {
         if replace {
-            unsafe { self.command("loadlist", &[&format!("\"{}\"", path), "replace"]) }
+            self.command("loadlist", &[&format!("\"{}\"", path), "replace"])
         } else {
-            unsafe { self.command("loadlist", &[&format!("\"{}\"", path), "append"]) }
+            self.command("loadlist", &[&format!("\"{}\"", path), "append"])
         }
     }
 
     #[inline]
     /// Remove every, except the current, item from the playlist.
     pub fn playlist_clear(&self) -> Result<()> {
-        unsafe { self.command("playlist-clear", &[]) }
+        self.command("playlist-clear", &[])
     }
 
     #[inline]
     /// Remove the currently selected item from the playlist.
     pub fn playlist_remove_current(&self) -> Result<()> {
-        unsafe { self.command("playlist-remove", &["current"]) }
+        self.command("playlist-remove", &["current"])
     }
 
     #[inline]
     /// Remove item at `position` from the playlist.
     pub fn playlist_remove_index(&self, position: usize) -> Result<()> {
-        unsafe { self.command("playlist-remove", &[&format!("{}", position)]) }
+        self.command("playlist-remove", &[&format!("{}", position)])
     }
 
     #[inline]
     /// Move item `old` to the position of item `new`.
     pub fn playlist_move(&self, old: usize, new: usize) -> Result<()> {
-        unsafe { self.command("playlist-move", &[&format!("{}", new), &format!("{}", old)]) }
+        self.command("playlist-move", &[&format!("{}", new), &format!("{}", old)])
     }
 
     #[inline]
     /// Shuffle the playlist.
     pub fn playlist_shuffle(&self) -> Result<()> {
-        unsafe { self.command("playlist-shuffle", &[]) }
+        self.command("playlist-shuffle", &[])
     }
 
     // --- Subtitle functions ---
@@ -811,16 +806,12 @@ impl Mpv {
          lang: B)
          -> Result<()> {
         match (title.into(), lang.into()) {
-            (None, None) => unsafe {
-                self.command("sub-add", &[&format!("\"{}\"", path), "select"])
-            },
-            (Some(t), None) => unsafe {
-                self.command("sub-add", &[&format!("\"{}\"", path), "select", t])
-            },
+            (None, None) => self.command("sub-add", &[&format!("\"{}\"", path), "select"]),
+            (Some(t), None) => self.command("sub-add", &[&format!("\"{}\"", path), "select", t]),
             (None, Some(_)) => Err(ErrorKind::InvalidArgument.into()),
-            (Some(t), Some(l)) => unsafe {
+            (Some(t), Some(l)) => {
                 self.command("sub-add", &[&format!("\"{}\"", path), "select", t, l])
-            },
+            }
         }
     }
 
@@ -836,13 +827,11 @@ impl Mpv {
          lang: B)
          -> Result<()> {
         match (title.into(), lang.into()) {
-            (None, None) => unsafe { self.command("sub-add", &[&format!("\"{}\"", path), "auto"]) },
-            (Some(t), None) => unsafe {
-                self.command("sub-add", &[&format!("\"{}\"", path), "auto", t])
-            },
-            (Some(t), Some(l)) => unsafe {
+            (None, None) => self.command("sub-add", &[&format!("\"{}\"", path), "auto"]),
+            (Some(t), None) => self.command("sub-add", &[&format!("\"{}\"", path), "auto", t]),
+            (Some(t), Some(l)) => {
                 self.command("sub-add", &[&format!("\"{}\"", path), "auto", t, l])
-            },
+            }
             (None, Some(_)) => Err(ErrorKind::InvalidArgument.into()),
         }
     }
@@ -853,7 +842,7 @@ impl Mpv {
     /// (In this case, title/language are ignored, and if the [sub] was changed since it was loaded,
     /// these changes won't be reflected.)".
     pub fn subtitle_add_cached(&self, path: &str) -> Result<()> {
-        unsafe { self.command("sub-add", &[&format!("\"{}\"", path), "cached"]) }
+        self.command("sub-add", &[&format!("\"{}\"", path), "cached"])
     }
 
     #[inline]
@@ -861,9 +850,9 @@ impl Mpv {
     /// track. (Works on external subtitle files only.)"
     pub fn subtitle_remove<A: Into<Option<usize>>>(&self, index: A) -> Result<()> {
         if let Some(idx) = index.into() {
-            unsafe { self.command("sub-remove", &[&format!("{}", idx)]) }
+            self.command("sub-remove", &[&format!("{}", idx)])
         } else {
-            unsafe { self.command("sub-remove", &[]) }
+            self.command("sub-remove", &[])
         }
     }
 
@@ -872,9 +861,9 @@ impl Mpv {
     /// track. (Works on external subtitle files only.)"
     pub fn subtitle_reload<A: Into<Option<usize>>>(&self, index: A) -> Result<()> {
         if let Some(idx) = index.into() {
-            unsafe { self.command("sub-reload", &[&format!("{}", idx)]) }
+            self.command("sub-reload", &[&format!("{}", idx)])
         } else {
-            unsafe { self.command("sub-reload", &[]) }
+            self.command("sub-reload", &[])
         }
     }
 
@@ -882,7 +871,7 @@ impl Mpv {
     /// "Change subtitle timing such, that the subtitle event after the next `isize` subtitle
     /// events is displayed. `isize` can be negative to step backwards."
     pub fn subtitle_step(&self, skip: isize) -> Result<()> {
-        unsafe { self.command("sub-step", &[&format!("{}", skip)]) }
+        self.command("sub-step", &[&format!("{}", skip)])
     }
 
     #[inline]
@@ -891,12 +880,12 @@ impl Mpv {
     /// For embedded subtitles (like with matroska), this works only with subtitle events that
     /// have already been displayed, or are within a short prefetch range."
     pub fn subtitle_seek_forward(&self) -> Result<()> {
-        unsafe { self.command("sub-seek", &["1"]) }
+        self.command("sub-seek", &["1"])
     }
 
     #[inline]
     /// See `SeekForward`.
     pub fn subtitle_seek_backward(&self) -> Result<()> {
-        unsafe { self.command("sub-seek", &["-1"]) }
+        self.command("sub-seek", &["-1"])
     }
 }

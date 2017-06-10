@@ -56,16 +56,17 @@ impl Mpv {
     }
 }
 
-/// Return an initialized `T`, panic on errors.
+/// Return a persistent `T` that is passed to all other `Stream*` functions, panic on errors.
 pub type StreamOpen<T, U> = fn(&mut U, &str) -> T;
 /// Do any necessary cleanup.
 pub type StreamClose<T> = fn(Box<T>);
-/// Seek to the given offset. Return the new offset, or `MpvError::Generic` if seek failed.
+/// Seek to the given offset. Return the new offset, or either `MpvError::Generic` if seeking
+/// failed or panic.
 pub type StreamSeek<T> = fn(&mut T, i64) -> i64;
 /// Read nbytes into the given buffer.
-/// Return either the number of read bytes, `0` on EOF, `-1` on error.
+/// Return either the number of read bytes, `0` on EOF, or either `-1` or panic on error.
 pub type StreamRead<T> = fn(&mut T, *mut ctype::c_char, u64) -> i64;
-/// Return the total size of the stream in bytes.
+/// Return the total size of the stream in bytes. Panic on error.
 pub type StreamSize<T> = fn(&mut T) -> i64;
 
 unsafe extern "C" fn open_wrapper<T, U>(user_data: *mut ctype::c_void,
@@ -222,15 +223,14 @@ pub struct Protocol<T: Sized + RefUnwindSafe, U: RefUnwindSafe> {
 }
 
 impl<T: RefUnwindSafe, U: RefUnwindSafe> Protocol<T, U> {
-    /// `name` is the prefix of the protocol, e.g. `myprotocol://path`.
+    #[inline]
+    /// `name` is the prefix of the protocol, e.g. `name://path`.
     ///
-    /// `user_data` is data that will be passed to `StreamOpen`.
+    /// `user_data` is data that will be passed to `open_fn`.
     ///
     /// # Safety
     /// Do not call libmpv functions in any supplied function.
     /// All panics of the provided functions are catched and can be used as generic error returns.
-    ///
-    /// Panic unwinding is catched and returns an appropriate error.
     pub unsafe fn new(name: String,
                       user_data: U,
                       open_fn: StreamOpen<T, U>,
