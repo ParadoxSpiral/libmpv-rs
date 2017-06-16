@@ -37,7 +37,6 @@ pub enum PropertyData<'a> {
     Double(ctype::c_double),
 }
 
-
 impl<'a> PropertyData<'a> {
     fn from_raw(format: mpv_format, ptr: *mut ctype::c_void) -> Result<PropertyData<'a>> {
         debug_assert!(!ptr.is_null());
@@ -59,6 +58,7 @@ impl<'a> PropertyData<'a> {
                 Ok(PropertyData::Double(unsafe { *(ptr as *mut f64) }))
             }
             mpv_format::MPV_FORMAT_INT64 => Ok(PropertyData::Int64(unsafe { *(ptr as *mut i64) })),
+            mpv_format::MPV_FORMAT_NONE => unreachable!(),
             _ => unimplemented!(),
         }
     }

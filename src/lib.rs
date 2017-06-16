@@ -55,6 +55,8 @@ pub use raw::mpv_event_id as EventId;
 pub use raw::mpv_log_level as LogLevel;
 /// The reason an `Event::EndFile` was fired.
 pub use raw::mpv_end_file_reason as EndFileReason;
+/// An mpv error, used in `Error::Native`
+pub use raw::mpv_error as MpvError;
 mod wrapper;
 pub use wrapper::*;
 #[cfg(test)]
