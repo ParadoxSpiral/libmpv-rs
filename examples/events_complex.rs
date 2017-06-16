@@ -19,12 +19,12 @@
 extern crate mpv;
 extern crate crossbeam;
 
-#[cfg(not(feature="events_complex"))]
+#[cfg(not(feature = "events_complex"))]
 fn main() {
     panic!("complex events not enabled!");
 }
 
-#[cfg(feature="events_complex")]
+#[cfg(feature = "events_complex")]
 fn main() {
     use mpv::*;
     use mpv::events::events_complex::*;
@@ -34,9 +34,9 @@ fn main() {
     use std::time::Duration;
     use std::thread;
 
-    let path = env::args()
-        .nth(1)
-        .expect("Expected path to media as argument, found nil.");
+    let path = env::args().nth(1).expect(
+        "Expected path to media as argument, found nil.",
+    );
 
     // Create an `Mpv` and set some properties.
     let mpv = Mpv::new().unwrap();
@@ -49,15 +49,18 @@ fn main() {
     crossbeam::scope(|scope| {
         // Spin up 3 threads that observe different sets of `Event`s.
         scope.spawn(|| {
-            let iter = mpv.observe_events(&[Event::FileLoaded,
-                                            Event::StartFile,
-                                            Event::Seek,
-                                            Event::PlaybackRestart,
-                                            Event::EndFile {
-                                                reason: EndFileReason::MPV_END_FILE_REASON_EOF,
-                                                error: None,
-                                            }])
-                .unwrap();
+            let iter = mpv.observe_events(
+                &[
+                    Event::FileLoaded,
+                    Event::StartFile,
+                    Event::Seek,
+                    Event::PlaybackRestart,
+                    Event::EndFile {
+                        reason: EndFileReason::MPV_END_FILE_REASON_EOF,
+                        error: None,
+                    },
+                ],
+            ).unwrap();
 
             for vec in iter {
                 // If any `Event` was an `Endfile`, . . .
@@ -65,12 +68,12 @@ fn main() {
                                 reason: ref r,
                                 error: ref e,
                             }) =
-                    vec.iter()
-                        .find(|ev| if let Event::EndFile { .. } = **ev {
-                                  true
-                              } else {
-                                  false
-                              }) {
+                    vec.iter().find(|ev| if let Event::EndFile { .. } = **ev {
+                        true
+                    } else {
+                        false
+                    })
+                {
                     // . . . print the `EndFile` reason and exit, . . .
                     println!("File ended! Reason: {:?}; Error: {:?}", r, e);
                     thread::sleep(Duration::from_millis(300));
@@ -83,11 +86,12 @@ fn main() {
         });
         scope.spawn(|| {
             // Here the value of the property is irrelevant: only the name is used.
-            let iter = mpv.observe_events(&[Event::PropertyChange(("volume".into(),
-                                                                   PropertyData::Int64(0))),
-                                            Event::PropertyChange(("pause".into(),
-                                                                   PropertyData::Flag(false)))])
-                .unwrap();
+            let iter = mpv.observe_events(
+                &[
+                    Event::PropertyChange(("volume".into(), PropertyData::Int64(0))),
+                    Event::PropertyChange(("pause".into(), PropertyData::Flag(false))),
+                ],
+            ).unwrap();
 
             for vec in iter {
                 println!("properties: {:?}", vec);

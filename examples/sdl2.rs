@@ -30,9 +30,9 @@ use std::rc::Rc;
 struct Draw {}
 
 fn main() {
-    let path = env::args()
-        .nth(1)
-        .expect("Expected path to media as argument, found nil.");
+    let path = env::args().nth(1).expect(
+        "Expected path to media as argument, found nil.",
+    );
 
     // Check for driver availability
     let driver_index = sdl2::render::drivers()
@@ -69,8 +69,9 @@ fn main() {
     let mut mpv_ogl = mpv.create_opengl_context(move |name| vs.gl_get_proc_address(name))
         .unwrap();
     unsafe {
-        mpv_ogl.set_update_callback(AssertUnwindSafe(events),
-                                    |events| events.push_custom_event(Draw {}).unwrap())
+        mpv_ogl.set_update_callback(AssertUnwindSafe(events), |events| {
+            events.push_custom_event(Draw {}).unwrap()
+        })
     };
 
     // Load specified file

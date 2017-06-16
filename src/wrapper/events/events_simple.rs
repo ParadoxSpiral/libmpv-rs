@@ -45,11 +45,15 @@ impl<'a> PropertyData<'a> {
             mpv_format::MPV_FORMAT_FLAG => Ok(PropertyData::Flag(unsafe { *(ptr as *mut bool) })),
             mpv_format::MPV_FORMAT_STRING => {
                 let char_ptr = unsafe { *(ptr as *mut *mut ctype::c_char) };
-                Ok(PropertyData::Str(mpv_cstr_to_str!(unsafe { CStr::from_ptr(char_ptr) })?))
+                Ok(PropertyData::Str(
+                    mpv_cstr_to_str!(unsafe { CStr::from_ptr(char_ptr) })?,
+                ))
             }
             mpv_format::MPV_FORMAT_OSD_STRING => {
                 let char_ptr = unsafe { *(ptr as *mut *mut ctype::c_char) };
-                Ok(PropertyData::OsdStr(mpv_cstr_to_str!(unsafe { CStr::from_ptr(char_ptr) })?))
+                Ok(PropertyData::OsdStr(
+                    mpv_cstr_to_str!(unsafe { CStr::from_ptr(char_ptr) })?,
+                ))
             }
             mpv_format::MPV_FORMAT_DOUBLE => {
                 Ok(PropertyData::Double(unsafe { *(ptr as *mut f64) }))
@@ -151,11 +155,11 @@ impl Mpv {
                     Ok(v) => v,
                 };
                 Some(Ok(Event::LogMessage {
-                            prefix: prefix,
-                            level: level,
-                            text: text,
-                            log_level: log_message.log_level,
-                        }))
+                    prefix: prefix,
+                    level: level,
+                    text: text,
+                    log_level: log_message.log_level,
+                }))
             }
             mpv_event_id::MPV_EVENT_GET_PROPERTY_REPLY => {
                 let property = *(event.data as *mut mpv_event_property);
@@ -172,16 +176,22 @@ impl Mpv {
                     }
                 };
                 Some(Ok(Event::GetPropertyReply {
-                            name: name,
-                            result: data,
-                            reply_userdata: event.reply_userdata,
-                        }))
+                    name: name,
+                    result: data,
+                    reply_userdata: event.reply_userdata,
+                }))
             }
             mpv_event_id::MPV_EVENT_SET_PROPERTY_REPLY => {
-                Some(mpv_err(Event::SetPropertyReply(event.reply_userdata), event.error))
+                Some(mpv_err(
+                    Event::SetPropertyReply(event.reply_userdata),
+                    event.error,
+                ))
             }
             mpv_event_id::MPV_EVENT_COMMAND_REPLY => {
-                Some(mpv_err(Event::CommandReply(event.reply_userdata), event.error))
+                Some(mpv_err(
+                    Event::CommandReply(event.reply_userdata),
+                    event.error,
+                ))
             }
             mpv_event_id::MPV_EVENT_START_FILE => Some(Ok(Event::StartFile)),
             mpv_event_id::MPV_EVENT_END_FILE => {
@@ -203,19 +213,19 @@ impl Mpv {
             mpv_event_id::MPV_EVENT_SCRIPT_INPUT_DISPATCH => Some(Ok(Event::Unused)),
             mpv_event_id::MPV_EVENT_CLIENT_MESSAGE => {
                 let client_message = *(event.data as *mut mpv_event_client_message);
-                let raw_messages = slice::from_raw_parts_mut(client_message.args,
-                                                             client_message.num_args as _);
+                let raw_messages =
+                    slice::from_raw_parts_mut(client_message.args, client_message.num_args as _);
 
                 // TODO: How can we do this w/o heap allocation?
                 let mut messages = Vec::with_capacity(client_message.num_args as _);
 
                 for m in raw_messages {
                     messages.push({
-                                      match mpv_cstr_to_str!(CStr::from_ptr(*m)) {
-                                          Err(e) => return Some(Err(e)),
-                                          Ok(v) => v,
-                                      }
-                                  })
+                        match mpv_cstr_to_str!(CStr::from_ptr(*m)) {
+                            Err(e) => return Some(Err(e)),
+                            Ok(v) => v,
+                        }
+                    })
                 }
                 Some(Ok(Event::ClientMessage(messages)))
             }
@@ -239,10 +249,10 @@ impl Mpv {
                     }
                 };
                 Some(Ok(Event::PropertyChange {
-                            name: name,
-                            change: data,
-                            reply_userdata: event.reply_userdata,
-                        }))
+                    name: name,
+                    change: data,
+                    reply_userdata: event.reply_userdata,
+                }))
             }
             mpv_event_id::MPV_EVENT_CHAPTER_CHANGE => Some(Ok(Event::ChapterChange)),
             mpv_event_id::MPV_EVENT_QUEUE_OVERFLOW => Some(Ok(Event::QueueOverflow)),

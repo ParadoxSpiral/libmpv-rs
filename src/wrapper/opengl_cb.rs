@@ -34,10 +34,15 @@ impl Mpv {
     ///
     /// `vo` has to be set to `opengl-cb` for this to work properly.
     pub fn create_opengl_context<F, V>(&self, procaddr: F) -> Result<OpenGlContext<V>>
-        where F: for<'a> Fn(&'a str) -> *const () + 'static
+    where
+        F: for<'a> Fn(&'a str) -> *const () + 'static,
     {
-        if self.opengl_guard
-               .compare_and_swap(false, true, Ordering::AcqRel) {
+        if self.opengl_guard.compare_and_swap(
+            false,
+            true,
+            Ordering::AcqRel,
+        )
+        {
             bail!("Context already exists")
         } else {
             OpenGlContext::new(self.ctx, procaddr, PhantomData::<&Self>)
@@ -45,18 +50,19 @@ impl Mpv {
     }
 }
 
-unsafe extern "C" fn get_proc_addr_wrapper<F>(cookie: *mut ctype::c_void,
-                                              name: *const ctype::c_char)
-                                              -> *mut ctype::c_void
-    where F: for<'a> Fn(&'a str) -> *const ()
+unsafe extern "C" fn get_proc_addr_wrapper<F>(
+    cookie: *mut ctype::c_void,
+    name: *const ctype::c_char,
+) -> *mut ctype::c_void
+where
+    F: for<'a> Fn(&'a str) -> *const (),
 {
     let fun = cookie as *mut F;
 
     let ret = panic::catch_unwind(AssertUnwindSafe(|| {
-                                                       let name =
-                                                           CStr::from_ptr(name).to_str().unwrap();
-                                                       (*fun)(name) as *mut () as *mut ctype::c_void
-                                                   }));
+        let name = CStr::from_ptr(name).to_str().unwrap();
+        (*fun)(name) as *mut () as *mut ctype::c_void
+    }));
     if ret.is_ok() {
         ret.unwrap()
     } else {
@@ -66,8 +72,9 @@ unsafe extern "C" fn get_proc_addr_wrapper<F>(cookie: *mut ctype::c_void,
 
 #[allow(unused_must_use)]
 unsafe extern "C" fn callback_update_wrapper<F, V>(cb_ctx: *mut ctype::c_void)
-    where F: for<'a> Fn(&'a V) + RefUnwindSafe + 'static,
-          V: RefUnwindSafe
+where
+    F: for<'a> Fn(&'a V) + RefUnwindSafe + 'static,
+    V: RefUnwindSafe,
 {
     let data = cb_ctx as *mut (*const F, *mut V);
 
@@ -95,31 +102,37 @@ impl<'parent, V> Drop for OpenGlContext<'parent, V> {
 }
 
 impl<'parent, V> OpenGlContext<'parent, V> {
-    fn new<F>(mpv_ctx: *mut mpv_handle,
-              mut proc_addr: F,
-              parent: PhantomData<&'parent Mpv>)
-              -> Result<OpenGlContext<'parent, V>>
-        where F: for<'a> Fn(&'a str) -> *const () + 'static
+    fn new<F>(
+        mpv_ctx: *mut mpv_handle,
+        mut proc_addr: F,
+        parent: PhantomData<&'parent Mpv>,
+    ) -> Result<OpenGlContext<'parent, V>>
+    where
+        F: for<'a> Fn(&'a str) -> *const () + 'static,
     {
         let api_ctx = unsafe {
             mpv_get_sub_api(mpv_ctx, mpv_sub_api::MPV_SUB_API_OPENGL_CB) as
-            *mut mpv_opengl_cb_context
+                *mut mpv_opengl_cb_context
         };
         debug_assert!(!api_ctx.is_null());
 
         let proc_addr_ptr = &mut proc_addr as *mut F;
 
-        mpv_err(OpenGlContext {
+        mpv_err(
+            OpenGlContext {
+                api_ctx,
+                update_callback_data: None,
+                _does_not_outlive: parent,
+            },
+            unsafe {
+                mpv_opengl_cb_init_gl(
                     api_ctx,
-                    update_callback_data: None,
-                    _does_not_outlive: parent,
-                },
-                unsafe {
-                    mpv_opengl_cb_init_gl(api_ctx,
-                                          ptr::null(),
-                                          Some(get_proc_addr_wrapper::<F>),
-                                          proc_addr_ptr as *mut ctype::c_void)
-                })
+                    ptr::null(),
+                    Some(get_proc_addr_wrapper::<F>),
+                    proc_addr_ptr as *mut ctype::c_void,
+                )
+            },
+        )
     }
 
     #[inline]
@@ -152,14 +165,16 @@ impl<'parent, V> OpenGlContext<'parent, V> {
     /// # Safety
     /// Do not call any mpv API during the callback.
     pub unsafe fn set_update_callback<F>(&mut self, mut data: V, callback: F)
-        where F: for<'a> Fn(&'a V) + RefUnwindSafe + 'static,
-              V: RefUnwindSafe
+    where
+        F: for<'a> Fn(&'a V) + RefUnwindSafe + 'static,
+        V: RefUnwindSafe,
     {
-        mpv_opengl_cb_set_update_callback(self.api_ctx,
-                                          Some(callback_update_wrapper::<F, V>),
-                                          &mut (&callback as *const F, &mut data as *mut V) as
-                                          *mut (*const F, *mut V) as
-                                          *mut ctype::c_void);
+        mpv_opengl_cb_set_update_callback(
+            self.api_ctx,
+            Some(callback_update_wrapper::<F, V>),
+            &mut (&callback as *const F, &mut data as *mut V) as *mut (*const F, *mut V) as
+                *mut ctype::c_void,
+        );
 
         self.update_callback_data = Some(data);
     }

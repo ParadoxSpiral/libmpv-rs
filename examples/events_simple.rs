@@ -19,12 +19,12 @@
 extern crate mpv;
 extern crate crossbeam;
 
-#[cfg(not(feature="events_simple"))]
+#[cfg(not(feature = "events_simple"))]
 fn main() {
     panic!("simple events not enabled!");
 }
 
-#[cfg(feature="events_simple")]
+#[cfg(feature = "events_simple")]
 fn main() {
     use mpv::*;
     use mpv::events::events_simple::*;
@@ -33,9 +33,9 @@ fn main() {
     use std::time::Duration;
     use std::thread;
 
-    let path = env::args()
-        .nth(1)
-        .expect("Expected path to media as argument, found nil.");
+    let path = env::args().nth(1).expect(
+        "Expected path to media as argument, found nil.",
+    );
 
     // Create an `Mpv` and set some properties.
     let mpv = Mpv::new().unwrap();
@@ -60,15 +60,15 @@ fn main() {
             mpv.playlist_next_force().unwrap();
         });
         scope.spawn(|| loop {
-                        let ev = unsafe { mpv.wait_event(600.) };
-                        if let Some(Ok(Event::EndFile(r))) = ev {
-                            println!("Exiting! Reason: {:?}", r);
-                            break;
-                        } else if let Some(Ok(e)) = ev {
-                            println!("Event triggered: {:?}", e);
-                        } else if let Some(Err(e)) = ev {
-                            println!("Event errored: {:?}", e);
-                        }
-                    });
+            let ev = unsafe { mpv.wait_event(600.) };
+            if let Some(Ok(Event::EndFile(r))) = ev {
+                println!("Exiting! Reason: {:?}", r);
+                break;
+            } else if let Some(Ok(e)) = ev {
+                println!("Event triggered: {:?}", e);
+            } else if let Some(Err(e)) = ev {
+                println!("Event errored: {:?}", e);
+            }
+        });
     });
 }

@@ -44,14 +44,23 @@ impl Mpv {
     ///
     /// Returns `None` if a context already exists
     pub fn create_protocol_context<T, U>(&self, capacity: usize) -> Option<ProtocolContext<T, U>>
-        where T: RefUnwindSafe,
-              U: RefUnwindSafe
+    where
+        T: RefUnwindSafe,
+        U: RefUnwindSafe,
     {
-        if self.protocols_guard
-               .compare_and_swap(false, true, Ordering::AcqRel) {
+        if self.protocols_guard.compare_and_swap(
+            false,
+            true,
+            Ordering::AcqRel,
+        )
+        {
             None
         } else {
-            Some(ProtocolContext::new(self.ctx, capacity, PhantomData::<&Self>))
+            Some(ProtocolContext::new(
+                self.ctx,
+                capacity,
+                PhantomData::<&Self>,
+            ))
         }
     }
 }
@@ -69,12 +78,14 @@ pub type StreamRead<T> = fn(&mut T, *mut ctype::c_char, u64) -> i64;
 /// Return the total size of the stream in bytes. Panic on error.
 pub type StreamSize<T> = fn(&mut T) -> i64;
 
-unsafe extern "C" fn open_wrapper<T, U>(user_data: *mut ctype::c_void,
-                                        uri: *mut ctype::c_char,
-                                        info: *mut mpv_stream_cb_info)
-                                        -> ctype::c_int
-    where T: RefUnwindSafe,
-          U: RefUnwindSafe
+unsafe extern "C" fn open_wrapper<T, U>(
+    user_data: *mut ctype::c_void,
+    uri: *mut ctype::c_char,
+    info: *mut mpv_stream_cb_info,
+) -> ctype::c_int
+where
+    T: RefUnwindSafe,
+    U: RefUnwindSafe,
 {
     let data = user_data as *mut ProtocolData<T, U>;
 
@@ -85,11 +96,12 @@ unsafe extern "C" fn open_wrapper<T, U>(user_data: *mut ctype::c_void,
     (*info).close_fn = Some(close_wrapper::<T, U>);
 
     let ret = panic::catch_unwind(|| {
-                                      let uri = CStr::from_ptr(uri as *const _);
-                                      ptr::write((*data).cookie,
-                                                 ((*data).open_fn)(&mut (*data).user_data,
-                                                                   mpv_cstr_to_str!(uri).unwrap()));
-                                  });
+        let uri = CStr::from_ptr(uri as *const _);
+        ptr::write(
+            (*data).cookie,
+            ((*data).open_fn)(&mut (*data).user_data, mpv_cstr_to_str!(uri).unwrap()),
+        );
+    });
     if ret.is_ok() {
         0
     } else {
@@ -97,25 +109,28 @@ unsafe extern "C" fn open_wrapper<T, U>(user_data: *mut ctype::c_void,
     }
 }
 
-unsafe extern "C" fn read_wrapper<T, U>(cookie: *mut ctype::c_void,
-                                        buf: *mut ctype::c_char,
-                                        nbytes: u64)
-                                        -> i64
-    where T: RefUnwindSafe,
-          U: RefUnwindSafe
+unsafe extern "C" fn read_wrapper<T, U>(
+    cookie: *mut ctype::c_void,
+    buf: *mut ctype::c_char,
+    nbytes: u64,
+) -> i64
+where
+    T: RefUnwindSafe,
+    U: RefUnwindSafe,
 {
     let data = cookie as *mut ProtocolData<T, U>;
 
     let ret = panic::catch_unwind(|| {
-                                      debug_assert!(!(*data).cookie.is_null());
-                                      ((*data).read_fn)(&mut *(*data).cookie, buf, nbytes)
-                                  });
+        debug_assert!(!(*data).cookie.is_null());
+        ((*data).read_fn)(&mut *(*data).cookie, buf, nbytes)
+    });
     if ret.is_ok() { ret.unwrap() } else { -1 }
 }
 
 unsafe extern "C" fn seek_wrapper<T, U>(cookie: *mut ctype::c_void, offset: i64) -> i64
-    where T: RefUnwindSafe,
-          U: RefUnwindSafe
+where
+    T: RefUnwindSafe,
+    U: RefUnwindSafe,
 {
     let data = cookie as *mut ProtocolData<T, U>;
 
@@ -124,10 +139,9 @@ unsafe extern "C" fn seek_wrapper<T, U>(cookie: *mut ctype::c_void, offset: i64)
     }
 
     let ret = panic::catch_unwind(|| {
-                                      debug_assert!(!(*data).cookie.is_null());
-                                      (*(*data).seek_fn.as_ref().unwrap())(&mut *(*data).cookie,
-                                                                           offset)
-                                  });
+        debug_assert!(!(*data).cookie.is_null());
+        (*(*data).seek_fn.as_ref().unwrap())(&mut *(*data).cookie, offset)
+    });
     if ret.is_ok() {
         ret.unwrap()
     } else {
@@ -136,8 +150,9 @@ unsafe extern "C" fn seek_wrapper<T, U>(cookie: *mut ctype::c_void, offset: i64)
 }
 
 unsafe extern "C" fn size_wrapper<T, U>(cookie: *mut ctype::c_void) -> i64
-    where T: RefUnwindSafe,
-          U: RefUnwindSafe
+where
+    T: RefUnwindSafe,
+    U: RefUnwindSafe,
 {
     let data = cookie as *mut ProtocolData<T, U>;
 
@@ -146,9 +161,9 @@ unsafe extern "C" fn size_wrapper<T, U>(cookie: *mut ctype::c_void) -> i64
     }
 
     let ret = panic::catch_unwind(|| {
-                                      debug_assert!(!(*data).cookie.is_null());
-                                      (*(*data).size_fn.as_ref().unwrap())(&mut *(*data).cookie)
-                                  });
+        debug_assert!(!(*data).cookie.is_null());
+        (*(*data).size_fn.as_ref().unwrap())(&mut *(*data).cookie)
+    });
     if ret.is_ok() {
         ret.unwrap()
     } else {
@@ -158,15 +173,16 @@ unsafe extern "C" fn size_wrapper<T, U>(cookie: *mut ctype::c_void) -> i64
 
 #[allow(unused_must_use)]
 unsafe extern "C" fn close_wrapper<T, U>(cookie: *mut ctype::c_void)
-    where T: RefUnwindSafe,
-          U: RefUnwindSafe
+where
+    T: RefUnwindSafe,
+    U: RefUnwindSafe,
 {
     let data = cookie as *mut ProtocolData<T, U>;
 
     panic::catch_unwind(|| {
-                            debug_assert!(!(*data).cookie.is_null());
-                            ((*data).close_fn)(Box::from_raw((*data).cookie))
-                        });
+        debug_assert!(!(*data).cookie.is_null());
+        ((*data).close_fn)(Box::from_raw((*data).cookie))
+    });
 }
 
 struct ProtocolData<T, U> {
@@ -192,10 +208,11 @@ unsafe impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> Send for ProtocolContex
 unsafe impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> Sync for ProtocolContext<'parent, T, U> {}
 
 impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> ProtocolContext<'parent, T, U> {
-    fn new(ctx: *mut mpv_handle,
-           capacity: usize,
-           marker: PhantomData<&'parent Mpv>)
-           -> ProtocolContext<'parent, T, U> {
+    fn new(
+        ctx: *mut mpv_handle,
+        capacity: usize,
+        marker: PhantomData<&'parent Mpv>,
+    ) -> ProtocolContext<'parent, T, U> {
         ProtocolContext {
             ctx,
             protocols: Mutex::new(Vec::with_capacity(capacity)),
@@ -231,24 +248,25 @@ impl<T: RefUnwindSafe, U: RefUnwindSafe> Protocol<T, U> {
     /// # Safety
     /// Do not call libmpv functions in any supplied function.
     /// All panics of the provided functions are catched and can be used as generic error returns.
-    pub unsafe fn new(name: String,
-                      user_data: U,
-                      open_fn: StreamOpen<T, U>,
-                      close_fn: StreamClose<T>,
-                      read_fn: StreamRead<T>,
-                      seek_fn: Option<StreamSeek<T>>,
-                      size_fn: Option<StreamSize<T>>)
-                      -> Protocol<T, U> {
+    pub unsafe fn new(
+        name: String,
+        user_data: U,
+        open_fn: StreamOpen<T, U>,
+        close_fn: StreamClose<T>,
+        read_fn: StreamRead<T>,
+        seek_fn: Option<StreamSeek<T>>,
+        size_fn: Option<StreamSize<T>>,
+    ) -> Protocol<T, U> {
         let data = Box::into_raw(Box::new(ProtocolData {
-                                              cookie: allocate(1),
-                                              user_data: user_data,
+            cookie: allocate(1),
+            user_data: user_data,
 
-                                              open_fn: open_fn,
-                                              close_fn: close_fn,
-                                              read_fn: read_fn,
-                                              seek_fn: seek_fn,
-                                              size_fn: size_fn,
-                                          }));
+            open_fn: open_fn,
+            close_fn: close_fn,
+            read_fn: read_fn,
+            seek_fn: seek_fn,
+            size_fn: size_fn,
+        }));
 
         Protocol {
             name: name,
@@ -259,11 +277,15 @@ impl<T: RefUnwindSafe, U: RefUnwindSafe> Protocol<T, U> {
     fn register(&self, ctx: *mut mpv_handle) -> Result<()> {
         let name = CString::new(&self.name[..])?;
         unsafe {
-            mpv_err((),
-                    mpv_stream_cb_add_ro(ctx,
-                                         name.as_ptr(),
-                                         self.data as *mut _,
-                                         Some(open_wrapper::<T, U>)))
+            mpv_err(
+                (),
+                mpv_stream_cb_add_ro(
+                    ctx,
+                    name.as_ptr(),
+                    self.data as *mut _,
+                    Some(open_wrapper::<T, U>),
+                ),
+            )
         }
     }
 }

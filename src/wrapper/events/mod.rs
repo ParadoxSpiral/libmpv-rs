@@ -16,9 +16,9 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-#[cfg(feature="events_complex")]
+#[cfg(feature = "events_complex")]
 /// TODO: Doc
 pub mod events_complex;
-#[cfg(feature="events_simple")]
+#[cfg(feature = "events_simple")]
 /// TODO: Doc
 pub mod events_simple;

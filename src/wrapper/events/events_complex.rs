@@ -41,7 +41,9 @@ impl Mpv {
     pub fn new() -> Result<Mpv> {
         let api_version = unsafe { mpv_client_api_version() };
         if ::MPV_CLIENT_API_VERSION != api_version {
-            return Err(ErrorKind::VersionMismatch(::MPV_CLIENT_API_VERSION, api_version).into());
+            return Err(
+                ErrorKind::VersionMismatch(::MPV_CLIENT_API_VERSION, api_version).into(),
+            );
         }
 
         let ctx = unsafe { mpv_create() };
@@ -52,73 +54,81 @@ impl Mpv {
         let (ev_iter_notification, ev_to_observe, ev_to_observe_properties, ev_observed) = {
             let ev_iter_notification = Box::new((Mutex::new(false), Condvar::new()));
             unsafe {
-                mpv_set_wakeup_callback(ctx,
-                                        Some(event_callback),
-                                        &ev_iter_notification.1 as *const Condvar as *mut Condvar as
-                                        *mut _);
+                mpv_set_wakeup_callback(
+                    ctx,
+                    Some(event_callback),
+                    &ev_iter_notification.1 as *const Condvar as *mut Condvar as *mut _,
+                );
             }
 
-            (ev_iter_notification,
-             Mutex::new(Vec::with_capacity(10)),
-             Mutex::new(HashMap::with_capacity(10)),
-             Mutex::new(Vec::with_capacity(15)))
+            (
+                ev_iter_notification,
+                Mutex::new(Vec::with_capacity(10)),
+                Mutex::new(HashMap::with_capacity(10)),
+                Mutex::new(Vec::with_capacity(15)),
+            )
         };
 
         for i in 2..24 {
-            if let Err(e) = mpv_err((),
-                                    unsafe { mpv_request_event(ctx, mpv_event_id::from(i), 0) }) {
+            if let Err(e) = mpv_err((), unsafe {
+                mpv_request_event(ctx, mpv_event_id::from(i), 0)
+            })
+            {
                 unsafe { mpv_terminate_destroy(ctx) };
                 return Err(e);
             }
         }
 
-        mpv_err((), unsafe { mpv_initialize(ctx) })
-            .or_else(|err| {
-                         unsafe { mpv_terminate_destroy(ctx) };
-                         Err(err)
-                     })?;
+        mpv_err((), unsafe { mpv_initialize(ctx) }).or_else(|err| {
+            unsafe { mpv_terminate_destroy(ctx) };
+            Err(err)
+        })?;
 
         // TODO: This can be made much prettier once `struct_field_attributes` is stable.
         let ret;
-#[cfg(all(feature="custom_protocols", not(feature="opengl_callback")))]        {
+        #[cfg(all(feature = "custom_protocols", not(feature = "opengl_callback")))]
+        {
             ret = Ok(Mpv {
-                         ctx,
-                         ev_iter_notification,
-                         ev_to_observe,
-                         ev_to_observe_properties,
-                         ev_observed,
-                         protocols_guard: AtomicBool::new(false),
-                     });
+                ctx,
+                ev_iter_notification,
+                ev_to_observe,
+                ev_to_observe_properties,
+                ev_observed,
+                protocols_guard: AtomicBool::new(false),
+            });
         }
-#[cfg(all(feature="opengl_callback", not(feature="custom_protocols")))]        {
+        #[cfg(all(feature = "opengl_callback", not(feature = "custom_protocols")))]
+        {
             ret = Ok(Mpv {
-                         ctx,
-                         ev_iter_notification,
-                         ev_to_observe,
-                         ev_to_observe_properties,
-                         ev_observed,
-                         opengl_guard: AtomicBool::new(false),
-                     });
+                ctx,
+                ev_iter_notification,
+                ev_to_observe,
+                ev_to_observe_properties,
+                ev_observed,
+                opengl_guard: AtomicBool::new(false),
+            });
         }
-#[cfg(all(feature="opengl_callback", feature="custom_protocols"))]        {
+        #[cfg(all(feature = "opengl_callback", feature = "custom_protocols"))]
+        {
             ret = Ok(Mpv {
-                         ctx,
-                         ev_iter_notification,
-                         ev_to_observe,
-                         ev_to_observe_properties,
-                         ev_observed,
-                         protocols_guard: AtomicBool::new(false),
-                         opengl_guard: AtomicBool::new(false),
-                     });
+                ctx,
+                ev_iter_notification,
+                ev_to_observe,
+                ev_to_observe_properties,
+                ev_observed,
+                protocols_guard: AtomicBool::new(false),
+                opengl_guard: AtomicBool::new(false),
+            });
         }
-#[cfg(all(not(feature="opengl_callback"), not(feature="custom_protocols")))]        {
+        #[cfg(all(not(feature = "opengl_callback"), not(feature = "custom_protocols")))]
+        {
             ret = Ok(Mpv {
-                         ctx,
-                         ev_iter_notification,
-                         ev_to_observe,
-                         ev_to_observe_properties,
-                         ev_observed,
-                     });
+                ctx,
+                ev_iter_notification,
+                ev_to_observe,
+                ev_to_observe_properties,
+                ev_observed,
+            });
         }
         ret
     }
@@ -153,8 +163,9 @@ impl Mpv {
 
                 if let Event::LogMessage { level: lvl, .. } = *elem {
                     let min_level = CString::new(mpv_log_level_as_str(lvl))?;
-                    mpv_err((),
-                            unsafe { mpv_request_log_messages(self.ctx, min_level.as_ptr()) })?;
+                    mpv_err((), unsafe {
+                        mpv_request_log_messages(self.ctx, min_level.as_ptr())
+                    })?;
                 }
 
                 mpv_err((), unsafe { mpv_request_event(self.ctx, elem.as_id(), 1) })?;
@@ -168,10 +179,12 @@ impl Mpv {
         for (i, elem) in props.iter().enumerate() {
             let name = CString::new(&elem.0[..])?;
             let err = mpv_err((), unsafe {
-                mpv_observe_property(self.ctx,
-                                     (start_id + i) as _,
-                                     name.as_ptr(),
-                                     elem.1.format() as _)
+                mpv_observe_property(
+                    self.ctx,
+                    (start_id + i) as _,
+                    name.as_ptr(),
+                    elem.1.format() as _,
+                )
             });
             if err.is_err() {
                 for (_, id) in props_ins {
@@ -186,15 +199,15 @@ impl Mpv {
         properties.extend(props_ins);
 
         Ok(EventIter {
-               ctx: self.ctx,
-               first_iteration: true,
-               notification: &self.ev_iter_notification,
-               all_to_observe: &self.ev_to_observe,
-               all_to_observe_properties: &self.ev_to_observe_properties,
-               local_to_observe: evs,
-               all_observed: &self.ev_observed,
-               _does_not_outlive: PhantomData::<&Self>,
-           })
+            ctx: self.ctx,
+            first_iteration: true,
+            notification: &self.ev_iter_notification,
+            all_to_observe: &self.ev_to_observe,
+            all_to_observe_properties: &self.ev_to_observe_properties,
+            local_to_observe: evs,
+            all_observed: &self.ev_observed,
+            _does_not_outlive: PhantomData::<&Self>,
+        })
     }
 }
 
@@ -318,10 +331,12 @@ impl Event {
     fn property_from_raw(raw: *mut ctype::c_void) -> Event {
         debug_assert!(!raw.is_null());
         let raw = unsafe { &mut *(raw as *mut mpv_event_property) };
-        Event::PropertyChange((unsafe {
-                                   mpv_cstr_to_str!(CStr::from_ptr(raw.name)).unwrap().into()
-                               },
-                               PropertyData::from_raw(raw.format, raw.data)))
+        Event::PropertyChange((
+            unsafe {
+                mpv_cstr_to_str!(CStr::from_ptr(raw.name)).unwrap().into()
+            },
+            PropertyData::from_raw(raw.format, raw.data),
+        ))
     }
 }
 
@@ -399,15 +414,16 @@ impl<'parent> Drop for EventIter<'parent> {
                     // `.0` is the name of the property.
                     if outer_prop.0 == inner_prop.0 {
                         unsafe {
-                            mpv_unobserve_property(self.ctx,
-                                                   all_to_observe_properties
-                                                       .remove(&outer_prop.0)
-                                                       .unwrap());
+                            mpv_unobserve_property(
+                                self.ctx,
+                                all_to_observe_properties.remove(&outer_prop.0).unwrap(),
+                            );
                         }
                         return true;
                     }
                 } else if mpv_event_id::MPV_EVENT_LOG_MESSAGE == outer_ev.as_id() &&
-                          outer_ev == inner_ev {
+                           outer_ev == inner_ev
+                {
                     let min_level = &*b"no\0";
                     unsafe { mpv_request_log_messages(self.ctx, min_level.as_ptr() as _) };
                     return true;

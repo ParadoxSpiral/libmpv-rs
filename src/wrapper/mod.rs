@@ -18,7 +18,7 @@
 
 mod errors {
     #![allow(missing_docs)]
-    #[cfg(feature="events_complex")]
+    #[cfg(feature = "events_complex")]
     use super::events::events_complex::Event;
     use raw::mpv_error;
     use std::ffi::NulError;
@@ -69,7 +69,7 @@ mod errors {
                 &ErrorKind::Loadfiles(ref idx, ref err) => {
                     ErrorKind::Loadfiles(*idx, err.clone()).into()
                 }
-                #[cfg(feature="events_complex")]
+                #[cfg(feature = "events_complex")]
                 &ErrorKind::AlreadyObserved(ref e) => ErrorKind::AlreadyObserved(e.clone()).into(),
                 &ErrorKind::InvalidArgument => ErrorKind::InvalidArgument.into(),
                 &ErrorKind::VersionMismatch(ref li, ref lo) => {
@@ -90,7 +90,7 @@ mod errors {
                 (&ErrorKind::Native(ref e1), &ErrorKind::Native(ref e2)) => e1 == e2,
                 (&ErrorKind::Loadfiles(ref idx1, ref err1),
                  &ErrorKind::Loadfiles(ref idx2, ref err2)) => idx1 == idx2 && err1 == err2,
-                #[cfg(feature="events_complex")]
+                #[cfg(feature = "events_complex")]
                 (&ErrorKind::AlreadyObserved(ref e1), &ErrorKind::AlreadyObserved(ref e2)) => {
                     e1 == e2
                 }
@@ -129,18 +129,18 @@ macro_rules! mpv_cstr_to_str {
 
 /// Contains event related abstractions
 pub mod events;
-#[cfg(feature="custom_protocols")]
+#[cfg(feature = "custom_protocols")]
 /// Contains abstractions to define custom protocol handlers.
 pub mod protocol;
-#[cfg(feature="opengl_callback")]
+#[cfg(feature = "opengl_callback")]
 /// Contains abstractions to use the opengl callback interface.
 pub mod opengl_cb;
 
 use super::*;
 
-#[cfg(feature="events_complex")]
+#[cfg(feature = "events_complex")]
 use parking_lot;
-#[cfg(feature="events_complex")]
+#[cfg(feature = "events_complex")]
 use parking_lot::Mutex;
 use raw::*;
 
@@ -149,7 +149,7 @@ use std::mem;
 use std::ops::Deref;
 use std::os::raw as ctype;
 use std::ptr;
-#[cfg(any(feature="custom_protocols", feature="opengl_callback"))]
+#[cfg(any(feature = "custom_protocols", feature = "opengl_callback"))]
 use std::sync::atomic::AtomicBool;
 #[cfg(unix)]
 use std::ffi::OsStr;
@@ -180,9 +180,10 @@ pub unsafe trait GetData: Sized {
 /// This trait describes which types are allowed to be passed to setter mpv APIs.
 pub unsafe trait SetData: Sized {
     #[doc(hidden)]
-    fn call_as_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(mut self,
-                                                                    mut fun: F)
-                                                                    -> Result<T> {
+    fn call_as_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(
+        mut self,
+        mut fun: F,
+    ) -> Result<T> {
         fun(&mut self as *mut Self as _)
     }
     fn get_format() -> Format;
@@ -222,10 +223,10 @@ unsafe impl GetData for bool {
         let ptr = unsafe { &mut mem::zeroed() } as *mut i64;
         let _ = fun(ptr as _)?;
         Ok(match unsafe { *ptr } {
-               0 => false,
-               1 => true,
-               _ => unreachable!(),
-           })
+            0 => false,
+            1 => true,
+            _ => unreachable!(),
+        })
     }
 
     #[inline]
@@ -269,7 +270,9 @@ unsafe impl SetData for String {
     #[inline]
     fn call_as_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(self, mut fun: F) -> Result<T> {
         let string = CString::new(self)?;
-        fun((&mut string.as_ptr()) as *mut *const ctype::c_char as *mut _)
+        fun(
+            (&mut string.as_ptr()) as *mut *const ctype::c_char as *mut _,
+        )
     }
 
     #[inline]
@@ -295,8 +298,9 @@ impl<'a> Drop for MpvStr<'a> {
 
 unsafe impl<'a> GetData for MpvStr<'a> {
     #[inline]
-    fn get_from_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(mut fun: F)
-                                                                     -> Result<MpvStr<'a>> {
+    fn get_from_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(
+        mut fun: F,
+    ) -> Result<MpvStr<'a>> {
         let ptr = &mut ptr::null();
         let _ = fun(ptr as *mut *const ctype::c_char as _)?;
 
@@ -313,7 +317,9 @@ unsafe impl<'a> SetData for &'a str {
     #[inline]
     fn call_as_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(self, mut fun: F) -> Result<T> {
         let string = CString::new(self)?;
-        fun((&mut string.as_ptr()) as *mut *const ctype::c_char as *mut _)
+        fun(
+            (&mut string.as_ptr()) as *mut *const ctype::c_char as *mut _,
+        )
     }
 
     #[inline]
@@ -368,17 +374,17 @@ impl FileState {
 pub struct Mpv {
     /// The handle to the mpv core
     pub ctx: *mut mpv_handle,
-    #[cfg(feature="events_complex")]
+    #[cfg(feature = "events_complex")]
     ev_iter_notification: Box<(Mutex<bool>, parking_lot::Condvar)>,
-    #[cfg(feature="events_complex")]
+    #[cfg(feature = "events_complex")]
     ev_to_observe: Mutex<Vec<events::events_complex::Event>>,
-    #[cfg(feature="events_complex")]
+    #[cfg(feature = "events_complex")]
     ev_to_observe_properties: Mutex<::std::collections::HashMap<String, u64>>,
-    #[cfg(feature="events_complex")]
+    #[cfg(feature = "events_complex")]
     ev_observed: Mutex<Vec<events::events_complex::Event>>,
-    #[cfg(feature="custom_protocols")]
+    #[cfg(feature = "custom_protocols")]
     protocols_guard: AtomicBool,
-    #[cfg(feature="opengl_callback")]
+    #[cfg(feature = "opengl_callback")]
     opengl_guard: AtomicBool,
 }
 
@@ -395,48 +401,53 @@ impl Drop for Mpv {
 }
 
 impl Mpv {
-    #[cfg(not(feature="events_complex"))]
+    #[cfg(not(feature = "events_complex"))]
     #[inline]
     /// Create a new `Mpv`.
     /// The default settings can be probed by running: `$ mpv --show-profile=libmpv`
     pub fn new() -> Result<Mpv> {
         let api_version = unsafe { mpv_client_api_version() };
         if ::MPV_CLIENT_API_VERSION != api_version {
-            return Err(ErrorKind::VersionMismatch(::MPV_CLIENT_API_VERSION, api_version).into());
+            return Err(
+                ErrorKind::VersionMismatch(::MPV_CLIENT_API_VERSION, api_version).into(),
+            );
         }
 
         let ctx = unsafe { mpv_create() };
         if ctx.is_null() {
             return Err(ErrorKind::Null.into());
         }
-        mpv_err((), unsafe { mpv_initialize(ctx) })
-            .or_else(|err| {
-                         unsafe { mpv_terminate_destroy(ctx) };
-                         Err(err)
-                     })?;
+        mpv_err((), unsafe { mpv_initialize(ctx) }).or_else(|err| {
+            unsafe { mpv_terminate_destroy(ctx) };
+            Err(err)
+        })?;
 
         // TODO: This can be made much prettier once `struct_field_attributes` is stable.
         let ret;
-#[cfg(all(feature="custom_protocols", not(feature="opengl_callback")))]        {
+        #[cfg(all(feature = "custom_protocols", not(feature = "opengl_callback")))]
+        {
             ret = Ok(Mpv {
-                         ctx,
-                         protocols_guard: AtomicBool::new(false),
-                     });
+                ctx,
+                protocols_guard: AtomicBool::new(false),
+            });
         }
-#[cfg(all(feature="opengl_callback", not(feature="custom_protocols")))]        {
+        #[cfg(all(feature = "opengl_callback", not(feature = "custom_protocols")))]
+        {
             ret = Ok(Mpv {
-                         ctx,
-                         opengl_guard: AtomicBool::new(false),
-                     });
+                ctx,
+                opengl_guard: AtomicBool::new(false),
+            });
         }
-#[cfg(all(feature="opengl_callback", feature="custom_protocols"))]        {
+        #[cfg(all(feature = "opengl_callback", feature = "custom_protocols"))]
+        {
             ret = Ok(Mpv {
-                         ctx,
-                         protocols_guard: AtomicBool::new(false),
-                         opengl_guard: AtomicBool::new(false),
-                     });
+                ctx,
+                protocols_guard: AtomicBool::new(false),
+                opengl_guard: AtomicBool::new(false),
+            });
         }
-#[cfg(all(not(feature="opengl_callback"), not(feature="custom_protocols")))]        {
+        #[cfg(all(not(feature = "opengl_callback"), not(feature = "custom_protocols")))]
+        {
             ret = Ok(Mpv { ctx });
         }
         ret
@@ -458,8 +469,8 @@ impl Mpv {
     ///
     /// Note that you may have to escape strings with `""` when they contain spaces.
     pub fn command(&self, name: &str, args: &[&str]) -> Result<()> {
-        let mut cmd = String::with_capacity(name.len() +
-                                            args.iter().fold(0, |acc, e| acc + e.len() + 1));
+        let mut cmd =
+            String::with_capacity(name.len() + args.iter().fold(0, |acc, e| acc + e.len() + 1));
         cmd.push_str(name);
 
         for elem in args {
@@ -477,10 +488,10 @@ impl Mpv {
         let name = CString::new(name)?;
         let format = T::get_format().as_mpv_format() as _;
         data.call_as_c_void(|ptr| {
-                                mpv_err((), unsafe {
+            mpv_err((), unsafe {
                 mpv_set_property(self.ctx, name.as_ptr(), format, ptr)
             })
-                            })
+        })
     }
 
     #[inline]
@@ -490,10 +501,10 @@ impl Mpv {
 
         let format = T::get_format().as_mpv_format() as _;
         T::get_from_c_void(|ptr| {
-                               mpv_err((), unsafe {
+            mpv_err((), unsafe {
                 mpv_get_property(self.ctx, name.as_ptr(), format, ptr)
             })
-                           })
+        })
     }
 
     #[inline]
@@ -550,11 +561,10 @@ impl Mpv {
     #[inline]
     /// Enable all, except deprecated, events.
     pub fn enable_all_events(&self) -> Result<()> {
-        for i in (2..9)
-                .chain(11..12)
-                .chain(14..15)
-                .chain(16..19)
-                .chain(20..23) {
+        for i in (2..9).chain(11..12).chain(14..15).chain(16..19).chain(
+            20..23,
+        )
+        {
             let _ = self.enable_event(mpv_event_id::from(i))?;
         }
         Ok(())
@@ -738,13 +748,16 @@ impl Mpv {
     /// `loadfile` is kind of asynchronous, any additional option is set during loading,
     /// [specifics](https://github.com/mpv-player/mpv/issues/4089).
     pub fn playlist_load_files<'a, A>(&self, files: &[(&str, FileState, A)]) -> Result<()>
-        where A: Into<Option<&'a str>> + Clone
+    where
+        A: Into<Option<&'a str>> + Clone,
     {
         for (i, elem) in files.iter().enumerate() {
             let args = elem.2.clone().into().unwrap_or("");
 
-            let ret = self.command("loadfile",
-                                   &[&format!("\"{}\"", elem.0), elem.1.val(), args]);
+            let ret = self.command(
+                "loadfile",
+                &[&format!("\"{}\"", elem.0), elem.1.val(), args],
+            );
 
             if ret.is_err() {
                 return Err(ErrorKind::Loadfiles(i, Box::new(ret.unwrap_err())).into());
@@ -799,12 +812,12 @@ impl Mpv {
     #[inline]
     /// Add and select the subtitle immediately.
     /// Specifying a language requires specifying a title.
-    pub fn subtitle_add_select<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'b str>>>
-        (&self,
-         path: &str,
-         title: A,
-         lang: B)
-         -> Result<()> {
+    pub fn subtitle_add_select<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'b str>>>(
+        &self,
+        path: &str,
+        title: A,
+        lang: B,
+    ) -> Result<()> {
         match (title.into(), lang.into()) {
             (None, None) => self.command("sub-add", &[&format!("\"{}\"", path), "select"]),
             (Some(t), None) => self.command("sub-add", &[&format!("\"{}\"", path), "select", t]),
@@ -820,12 +833,12 @@ impl Mpv {
     /// (Or in some special situations, let the default stream selection mechanism decide.)".
     ///
     /// Returns an `Error::InvalidArgument` if a language, but not a title, was provided.
-    pub fn subtitle_add_auto<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'b str>>>
-        (&self,
-         path: &str,
-         title: A,
-         lang: B)
-         -> Result<()> {
+    pub fn subtitle_add_auto<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'b str>>>(
+        &self,
+        path: &str,
+        title: A,
+        lang: B,
+    ) -> Result<()> {
         match (title.into(), lang.into()) {
             (None, None) => self.command("sub-add", &[&format!("\"{}\"", path), "auto"]),
             (Some(t), None) => self.command("sub-add", &[&format!("\"{}\"", path), "auto", t]),

@@ -60,12 +60,24 @@ fn size(cookie: &mut File) -> i64 {
 }
 
 fn main() {
-    let path = format!("filereader://{}",
-                       env::args()
-                           .nth(1)
-                           .expect("Expected path to local media as argument, found nil."));
+    let path = format!(
+        "filereader://{}",
+        env::args().nth(1).expect(
+            "Expected path to local media as argument, found nil.",
+        )
+    );
 
-    let protocol = unsafe { Protocol::new("filereader".into(), (), open, close, read, Some(seek), Some(size)) };
+    let protocol = unsafe {
+        Protocol::new(
+            "filereader".into(),
+            (),
+            open,
+            close,
+            read,
+            Some(seek),
+            Some(size),
+        )
+    };
 
     let mpv = Mpv::new().unwrap();
     mpv.set_property("volume", 25).unwrap();

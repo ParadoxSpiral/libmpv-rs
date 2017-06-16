@@ -34,10 +34,10 @@ const MPV_COMMIT: &'static str = "d276a01ac3fd8655a48c4a39d3d8574c25e83027";
 const WIN_MPV_ARCHIVE_SIZE: usize = 109615618;
 const WIN_MPV_ARCHIVE_URL: &'static str = "https://mpv.srsfckn.biz/mpv-dev-20170212.7z";
 
-#[cfg(not(feature="build_libmpv"))]
+#[cfg(not(feature = "build_libmpv"))]
 fn main() {}
 
-#[cfg(feature="build_libmpv")]
+#[cfg(feature = "build_libmpv")]
 fn main() {
     let out_dir = env::var("OUT_DIR").unwrap();
 
@@ -49,13 +49,13 @@ fn main() {
         let legacy = archive
             .as_ref()
             .and_then(|v| {
-                          if v.metadata().unwrap().len() != WIN_MPV_ARCHIVE_SIZE as u64 {
-                              Ok(&dummy_err)
-                          } else {
-                              // The returned error does not matter
-                              Err(&dummy_err)
-                          }
-                      })
+                if v.metadata().unwrap().len() != WIN_MPV_ARCHIVE_SIZE as u64 {
+                    Ok(&dummy_err)
+                } else {
+                    // The returned error does not matter
+                    Err(&dummy_err)
+                }
+            })
             .is_ok();
 
         if archive.is_err() || legacy {
@@ -98,12 +98,14 @@ fn main() {
 
         // `target` (in cfg) doesn't really mean target. It means target(host) of build script,
         // which is a bit confusing because it means the actual `--target` everywhere else.
-#[cfg(target_pointer_width = "64")]        {
+        #[cfg(target_pointer_width = "64")]
+        {
             if env::var("CARGO_CFG_TARGET_POINTER_WIDTH").unwrap() == "32" {
                 panic!("Cross-compiling to different arch not yet supported");
             }
         }
-#[cfg(target_pointer_width = "32")]        {
+        #[cfg(target_pointer_width = "32")]
+        {
             if env::var("CARGO_CFG_TARGET_POINTER_WIDTH").unwrap() == "64" {
                 panic!("Cross-compiling to different arch not yet supported");
             }
@@ -128,20 +130,22 @@ fn main() {
 
             let mpv_repo = Repository::open(&format!("{}/mpv/", path)).unwrap();
             mpv_repo
-                .reset(&mpv_repo
-                            .find_object(Oid::from_str(MPV_COMMIT).unwrap(),
-                                         Some(ObjectType::Commit))
-                            .unwrap(),
-                       ResetType::Soft,
-                       None)
+                .reset(
+                    &mpv_repo
+                        .find_object(Oid::from_str(MPV_COMMIT).unwrap(), Some(ObjectType::Commit))
+                        .unwrap(),
+                    ResetType::Soft,
+                    None,
+                )
                 .unwrap();
         } else {
             let mpv_repo = Repository::open(&format!("{}/mpv/", path)).unwrap();
 
             // If repo is older version cloned by older build script, update
             if mpv_repo
-                   .find_object(Oid::from_str(MPV_COMMIT).unwrap(), Some(ObjectType::Commit))
-                   .is_err() {
+                .find_object(Oid::from_str(MPV_COMMIT).unwrap(), Some(ObjectType::Commit))
+                .is_err()
+            {
                 needs_rebuild = true;
                 Command::new("sh")
                     .arg("-c")
@@ -155,12 +159,13 @@ fn main() {
             }
 
             mpv_repo
-                .reset(&mpv_repo
-                            .find_object(Oid::from_str(MPV_COMMIT).unwrap(),
-                                         Some(ObjectType::Commit))
-                            .unwrap(),
-                       ResetType::Hard,
-                       None)
+                .reset(
+                    &mpv_repo
+                        .find_object(Oid::from_str(MPV_COMMIT).unwrap(), Some(ObjectType::Commit))
+                        .unwrap(),
+                    ResetType::Hard,
+                    None,
+                )
                 .unwrap();
         }
 
@@ -169,10 +174,12 @@ fn main() {
         // TODO: When Cross-compiling to different archs is implemented, this has to be handled.
         env::remove_var("TARGET");
 
-        let cmd = format!("cd {} && echo \"--enable-libmpv-shared\" > {0}/mpv_options \
+        let cmd = format!(
+            "cd {} && echo \"--enable-libmpv-shared\" > {0}/mpv_options \
 						  && {0}/build -j{}",
-                          path,
-                          num_threads);
+            path,
+            num_threads
+        );
 
         if needs_rebuild {
             Command::new("sh")
