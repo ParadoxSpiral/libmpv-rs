@@ -21,7 +21,9 @@ use raw::*;
 use ::*;
 use super::super::*;
 
+use std::iter::Map;
 use std::slice;
+use std::slice::Iter;
 use std::os::raw as ctype;
 
 // TODO: Clean this up, as a lot is duplicated/copied from elsewhere, use cstr macro
@@ -64,6 +66,31 @@ impl<'a> PropertyData<'a> {
     }
 }
 
+#[derive(Clone, Debug)]
+/// Wrapper around an `Iterator` that yields the `str` of `Event::ClientMessage`
+pub struct MessageIter<'a>(Map<Iter<'a, *const i8>, fn(&'a *const i8) -> Result<&'a str>>, usize);
+
+impl<'a> Iterator for MessageIter<'a> {
+	type Item = Result<&'a str>;
+	fn next(&mut self) -> Option<Self::Item> {
+		self.0.next()
+	}
+	fn size_hint(&self) -> (usize, Option<usize>) {(self.1, Some(self.1))}
+}
+
+impl<'a> ExactSizeIterator for MessageIter<'a>{}
+
+impl<'a> PartialEq for MessageIter<'a> {
+    fn eq(&self, rhs: &Self) -> bool {
+        if self.1 == rhs.len() {
+        	// TODO: Any way to avoid clone?
+        	self.0.clone().eq(rhs.0.clone())
+        } else {
+            false
+        }
+    }
+}
+
 #[allow(missing_docs)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Event<'a> {
@@ -102,7 +129,7 @@ pub enum Event<'a> {
     /// The player started playback again
     Unpause,
     Tick,
-    ClientMessage(Vec<&'a str>),
+    ClientMessage(MessageIter<'a>),
     VideoReconfig,
     AudioReconfig,
     MetadataUpdate,
@@ -132,7 +159,7 @@ impl Mpv {
     ///
     /// # Unsafety
     /// Calling this function simultaneosly multiple times may result in data races. Internally,
-    /// `EventIter` also uses `wait_event`, do not combine the two.
+    /// `EventIter` also uses `wait_event`. Do not combine the two.
     pub unsafe fn wait_event(&self, timeout: f64) -> Option<Result<Event>> {
         let event = &*mpv_wait_event(self.ctx, timeout);
 
@@ -213,21 +240,13 @@ impl Mpv {
             mpv_event_id::MPV_EVENT_SCRIPT_INPUT_DISPATCH => Some(Ok(Event::Unused)),
             mpv_event_id::MPV_EVENT_CLIENT_MESSAGE => {
                 let client_message = *(event.data as *mut mpv_event_client_message);
-                let raw_messages =
-                    slice::from_raw_parts_mut(client_message.args, client_message.num_args as _);
 
-                // TODO: How can we do this w/o heap allocation?
-                let mut messages = Vec::with_capacity(client_message.num_args as _);
-
-                for m in raw_messages {
-                    messages.push({
-                        match mpv_cstr_to_str!(CStr::from_ptr(*m)) {
-                            Err(e) => return Some(Err(e)),
-                            Ok(v) => v,
-                        }
-                    })
-                }
-                Some(Ok(Event::ClientMessage(messages)))
+                Some(Ok(Event::ClientMessage(MessageIter(
+                    slice::from_raw_parts_mut(client_message.args, client_message.num_args as _)
+                        .iter()
+                        .map(|msg| mpv_cstr_to_str!(CStr::from_ptr(*msg))),
+                    client_message.num_args as _
+                ))))
             }
             mpv_event_id::MPV_EVENT_VIDEO_RECONFIG => Some(Ok(Event::VideoReconfig)),
             mpv_event_id::MPV_EVENT_AUDIO_RECONFIG => Some(Ok(Event::AudioReconfig)),
@@ -262,8 +281,8 @@ impl Mpv {
     /// Observe `name` property for changes. `id` can be used to unobserve this (or many) properties
     /// again.
     ///
-    /// Warning: This should probably not be used at the same time as an `EventIter` observing properties,
-    /// because the ids will most likely overlap.
+    /// Warning: This should probably not be used at the same time as an
+    /// `EventIter` observing properties, because the ids will most likely overlap.
     pub fn observe_property(&self, name: &str, format: Format, id: u64) -> Result<()> {
         let name = CString::new(name)?;
         mpv_err((), unsafe {

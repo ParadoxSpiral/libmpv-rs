@@ -33,9 +33,9 @@ fn main() {
     use std::time::Duration;
     use std::thread;
 
-    let path = env::args().nth(1).expect(
-        "Expected path to media as argument, found nil.",
-    );
+    let path = env::args()
+        .nth(1)
+        .expect("Expected path to media as argument, found nil.");
 
     // Create an `Mpv` and set some properties.
     let mpv = Mpv::new().unwrap();
