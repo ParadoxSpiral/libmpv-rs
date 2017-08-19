@@ -18,12 +18,9 @@
 
 [package]
 name = "mpv-sys"
-version = "0.1.0"
+version = "1.0.0"
 authors = ["ParadoxSpiral <ParadoxSpiral@riseup.net>"]
 build = "build.rs"
 
 [build-dependencies]
-bindgen = "0.25"
-
-[features]
-nightly = [] # Enable unions
+bindgen = "0.29"

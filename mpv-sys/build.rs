@@ -24,7 +24,6 @@ use std::path::PathBuf;
 fn main() {
     println!("cargo:rustc-link-lib=mpv");
 
-    #[cfg(feature="nightly")]
     let bindings = bindgen::Builder::default()
         .header("src/client.h")
         .header("src/opengl_cb.h")
@@ -32,17 +31,8 @@ fn main() {
         .hide_type("max_align_t")
         .opaque_type("mpv_handle")
         .opaque_type("mpv_opengl_cb_context")
-        .generate()
-        .expect("Unable to generate bindings");
-    #[cfg(not(feature="nightly"))]
-    let bindings = bindgen::Builder::default()
-        .no_unstable_rust()
-        .header("src/client.h")
-        .header("src/opengl_cb.h")
-        .header("src/stream_cb.h")
-        .hide_type("max_align_t")
-        .opaque_type("mpv_handle")
-        .opaque_type("mpv_opengl_cb_context")
+        // This needs to be disabled until we do static builds
+        //.clang_arg("-DMPV_ENABLE_DEPRECATED=0")
         .generate()
         .expect("Unable to generate bindings");
 
