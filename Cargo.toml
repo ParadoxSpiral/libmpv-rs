@@ -29,14 +29,14 @@ keywords = ["media", "playback", "mpv", "libmpv"]
 [dependencies]
 error-chain = "0.10"
 parking_lot = "0.4"
-mpv-sys = {version = "0.1", path = "mpv-sys/"}
+mpv-sys = {version = "1", path = "mpv-sys/"}
 
 [dev-dependencies]
 sdl2 = "0.30"
 crossbeam = "0.2"
 
 [build-dependencies]
-hyper = "0.10"
+reqwest = "0.7"
 git2 = "0.6"
 
 [features]

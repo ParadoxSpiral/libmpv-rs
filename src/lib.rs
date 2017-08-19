@@ -65,8 +65,7 @@ mod tests;
 #[allow(missing_docs)]
 pub const MPV_CLIENT_API_MAJOR: ctype::c_ulong = 1;
 #[allow(missing_docs)]
-pub const MPV_CLIENT_API_MINOR: ctype::c_ulong = 24;
+pub const MPV_CLIENT_API_MINOR: ctype::c_ulong = 25;
 #[allow(missing_docs)]
-pub const MPV_CLIENT_API_VERSION: ctype::c_ulong = {
-    MPV_CLIENT_API_MAJOR << 16 | MPV_CLIENT_API_MINOR
-};
+pub const MPV_CLIENT_API_VERSION: ctype::c_ulong =
+    { MPV_CLIENT_API_MAJOR << 16 | MPV_CLIENT_API_MINOR };
