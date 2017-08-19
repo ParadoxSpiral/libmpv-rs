@@ -39,7 +39,7 @@ fn main() {
 
     // Create an `Mpv` and set some properties.
     let mpv = Mpv::new().unwrap();
-    mpv.enable_all_events().unwrap();
+    mpv.disable_deprecated_events().unwrap();
     mpv.set_property("cache-initial", 10).unwrap();
     mpv.set_property("volume", 15).unwrap();
     mpv.set_property("vo", "null").unwrap();

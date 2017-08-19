@@ -29,10 +29,16 @@ use std::rc::Rc;
 
 struct Draw {}
 
+#[cfg(not(feature = "opengl_callback"))]
 fn main() {
-    let path = env::args().nth(1).expect(
-        "Expected path to media as argument, found nil.",
-    );
+    panic!("opengl callback not enabled!");
+}
+
+#[cfg(feature = "opengl_callback")]
+fn main() {
+    let path = env::args()
+        .nth(1)
+        .expect("Expected path to media as argument, found nil.");
 
     // Check for driver availability
     let driver_index = sdl2::render::drivers()
@@ -93,21 +99,25 @@ fn main() {
 
             match event {
                 Event::Quit { .. } |
-                Event::KeyDown { keycode: Some(Keycode::Escape), .. } |
-                Event::KeyDown { keycode: Some(Keycode::Q), .. } => {
+                Event::KeyDown {
+                    keycode: Some(Keycode::Escape),
+                    ..
+                } |
+                Event::KeyDown {
+                    keycode: Some(Keycode::Q),
+                    ..
+                } => {
                     break 'main;
                 }
                 Event::KeyDown {
                     keycode: Some(Keycode::Space),
                     repeat: false,
                     ..
-                } => {
-                    if mpv.get_property("pause").unwrap() {
-                        mpv.unpause().unwrap();
-                    } else {
-                        mpv.pause().unwrap();
-                    }
-                }
+                } => if mpv.get_property("pause").unwrap() {
+                    mpv.unpause().unwrap();
+                } else {
+                    mpv.pause().unwrap();
+                },
                 Event::KeyDown {
                     keycode: Some(Keycode::Right),
                     repeat: false,

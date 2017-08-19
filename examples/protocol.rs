@@ -59,12 +59,18 @@ fn size(cookie: &mut File) -> i64 {
     cookie.metadata().unwrap().len() as _
 }
 
+#[cfg(not(feature = "custom_protocols"))]
+fn main() {
+    panic!("custom protocols not enabled!");
+}
+
+#[cfg(feature = "custom_protocols")]
 fn main() {
     let path = format!(
         "filereader://{}",
-        env::args().nth(1).expect(
-            "Expected path to local media as argument, found nil.",
-        )
+        env::args()
+            .nth(1)
+            .expect("Expected path to local media as argument, found nil.")
     );
 
     let protocol = unsafe {
