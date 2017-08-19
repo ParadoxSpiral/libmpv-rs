@@ -21,7 +21,7 @@ use parking_lot::{Condvar, Mutex};
 use raw::*;
 
 use super::super::*;
-use {LogLevel, EndFileReason};
+use {EndFileReason, LogLevel};
 
 use std::collections::HashMap;
 use std::marker::PhantomData;
@@ -72,8 +72,7 @@ impl Mpv {
         for i in 2..24 {
             if let Err(e) = mpv_err((), unsafe {
                 mpv_request_event(ctx, mpv_event_id::from(i), 0)
-            })
-            {
+            }) {
                 unsafe { mpv_terminate_destroy(ctx) };
                 return Err(e);
             }
@@ -332,9 +331,7 @@ impl Event {
         debug_assert!(!raw.is_null());
         let raw = unsafe { &mut *(raw as *mut mpv_event_property) };
         Event::PropertyChange((
-            unsafe {
-                mpv_cstr_to_str!(CStr::from_ptr(raw.name)).unwrap().into()
-            },
+            unsafe { mpv_cstr_to_str!(CStr::from_ptr(raw.name)).unwrap().into() },
             PropertyData::from_raw(raw.format, raw.data),
         ))
     }
@@ -422,7 +419,7 @@ impl<'parent> Drop for EventIter<'parent> {
                         return true;
                     }
                 } else if mpv_event_id::MPV_EVENT_LOG_MESSAGE == outer_ev.as_id() &&
-                           outer_ev == inner_ev
+                    outer_ev == inner_ev
                 {
                     let min_level = &*b"no\0";
                     unsafe { mpv_request_log_messages(self.ctx, min_level.as_ptr() as _) };

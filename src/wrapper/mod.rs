@@ -88,15 +88,19 @@ mod errors {
                 (&ErrorKind::Nul(ref e1), &ErrorKind::Nul(ref e2)) => e1 == e2,
                 (&ErrorKind::Utf8(ref e1), &ErrorKind::Utf8(ref e2)) => e1 == e2,
                 (&ErrorKind::Native(ref e1), &ErrorKind::Native(ref e2)) => e1 == e2,
-                (&ErrorKind::Loadfiles(ref idx1, ref err1),
-                 &ErrorKind::Loadfiles(ref idx2, ref err2)) => idx1 == idx2 && err1 == err2,
+                (
+                    &ErrorKind::Loadfiles(ref idx1, ref err1),
+                    &ErrorKind::Loadfiles(ref idx2, ref err2),
+                ) => idx1 == idx2 && err1 == err2,
                 #[cfg(feature = "events_complex")]
                 (&ErrorKind::AlreadyObserved(ref e1), &ErrorKind::AlreadyObserved(ref e2)) => {
                     e1 == e2
                 }
                 (&ErrorKind::InvalidArgument, &ErrorKind::InvalidArgument) => true,
-                (&ErrorKind::VersionMismatch(ref li1, ref lo1),
-                 &ErrorKind::VersionMismatch(ref li2, ref lo2)) => li1 == li2 && lo1 == lo2,
+                (
+                    &ErrorKind::VersionMismatch(ref li1, ref lo1),
+                    &ErrorKind::VersionMismatch(ref li2, ref lo2),
+                ) => li1 == li2 && lo1 == lo2,
                 (&ErrorKind::InvalidUtf8, &ErrorKind::InvalidUtf8) => true,
                 (&ErrorKind::Null, &ErrorKind::Null) => true,
                 (_, _) => false,
@@ -561,11 +565,13 @@ impl Mpv {
     #[inline]
     /// Enable all, except deprecated, events.
     pub fn enable_all_events(&self) -> Result<()> {
-        for i in (2..9).chain(11..12).chain(14..15).chain(16..19).chain(
-            20..23,
-        )
+        for i in (2..9)
+            .chain(11..12)
+            .chain(14..15)
+            .chain(16..19)
+            .chain(20..23)
         {
-            let _ = self.enable_event(mpv_event_id::from(i))?;
+            self.enable_event(mpv_event_id::from(i))?;
         }
         Ok(())
     }
@@ -579,13 +585,13 @@ impl Mpv {
     #[inline]
     /// Diable all deprecated events.
     pub fn disable_deprecated_events(&self) -> Result<()> {
-        let _ = self.disable_event(EventId::MPV_EVENT_TRACKS_CHANGED)?;
-        let _ = self.disable_event(EventId::MPV_EVENT_TRACK_SWITCHED)?;
-        let _ = self.disable_event(EventId::MPV_EVENT_PAUSE)?;
-        let _ = self.disable_event(EventId::MPV_EVENT_UNPAUSE)?;
-        let _ = self.disable_event(EventId::MPV_EVENT_SCRIPT_INPUT_DISPATCH)?;
-        let _ = self.disable_event(EventId::MPV_EVENT_METADATA_UPDATE)?;
-        let _ = self.disable_event(EventId::MPV_EVENT_CHAPTER_CHANGE)?;
+        self.disable_event(EventId::MPV_EVENT_TRACKS_CHANGED)?;
+        self.disable_event(EventId::MPV_EVENT_TRACK_SWITCHED)?;
+        self.disable_event(EventId::MPV_EVENT_PAUSE)?;
+        self.disable_event(EventId::MPV_EVENT_UNPAUSE)?;
+        self.disable_event(EventId::MPV_EVENT_SCRIPT_INPUT_DISPATCH)?;
+        self.disable_event(EventId::MPV_EVENT_METADATA_UPDATE)?;
+        self.disable_event(EventId::MPV_EVENT_CHAPTER_CHANGE)?;
         Ok(())
     }
 
@@ -593,7 +599,7 @@ impl Mpv {
     /// Diable all events.
     pub fn disable_all_events(&self) -> Result<()> {
         for i in 2..24 {
-            let _ = self.disable_event(mpv_event_id::from(i))?;
+            self.disable_event(mpv_event_id::from(i))?;
         }
         Ok(())
     }
@@ -739,7 +745,7 @@ impl Mpv {
     /// and the error in case of an error. [More information.](https://mpv.io/manual/master/#command-interface-[replace|append|append-play)
     ///
     /// # Arguments
-    /// The tuple consists of:
+    /// The `files` tuple slice consists of:
     ///     * a string slice - the path
     ///     * a `FileState` - how the file will be opened
     ///     * an optional string slice - any additional options that will be set for this file

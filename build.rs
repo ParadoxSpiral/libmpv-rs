@@ -60,8 +60,11 @@ fn main() {
 
         if archive.is_err() || legacy {
             let mut buf = Vec::with_capacity(WIN_MPV_ARCHIVE_SIZE);
-            reqwest::get(WIN_MPV_ARCHIVE_URL).unwrap().read_to_end(&mut buf).unwrap();
-            
+            reqwest::get(WIN_MPV_ARCHIVE_URL)
+                .unwrap()
+                .read_to_end(&mut buf)
+                .unwrap();
+
             if legacy {
                 archive.as_ref().unwrap().set_len(0).unwrap();
                 archive.unwrap().write_all(&buf).unwrap();

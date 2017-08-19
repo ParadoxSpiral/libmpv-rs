@@ -48,11 +48,8 @@ impl Mpv {
         T: RefUnwindSafe,
         U: RefUnwindSafe,
     {
-        if self.protocols_guard.compare_and_swap(
-            false,
-            true,
-            Ordering::AcqRel,
-        )
+        if self.protocols_guard
+            .compare_and_swap(false, true, Ordering::AcqRel)
         {
             None
         } else {
@@ -124,7 +121,11 @@ where
         debug_assert!(!(*data).cookie.is_null());
         ((*data).read_fn)(&mut *(*data).cookie, buf, nbytes)
     });
-    if ret.is_ok() { ret.unwrap() } else { -1 }
+    if ret.is_ok() {
+        ret.unwrap()
+    } else {
+        -1
+    }
 }
 
 unsafe extern "C" fn seek_wrapper<T, U>(cookie: *mut ctype::c_void, offset: i64) -> i64

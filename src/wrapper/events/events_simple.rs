@@ -68,23 +68,28 @@ impl<'a> PropertyData<'a> {
 
 #[derive(Clone, Debug)]
 /// Wrapper around an `Iterator` that yields the `str` of `Event::ClientMessage`
-pub struct MessageIter<'a>(Map<Iter<'a, *const i8>, fn(&'a *const i8) -> Result<&'a str>>, usize);
+pub struct MessageIter<'a>(
+    Map<Iter<'a, *const i8>, fn(&'a *const i8) -> Result<&'a str>>,
+    usize,
+);
 
 impl<'a> Iterator for MessageIter<'a> {
-	type Item = Result<&'a str>;
-	fn next(&mut self) -> Option<Self::Item> {
-		self.0.next()
-	}
-	fn size_hint(&self) -> (usize, Option<usize>) {(self.1, Some(self.1))}
+    type Item = Result<&'a str>;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next()
+    }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.1, Some(self.1))
+    }
 }
 
-impl<'a> ExactSizeIterator for MessageIter<'a>{}
+impl<'a> ExactSizeIterator for MessageIter<'a> {}
 
 impl<'a> PartialEq for MessageIter<'a> {
     fn eq(&self, rhs: &Self) -> bool {
         if self.1 == rhs.len() {
-        	// TODO: Any way to avoid clone?
-        	self.0.clone().eq(rhs.0.clone())
+            // TODO: Any way to avoid clone?
+            self.0.clone().eq(rhs.0.clone())
         } else {
             false
         }
@@ -208,18 +213,14 @@ impl Mpv {
                     reply_userdata: event.reply_userdata,
                 }))
             }
-            mpv_event_id::MPV_EVENT_SET_PROPERTY_REPLY => {
-                Some(mpv_err(
-                    Event::SetPropertyReply(event.reply_userdata),
-                    event.error,
-                ))
-            }
-            mpv_event_id::MPV_EVENT_COMMAND_REPLY => {
-                Some(mpv_err(
-                    Event::CommandReply(event.reply_userdata),
-                    event.error,
-                ))
-            }
+            mpv_event_id::MPV_EVENT_SET_PROPERTY_REPLY => Some(mpv_err(
+                Event::SetPropertyReply(event.reply_userdata),
+                event.error,
+            )),
+            mpv_event_id::MPV_EVENT_COMMAND_REPLY => Some(mpv_err(
+                Event::CommandReply(event.reply_userdata),
+                event.error,
+            )),
             mpv_event_id::MPV_EVENT_START_FILE => Some(Ok(Event::StartFile)),
             mpv_event_id::MPV_EVENT_END_FILE => {
                 let end_file = *(event.data as *mut mpv_event_end_file);
@@ -245,7 +246,7 @@ impl Mpv {
                     slice::from_raw_parts_mut(client_message.args, client_message.num_args as _)
                         .iter()
                         .map(|msg| mpv_cstr_to_str!(CStr::from_ptr(*msg))),
-                    client_message.num_args as _
+                    client_message.num_args as _,
                 ))))
             }
             mpv_event_id::MPV_EVENT_VIDEO_RECONFIG => Some(Ok(Event::VideoReconfig)),

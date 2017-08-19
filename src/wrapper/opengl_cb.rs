@@ -37,11 +37,8 @@ impl Mpv {
     where
         F: for<'a> Fn(&'a str) -> *const () + 'static,
     {
-        if self.opengl_guard.compare_and_swap(
-            false,
-            true,
-            Ordering::AcqRel,
-        )
+        if self.opengl_guard
+            .compare_and_swap(false, true, Ordering::AcqRel)
         {
             bail!("Context already exists")
         } else {
