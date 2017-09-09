@@ -111,7 +111,7 @@ impl<'parent, V> OpenGlContext<'parent, V> {
             mpv_get_sub_api(mpv_ctx, mpv_sub_api::MPV_SUB_API_OPENGL_CB) as
                 *mut mpv_opengl_cb_context
         };
-        debug_assert!(!api_ctx.is_null());
+        assert!(!api_ctx.is_null());
 
         let proc_addr_ptr = &mut proc_addr as *mut F;
 

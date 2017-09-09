@@ -42,10 +42,10 @@
 // - update constants in build.rs
 // - run tests and examples to test whether they still work
 
-extern crate mpv_sys as raw;
-extern crate parking_lot;
 #[macro_use]
 extern crate error_chain;
+extern crate mpv_sys as raw;
+extern crate parking_lot;
 
 use std::os::raw as ctype;
 

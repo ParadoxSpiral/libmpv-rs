@@ -258,8 +258,7 @@ unsafe impl GetData for String {
         let ptr = &mut ptr::null();
         let _ = fun(ptr as *mut *const ctype::c_char as _)?;
 
-        let ret = mpv_cstr_to_str!(unsafe { CStr::from_ptr(*ptr) })?
-            .to_owned();
+        let ret = mpv_cstr_to_str!(unsafe { CStr::from_ptr(*ptr) })?.to_owned();
         unsafe { mpv_free(*ptr as *mut _) };
         Ok(ret)
     }
@@ -379,17 +378,15 @@ pub struct Mpv {
     /// The handle to the mpv core
     pub ctx: *mut mpv_handle,
     #[cfg(feature = "events_complex")]
-    ev_iter_notification: Box<(Mutex<bool>, parking_lot::Condvar)>,
+    ev_iter_notification:
+        Box<(Mutex<bool>, parking_lot::Condvar)>,
+    #[cfg(feature = "events_complex")] ev_to_observe: Mutex<Vec<events::events_complex::Event>>,
     #[cfg(feature = "events_complex")]
-    ev_to_observe: Mutex<Vec<events::events_complex::Event>>,
-    #[cfg(feature = "events_complex")]
-    ev_to_observe_properties: Mutex<::std::collections::HashMap<String, u64>>,
-    #[cfg(feature = "events_complex")]
-    ev_observed: Mutex<Vec<events::events_complex::Event>>,
-    #[cfg(feature = "custom_protocols")]
-    protocols_guard: AtomicBool,
-    #[cfg(feature = "opengl_callback")]
-    opengl_guard: AtomicBool,
+    ev_to_observe_properties:
+        Mutex<::std::collections::HashMap<String, u64>>,
+    #[cfg(feature = "events_complex")] ev_observed: Mutex<Vec<events::events_complex::Event>>,
+    #[cfg(feature = "custom_protocols")] protocols_guard: AtomicBool,
+    #[cfg(feature = "opengl_callback")] opengl_guard: AtomicBool,
 }
 
 unsafe impl Send for Mpv {}

@@ -16,10 +16,10 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-#![allow(dead_code, unused_imports)]
+#![allow(dead_code, unused_imports, unused_extern_crates)]
 
-extern crate reqwest;
 extern crate git2 as git;
+extern crate reqwest;
 
 use git::{ObjectType, Oid, Repository, ResetType};
 
@@ -34,6 +34,13 @@ const MPV_COMMIT: &'static str = "08ec444ba5896e75a0071978da97ee0ec3f48918";
 const WIN_MPV_ARCHIVE_SIZE: usize = 121270806;
 const WIN_MPV_ARCHIVE_URL: &'static str = "https://mpv.srsfckn.biz/mpv-dev-20170718.7z";
 
+#[cfg(all(feature = "events_simple", feature = "events_complex"))]
+compile_error!(
+    "Using events_simple and events_complex at the same time is forbidden, because it \
+     will more likely than not result in a lot of hard to debug issues. This will later be \
+     relaxed to a per mpv instance const generic flag."
+);
+
 #[cfg(not(feature = "build_libmpv"))]
 fn main() {}
 
@@ -45,15 +52,14 @@ fn main() {
         let path = format!("{}/libmpv.7z", out_dir);
         let archive = OpenOptions::new().read(true).write(true).open(&path);
 
-        let dummy_err = Error::last_os_error();
         let legacy = archive
             .as_ref()
-            .and_then(|v| {
+            .map(|v| {
                 if v.metadata().unwrap().len() != WIN_MPV_ARCHIVE_SIZE as u64 {
-                    Ok(&dummy_err)
+                    Ok(())
                 } else {
                     // The returned error does not matter
-                    Err(&dummy_err)
+                    Err(())
                 }
             })
             .is_ok();

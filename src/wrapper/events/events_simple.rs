@@ -162,56 +162,48 @@ impl Mpv {
     /// `MPV_EVENT_GET_PROPERTY_REPLY`, `MPV_EVENT_SET_PROPERTY_REPLY`, `MPV_EVENT_COMMAND_REPLY`,
     /// or `MPV_EVENT_PROPERTY_CHANGE` event failed, or if `MPV_EVENT_END_FILE` reported an error.
     ///
-    /// # Unsafety
-    /// Calling this function simultaneosly multiple times may result in data races. Internally,
-    /// `EventIter` also uses `wait_event`. Do not combine the two.
+    /// # Safety
+    /// An internally used API function is not thread-safe, thus using this method from multiple
+    /// threads is UB.
     pub unsafe fn wait_event(&self, timeout: f64) -> Option<Result<Event>> {
         let event = &*mpv_wait_event(self.ctx, timeout);
+        if event.event_id != mpv_event_id::MPV_EVENT_NONE {
+            if let Err(e) = mpv_err((), event.error) {
+                return Some(Err(e));
+            }
+        }
 
         match event.event_id {
             mpv_event_id::MPV_EVENT_NONE => None,
             mpv_event_id::MPV_EVENT_SHUTDOWN => Some(Ok(Event::Shutdown)),
             mpv_event_id::MPV_EVENT_LOG_MESSAGE => {
                 let log_message = *(event.data as *mut mpv_event_log_message);
-                // TODO: Can be made prettier once Carrier stabilized
-                let prefix = match mpv_cstr_to_str!(CStr::from_ptr(log_message.prefix)) {
-                    Err(e) => return Some(Err(e)),
-                    Ok(v) => v,
-                };
-                let level = match mpv_cstr_to_str!(CStr::from_ptr(log_message.level)) {
-                    Err(e) => return Some(Err(e)),
-                    Ok(v) => v,
-                };
-                let text = match mpv_cstr_to_str!(CStr::from_ptr(log_message.text)) {
-                    Err(e) => return Some(Err(e)),
-                    Ok(v) => v,
-                };
-                Some(Ok(Event::LogMessage {
-                    prefix: prefix,
-                    level: level,
-                    text: text,
-                    log_level: log_message.log_level,
-                }))
+
+                Some(
+                    mpv_cstr_to_str!(CStr::from_ptr(log_message.prefix)).and_then(|prefix| {
+                        let level = mpv_cstr_to_str!(CStr::from_ptr(log_message.level))?;
+                        let text = mpv_cstr_to_str!(CStr::from_ptr(log_message.text))?;
+                        Ok(Event::LogMessage {
+                            prefix: prefix,
+                            level: level,
+                            text: text,
+                            log_level: log_message.log_level,
+                        })
+                    }),
+                )
             }
             mpv_event_id::MPV_EVENT_GET_PROPERTY_REPLY => {
                 let property = *(event.data as *mut mpv_event_property);
-                let name = match mpv_cstr_to_str!(CStr::from_ptr(property.name)) {
-                    Err(e) => return Some(Err(e)),
-                    Ok(v) => v,
-                };
-                let data = if let Err(e) = mpv_err((), event.error) {
-                    return Some(Err(e));
-                } else {
-                    match PropertyData::from_raw(property.format, property.data) {
-                        Err(e) => return Some(Err(e)),
-                        Ok(v) => v,
-                    }
-                };
-                Some(Ok(Event::GetPropertyReply {
-                    name: name,
-                    result: data,
-                    reply_userdata: event.reply_userdata,
-                }))
+
+                Some(mpv_cstr_to_str!(CStr::from_ptr(property.name)).and_then(
+                    |name| {
+                        Ok(Event::GetPropertyReply {
+                            name: name,
+                            result: PropertyData::from_raw(property.format, property.data)?,
+                            reply_userdata: event.reply_userdata,
+                        })
+                    },
+                ))
             }
             mpv_event_id::MPV_EVENT_SET_PROPERTY_REPLY => Some(mpv_err(
                 Event::SetPropertyReply(event.reply_userdata),
@@ -226,10 +218,11 @@ impl Mpv {
                 let end_file = *(event.data as *mut mpv_event_end_file);
                 let end_file_reason = mpv_end_file_reason::from(end_file.reason as u32);
 
-                if let Err(e) = mpv_err((), end_file.error) {
-                    return Some(Err(e));
-                }
-                Some(Ok(Event::EndFile(end_file_reason)))
+                Some(if let Err(e) = mpv_err((), end_file.error) {
+                    Err(e)
+                } else {
+                    Ok(Event::EndFile(end_file_reason))
+                })
             }
             mpv_event_id::MPV_EVENT_FILE_LOADED => Some(Ok(Event::FileLoaded)),
             mpv_event_id::MPV_EVENT_TRACKS_CHANGED => Some(Ok(Event::TracksChanged)),
@@ -258,11 +251,9 @@ impl Mpv {
                 let property = *(event.data as *mut mpv_event_property);
                 Some(mpv_cstr_to_str!(CStr::from_ptr(property.name)).and_then(
                     |name| {
-                        mpv_err((), event.error)?;
-                        let data = PropertyData::from_raw(property.format, property.data)?;
                         Ok(Event::PropertyChange {
                             name: name,
-                            change: data,
+                            change: PropertyData::from_raw(property.format, property.data)?,
                             reply_userdata: event.reply_userdata,
                         })
                     },
@@ -275,9 +266,6 @@ impl Mpv {
 
     /// Observe `name` property for changes. `id` can be used to unobserve this (or many) properties
     /// again.
-    ///
-    /// Warning: This should probably not be used at the same time as an
-    /// `EventIter` observing properties, because the ids will most likely overlap.
     pub fn observe_property(&self, name: &str, format: Format, id: u64) -> Result<()> {
         let name = CString::new(name)?;
         mpv_err((), unsafe {
