@@ -256,23 +256,17 @@ impl Mpv {
             mpv_event_id::MPV_EVENT_PLAYBACK_RESTART => Some(Ok(Event::PlaybackRestart)),
             mpv_event_id::MPV_EVENT_PROPERTY_CHANGE => {
                 let property = *(event.data as *mut mpv_event_property);
-                let name = match mpv_cstr_to_str!(CStr::from_ptr(property.name)) {
-                    Err(e) => return Some(Err(e)),
-                    Ok(v) => v,
-                };
-                let data = if let Err(e) = mpv_err((), event.error) {
-                    return Some(Err(e));
-                } else {
-                    match PropertyData::from_raw(property.format, property.data) {
-                        Err(e) => return Some(Err(e)),
-                        Ok(v) => v,
-                    }
-                };
-                Some(Ok(Event::PropertyChange {
-                    name: name,
-                    change: data,
-                    reply_userdata: event.reply_userdata,
-                }))
+                Some(mpv_cstr_to_str!(CStr::from_ptr(property.name)).and_then(
+                    |name| {
+                        mpv_err((), event.error)?;
+                        let data = PropertyData::from_raw(property.format, property.data)?;
+                        Ok(Event::PropertyChange {
+                            name: name,
+                            change: data,
+                            reply_userdata: event.reply_userdata,
+                        })
+                    },
+                ))
             }
             mpv_event_id::MPV_EVENT_CHAPTER_CHANGE => Some(Ok(Event::ChapterChange)),
             mpv_event_id::MPV_EVENT_QUEUE_OVERFLOW => Some(Ok(Event::QueueOverflow)),
