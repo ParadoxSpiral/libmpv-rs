@@ -22,5 +22,9 @@ version = "1.0.0"
 authors = ["ParadoxSpiral <ParadoxSpiral@riseup.net>"]
 build = "build.rs"
 
-[build-dependencies]
-bindgen = "0.29"
+[features]
+use-bindgen = ["bindgen"]
+
+[build-dependencies.bindgen]
+optional = true
+version = "^0.32"
