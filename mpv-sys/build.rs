@@ -16,18 +16,18 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
+#[cfg(feature = "bindgen")]
 extern crate bindgen;
 
-use std::env;
+use std::{env, fs};
 use std::path::PathBuf;
 
-fn main() {
-    println!("cargo:rustc-link-lib=mpv");
-
+#[cfg(feature = "bindgen")]
+fn generate_bindings() {
     let bindings = bindgen::Builder::default()
-        .header("src/client.h")
-        .header("src/opengl_cb.h")
-        .header("src/stream_cb.h")
+        .header("include/client.h")
+        .header("include/opengl_cb.h")
+        .header("include/stream_cb.h")
         .hide_type("max_align_t")
         .opaque_type("mpv_handle")
         .opaque_type("mpv_opengl_cb_context")
@@ -40,4 +40,28 @@ fn main() {
     bindings
         .write_to_file(out_path.join("bindings.rs"))
         .expect("Couldn't write bindings!");
+}
+
+#[cfg(not(feature = "bindgen"))]
+fn copy_pregenerated_bindings() {
+    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let crate_path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+    fs::copy(crate_path.join("pregenerated_bindings.rs"), out_path.join("bindings.rs"))
+        .expect("Couldn't find pregenerated bindings!");
+}
+
+fn link_mpv() {
+    println!("cargo:rustc-link-lib=mpv");
+}
+
+fn main() {
+    #[cfg(not(feature = "bindgen"))] {
+        copy_pregenerated_bindings();
+    }
+
+    #[cfg(feature = "bindgen")] {
+        generate_bindings();
+    }
+
+    link_mpv();
 }
