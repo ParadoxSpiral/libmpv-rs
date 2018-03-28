@@ -85,8 +85,8 @@ fn main() {
         scope.spawn(|| {
             // Here the value of the property is irrelevant: only the name is used.
             let iter = mpv.observe_events(&[
-                Event::PropertyChange(("volume".into(), PropertyData::Int64(0))),
-                Event::PropertyChange(("pause".into(), PropertyData::Flag(false))),
+                Event::empty_propertychange("volume".into()),
+                Event::empty_propertychange("pause".into()),
             ]).unwrap();
 
             for vec in iter {

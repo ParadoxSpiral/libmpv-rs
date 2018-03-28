@@ -26,8 +26,6 @@ use std::slice;
 use std::slice::Iter;
 use std::os::raw as ctype;
 
-// TODO: Clean this up, as a lot is duplicated/copied from elsewhere, use cstr macro
-
 #[derive(Debug, Clone, PartialEq)]
 #[allow(missing_docs)]
 /// Data that is returned by both `GetPropertyReply` and `PropertyChange` events.

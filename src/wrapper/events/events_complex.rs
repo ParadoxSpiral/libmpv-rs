@@ -144,12 +144,12 @@ impl Mpv {
         let mut evs = Vec::with_capacity(len);
         let mut props = Vec::with_capacity(len);
         for elem in events {
-            if let Event::PropertyChange(ref v) = *elem {
-                if properties.contains_key(&v.0) {
+            if let Event::PropertyChange{ref name, ref data} = *elem {
+                if properties.contains_key(name) {
                     return Err(ErrorKind::AlreadyObserved(Box::new(elem.clone())).into());
                 } else {
                     mpv_err((), unsafe { mpv_request_event(self.ctx, elem.as_id(), 1) })?;
-                    props.push(v);
+                    props.push((name, data));
                     ids.push(elem.as_id());
                     evs.push(elem.clone());
                 }
@@ -186,8 +186,8 @@ impl Mpv {
                 )
             });
             if err.is_err() {
+                // Ignore errors.
                 for (_, id) in props_ins {
-                    // Ignore errors.
                     unsafe { mpv_unobserve_property(self.ctx, id) };
                 }
                 return Err(err.unwrap_err());
@@ -233,7 +233,10 @@ pub enum Event {
     AudioReconfig,
     Seek,
     PlaybackRestart,
-    PropertyChange((String, PropertyData)),
+    PropertyChange {
+        name: String,
+        data: PropertyData,
+    },
 }
 
 impl PartialEq for Event {
@@ -249,7 +252,7 @@ impl PartialEq for Event {
             (&Event::AudioReconfig, &Event::AudioReconfig) |
             (&Event::Seek, &Event::Seek) |
             (&Event::PlaybackRestart, &Event::PlaybackRestart) |
-            (&Event::PropertyChange(_), &Event::PropertyChange(_)) => true,
+            (&Event::PropertyChange{..}, &Event::PropertyChange{..}) => true,
             _ => false,
         }
     }
@@ -266,6 +269,14 @@ impl Event {
         }
     }
 
+    /// Create an `Event::PropertyChange` of a `property` with an empty `&'static str`.
+    pub fn empty_propertychange(property: String) -> Event {
+        Event::PropertyChange {
+            name: property,
+            data: PropertyData::Flag(false),
+        }
+    }
+
     fn as_id(&self) -> mpv_event_id {
         match *self {
             Event::LogMessage { .. } => mpv_event_id::MPV_EVENT_LOG_MESSAGE,
@@ -278,7 +289,7 @@ impl Event {
             Event::AudioReconfig => mpv_event_id::MPV_EVENT_AUDIO_RECONFIG,
             Event::Seek => mpv_event_id::MPV_EVENT_SEEK,
             Event::PlaybackRestart => mpv_event_id::MPV_EVENT_PLAYBACK_RESTART,
-            Event::PropertyChange(_) => mpv_event_id::MPV_EVENT_PROPERTY_CHANGE,
+            Event::PropertyChange { .. } => mpv_event_id::MPV_EVENT_PROPERTY_CHANGE,
         }
     }
 
@@ -330,10 +341,10 @@ impl Event {
     fn property_from_raw(raw: *mut ctype::c_void) -> Event {
         debug_assert!(!raw.is_null());
         let raw = unsafe { &mut *(raw as *mut mpv_event_property) };
-        Event::PropertyChange((
-            unsafe { mpv_cstr_to_str!(CStr::from_ptr(raw.name)).unwrap().into() },
-            PropertyData::from_raw(raw.format, raw.data),
-        ))
+        Event::PropertyChange {
+            name: unsafe { mpv_cstr_to_str!(CStr::from_ptr(raw.name)).unwrap().into() },
+            data: PropertyData::from_raw(raw.format, raw.data),
+        }
     }
 }
 
@@ -370,7 +381,6 @@ impl PropertyData {
     }
 }
 
-// TODO: How to do this more nicely? Coherence doesn't make this easy
 fn mpv_log_level_as_str(lvl: mpv_log_level) -> &'static str {
     match lvl {
         mpv_log_level::MPV_LOG_LEVEL_NONE => "no",
@@ -406,14 +416,14 @@ impl<'parent> Drop for EventIter<'parent> {
 
         // Returns true if outer and inner event match, if so, the event is unobserved.
         let mut compare_ev_unobserve = |outer_ev: &Event, inner_ev: &Event| {
-            if let Event::PropertyChange(ref outer_prop) = *outer_ev {
-                if let Event::PropertyChange(ref inner_prop) = *inner_ev {
-                    // `.0` is the name of the property.
-                    if outer_prop.0 == inner_prop.0 {
+            if let Event::PropertyChange{ref name, ..} = *outer_ev {
+                let oname = name;
+                if let Event::PropertyChange{ref name, ..} = *inner_ev {
+                    if oname == name {
                         unsafe {
                             mpv_unobserve_property(
                                 self.ctx,
-                                all_to_observe_properties.remove(&outer_prop.0).unwrap(),
+                                all_to_observe_properties.remove(oname).unwrap(),
                             );
                         }
                         return true;
@@ -493,9 +503,10 @@ impl<'parent> Iterator for EventIter<'parent> {
             } else {
                 // Return true where outer_ev == inner_ev, and push inner_ev to ret_events
                 let mut compare_ev = |outer_ev: &Event, inner_ev: &Event| {
-                    if let Event::PropertyChange(ref outer_prop) = *outer_ev {
-                        if let Event::PropertyChange(ref inner_prop) = *inner_ev {
-                            if outer_prop.0 == inner_prop.0 {
+                    if let Event::PropertyChange{ref name, ..} = *outer_ev {
+                        let oname = name;
+                        if let Event::PropertyChange{ref name, ..} = *inner_ev {
+                            if oname == name {
                                 ret_events.push(inner_ev.clone());
                                 return true;
                             }
