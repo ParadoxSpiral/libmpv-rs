@@ -419,35 +419,13 @@ impl Mpv {
             Err(err)
         })?;
 
-        // TODO: This can be made much prettier once `struct_field_attributes` is stable.
-        let ret;
-        #[cfg(all(feature = "custom_protocols", not(feature = "opengl_callback")))]
-        {
-            ret = Ok(Mpv {
-                ctx,
-                protocols_guard: AtomicBool::new(false),
-            });
-        }
-        #[cfg(all(feature = "opengl_callback", not(feature = "custom_protocols")))]
-        {
-            ret = Ok(Mpv {
-                ctx,
-                opengl_guard: AtomicBool::new(false),
-            });
-        }
-        #[cfg(all(feature = "opengl_callback", feature = "custom_protocols"))]
-        {
-            ret = Ok(Mpv {
-                ctx,
-                protocols_guard: AtomicBool::new(false),
-                opengl_guard: AtomicBool::new(false),
-            });
-        }
-        #[cfg(all(not(feature = "opengl_callback"), not(feature = "custom_protocols")))]
-        {
-            ret = Ok(Mpv { ctx });
-        }
-        ret
+        Ok(Mpv {
+            ctx,
+            #[cfg(feature = "custom_protocols")]
+            protocols_guard: AtomicBool::new(false),
+            #[cfg(feature = "opengl_callback")]
+            opengl_guard: AtomicBool::new(false),
+        })
     }
 
     #[inline]

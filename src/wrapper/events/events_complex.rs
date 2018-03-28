@@ -81,53 +81,17 @@ impl Mpv {
             Err(err)
         })?;
 
-        // TODO: This can be made much prettier once `struct_field_attributes` is stable.
-        let ret;
-        #[cfg(all(feature = "custom_protocols", not(feature = "opengl_callback")))]
-        {
-            ret = Ok(Mpv {
-                ctx,
-                ev_iter_notification,
-                ev_to_observe,
-                ev_to_observe_properties,
-                ev_observed,
-                protocols_guard: AtomicBool::new(false),
-            });
-        }
-        #[cfg(all(feature = "opengl_callback", not(feature = "custom_protocols")))]
-        {
-            ret = Ok(Mpv {
-                ctx,
-                ev_iter_notification,
-                ev_to_observe,
-                ev_to_observe_properties,
-                ev_observed,
-                opengl_guard: AtomicBool::new(false),
-            });
-        }
-        #[cfg(all(feature = "opengl_callback", feature = "custom_protocols"))]
-        {
-            ret = Ok(Mpv {
-                ctx,
-                ev_iter_notification,
-                ev_to_observe,
-                ev_to_observe_properties,
-                ev_observed,
-                protocols_guard: AtomicBool::new(false),
-                opengl_guard: AtomicBool::new(false),
-            });
-        }
-        #[cfg(all(not(feature = "opengl_callback"), not(feature = "custom_protocols")))]
-        {
-            ret = Ok(Mpv {
-                ctx,
-                ev_iter_notification,
-                ev_to_observe,
-                ev_to_observe_properties,
-                ev_observed,
-            });
-        }
-        ret
+        Ok(Mpv {
+            ctx,
+            ev_iter_notification,
+            ev_to_observe,
+            ev_to_observe_properties,
+            ev_observed,
+            #[cfg(feature = "custom_protocols")]
+            protocols_guard: AtomicBool::new(false),
+            #[cfg(feature = "opengl_callback")]
+            opengl_guard: AtomicBool::new(false),
+        })
     }
 
     #[inline]
