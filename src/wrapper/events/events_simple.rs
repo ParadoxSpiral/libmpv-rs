@@ -44,15 +44,15 @@ impl<'a> PropertyData<'a> {
             mpv_format::MPV_FORMAT_FLAG => Ok(PropertyData::Flag(unsafe { *(ptr as *mut bool) })),
             mpv_format::MPV_FORMAT_STRING => {
                 let char_ptr = unsafe { *(ptr as *mut *mut ctype::c_char) };
-                Ok(PropertyData::Str(
-                    mpv_cstr_to_str!(unsafe { CStr::from_ptr(char_ptr) })?,
-                ))
+                Ok(PropertyData::Str(mpv_cstr_to_str!(unsafe {
+                    CStr::from_ptr(char_ptr)
+                })?))
             }
             mpv_format::MPV_FORMAT_OSD_STRING => {
                 let char_ptr = unsafe { *(ptr as *mut *mut ctype::c_char) };
-                Ok(PropertyData::OsdStr(
-                    mpv_cstr_to_str!(unsafe { CStr::from_ptr(char_ptr) })?,
-                ))
+                Ok(PropertyData::OsdStr(mpv_cstr_to_str!(unsafe {
+                    CStr::from_ptr(char_ptr)
+                })?))
             }
             mpv_format::MPV_FORMAT_DOUBLE => {
                 Ok(PropertyData::Double(unsafe { *(ptr as *mut f64) }))
@@ -193,15 +193,15 @@ impl Mpv {
             mpv_event_id::MPV_EVENT_GET_PROPERTY_REPLY => {
                 let property = *(event.data as *mut mpv_event_property);
 
-                Some(mpv_cstr_to_str!(CStr::from_ptr(property.name)).and_then(
-                    |name| {
+                Some(
+                    mpv_cstr_to_str!(CStr::from_ptr(property.name)).and_then(|name| {
                         Ok(Event::GetPropertyReply {
                             name: name,
                             result: PropertyData::from_raw(property.format, property.data)?,
                             reply_userdata: event.reply_userdata,
                         })
-                    },
-                ))
+                    }),
+                )
             }
             mpv_event_id::MPV_EVENT_SET_PROPERTY_REPLY => Some(mpv_err(
                 Event::SetPropertyReply(event.reply_userdata),
@@ -247,15 +247,15 @@ impl Mpv {
             mpv_event_id::MPV_EVENT_PLAYBACK_RESTART => Some(Ok(Event::PlaybackRestart)),
             mpv_event_id::MPV_EVENT_PROPERTY_CHANGE => {
                 let property = *(event.data as *mut mpv_event_property);
-                Some(mpv_cstr_to_str!(CStr::from_ptr(property.name)).and_then(
-                    |name| {
+                Some(
+                    mpv_cstr_to_str!(CStr::from_ptr(property.name)).and_then(|name| {
                         Ok(Event::PropertyChange {
                             name: name,
                             change: PropertyData::from_raw(property.format, property.data)?,
                             reply_userdata: event.reply_userdata,
                         })
-                    },
-                ))
+                    }),
+                )
             }
             mpv_event_id::MPV_EVENT_CHAPTER_CHANGE => Some(Ok(Event::ChapterChange)),
             mpv_event_id::MPV_EVENT_QUEUE_OVERFLOW => Some(Ok(Event::QueueOverflow)),

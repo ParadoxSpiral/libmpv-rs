@@ -113,7 +113,7 @@ pub use self::errors::*;
 
 #[cfg(unix)]
 macro_rules! mpv_cstr_to_str {
-    ($cstr: expr) => (
+    ($cstr: expr) => {
         if let Some(v) = OsStr::from_bytes($cstr.to_bytes()).to_str() {
             // Not sure why the type isn't inferred
             let r: Result<&str> = Ok(v);
@@ -121,14 +121,14 @@ macro_rules! mpv_cstr_to_str {
         } else {
             Err(ErrorKind::InvalidUtf8.into())
         }
-    )
+    };
 }
 
 #[cfg(not(unix))]
 macro_rules! mpv_cstr_to_str {
-    ($cstr: expr) => (
+    ($cstr: expr) => {
         str::from_utf8($cstr.to_bytes())
-    )
+    };
 }
 
 /// Contains event related abstractions
@@ -273,9 +273,7 @@ unsafe impl SetData for String {
     #[inline]
     fn call_as_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(self, mut fun: F) -> Result<T> {
         let string = CString::new(self)?;
-        fun(
-            (&mut string.as_ptr()) as *mut *const ctype::c_char as *mut _,
-        )
+        fun((&mut string.as_ptr()) as *mut *const ctype::c_char as *mut _)
     }
 
     #[inline]
@@ -320,9 +318,7 @@ unsafe impl<'a> SetData for &'a str {
     #[inline]
     fn call_as_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(self, mut fun: F) -> Result<T> {
         let string = CString::new(self)?;
-        fun(
-            (&mut string.as_ptr()) as *mut *const ctype::c_char as *mut _,
-        )
+        fun((&mut string.as_ptr()) as *mut *const ctype::c_char as *mut _)
     }
 
     #[inline]
@@ -378,15 +374,17 @@ pub struct Mpv {
     /// The handle to the mpv core
     pub ctx: *mut mpv_handle,
     #[cfg(feature = "events_complex")]
-    ev_iter_notification:
-        Box<(Mutex<bool>, parking_lot::Condvar)>,
-    #[cfg(feature = "events_complex")] ev_to_observe: Mutex<Vec<events::events_complex::Event>>,
+    ev_iter_notification: Box<(Mutex<bool>, parking_lot::Condvar)>,
     #[cfg(feature = "events_complex")]
-    ev_to_observe_properties:
-        Mutex<::std::collections::HashMap<String, u64>>,
-    #[cfg(feature = "events_complex")] ev_observed: Mutex<Vec<events::events_complex::Event>>,
-    #[cfg(feature = "custom_protocols")] protocols_guard: AtomicBool,
-    #[cfg(feature = "opengl_callback")] opengl_guard: AtomicBool,
+    ev_to_observe: Mutex<Vec<events::events_complex::Event>>,
+    #[cfg(feature = "events_complex")]
+    ev_to_observe_properties: Mutex<::std::collections::HashMap<String, u64>>,
+    #[cfg(feature = "events_complex")]
+    ev_observed: Mutex<Vec<events::events_complex::Event>>,
+    #[cfg(feature = "custom_protocols")]
+    protocols_guard: AtomicBool,
+    #[cfg(feature = "opengl_callback")]
+    opengl_guard: AtomicBool,
 }
 
 unsafe impl Send for Mpv {}
@@ -409,9 +407,7 @@ impl Mpv {
     pub fn new() -> Result<Mpv> {
         let api_version = unsafe { mpv_client_api_version() };
         if ::MPV_CLIENT_API_VERSION != api_version {
-            return Err(
-                ErrorKind::VersionMismatch(::MPV_CLIENT_API_VERSION, api_version).into(),
-            );
+            return Err(ErrorKind::VersionMismatch(::MPV_CLIENT_API_VERSION, api_version).into());
         }
 
         let ctx = unsafe { mpv_create() };

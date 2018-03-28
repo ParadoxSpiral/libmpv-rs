@@ -41,9 +41,7 @@ impl Mpv {
     pub fn new() -> Result<Mpv> {
         let api_version = unsafe { mpv_client_api_version() };
         if ::MPV_CLIENT_API_VERSION != api_version {
-            return Err(
-                ErrorKind::VersionMismatch(::MPV_CLIENT_API_VERSION, api_version).into(),
-            );
+            return Err(ErrorKind::VersionMismatch(::MPV_CLIENT_API_VERSION, api_version).into());
         }
 
         let ctx = unsafe { mpv_create() };
@@ -242,17 +240,17 @@ pub enum Event {
 impl PartialEq for Event {
     fn eq(&self, rhs: &Event) -> bool {
         match (self, rhs) {
-            (&Event::LogMessage { .. }, &Event::LogMessage { .. }) |
-            (&Event::StartFile, &Event::StartFile) |
-            (&Event::EndFile { .. }, &Event::EndFile { .. }) |
-            (&Event::FileLoaded, &Event::FileLoaded) |
-            (&Event::Idle, &Event::Idle) |
-            (&Event::Tick, &Event::Tick) |
-            (&Event::VideoReconfig, &Event::VideoReconfig) |
-            (&Event::AudioReconfig, &Event::AudioReconfig) |
-            (&Event::Seek, &Event::Seek) |
-            (&Event::PlaybackRestart, &Event::PlaybackRestart) |
-            (&Event::PropertyChange{..}, &Event::PropertyChange{..}) => true,
+            (&Event::LogMessage { .. }, &Event::LogMessage { .. })
+            | (&Event::StartFile, &Event::StartFile)
+            | (&Event::EndFile { .. }, &Event::EndFile { .. })
+            | (&Event::FileLoaded, &Event::FileLoaded)
+            | (&Event::Idle, &Event::Idle)
+            | (&Event::Tick, &Event::Tick)
+            | (&Event::VideoReconfig, &Event::VideoReconfig)
+            | (&Event::AudioReconfig, &Event::AudioReconfig)
+            | (&Event::Seek, &Event::Seek)
+            | (&Event::PlaybackRestart, &Event::PlaybackRestart)
+            | (&Event::PropertyChange { .. }, &Event::PropertyChange { .. }) => true,
             _ => false,
         }
     }
@@ -428,8 +426,8 @@ impl<'parent> Drop for EventIter<'parent> {
                         }
                         return true;
                     }
-                } else if mpv_event_id::MPV_EVENT_LOG_MESSAGE == outer_ev.as_id() &&
-                    outer_ev == inner_ev
+                } else if mpv_event_id::MPV_EVENT_LOG_MESSAGE == outer_ev.as_id()
+                    && outer_ev == inner_ev
                 {
                     let min_level = &*b"no\0";
                     unsafe { mpv_request_log_messages(self.ctx, min_level.as_ptr() as _) };

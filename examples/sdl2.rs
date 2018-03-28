@@ -100,12 +100,12 @@ fn main() {
             }
 
             match event {
-                Event::Quit { .. } |
-                Event::KeyDown {
+                Event::Quit { .. }
+                | Event::KeyDown {
                     keycode: Some(Keycode::Escape),
                     ..
-                } |
-                Event::KeyDown {
+                }
+                | Event::KeyDown {
                     keycode: Some(Keycode::Q),
                     ..
                 } => {

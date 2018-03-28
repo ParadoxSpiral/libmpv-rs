@@ -67,10 +67,12 @@ fn main() {
                 if let Some(&Event::EndFile {
                     reason: ref r,
                     error: ref e,
-                }) = vec.iter().find(|ev| if let Event::EndFile { .. } = **ev {
-                    true
-                } else {
-                    false
+                }) = vec.iter().find(|ev| {
+                    if let Event::EndFile { .. } = **ev {
+                        true
+                    } else {
+                        false
+                    }
                 }) {
                     // . . . print the `EndFile` reason and exit, . . .
                     println!("File ended! Reason: {:?}; Error: {:?}", r, e);

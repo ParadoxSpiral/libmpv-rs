@@ -75,7 +75,9 @@ where
 {
     let data = cb_ctx as *mut (*const F, *mut V);
 
-    panic::catch_unwind(|| { (*(*data).0)(&*(*data).1); });
+    panic::catch_unwind(|| {
+        (*(*data).0)(&*(*data).1);
+    });
 }
 
 /// Holds all state relevant to opengl callback functions.
@@ -108,8 +110,8 @@ impl<'parent, V> OpenGlContext<'parent, V> {
         F: for<'a> Fn(&'a str) -> *const () + 'static,
     {
         let api_ctx = unsafe {
-            mpv_get_sub_api(mpv_ctx, mpv_sub_api::MPV_SUB_API_OPENGL_CB) as
-                *mut mpv_opengl_cb_context
+            mpv_get_sub_api(mpv_ctx, mpv_sub_api::MPV_SUB_API_OPENGL_CB)
+                as *mut mpv_opengl_cb_context
         };
         assert!(!api_ctx.is_null());
 
@@ -169,8 +171,8 @@ impl<'parent, V> OpenGlContext<'parent, V> {
         mpv_opengl_cb_set_update_callback(
             self.api_ctx,
             Some(callback_update_wrapper::<F, V>),
-            &mut (&callback as *const F, &mut data as *mut V) as *mut (*const F, *mut V) as
-                *mut ctype::c_void,
+            &mut (&callback as *const F, &mut data as *mut V) as *mut (*const F, *mut V)
+                as *mut ctype::c_void,
         );
 
         self.update_callback_data = Some(data);

@@ -180,8 +180,7 @@ fn main() {
         let cmd = format!(
             "cd {} && echo \"--enable-libmpv-shared\" > {0}/mpv_options \
              && {0}/build -j{}",
-            path,
-            num_threads
+            path, num_threads
         );
 
         if needs_rebuild {
