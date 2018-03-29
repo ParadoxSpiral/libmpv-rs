@@ -40,7 +40,7 @@ pub enum PropertyData<'a> {
 
 impl<'a> PropertyData<'a> {
     fn from_raw(format: MpvFormat, ptr: *mut ctype::c_void) -> Result<PropertyData<'a>> {
-        debug_assert!(!ptr.is_null());
+        assert!(!ptr.is_null());
         match format {
             mpv_format::Flag => Ok(PropertyData::Flag(unsafe { *(ptr as *mut bool) })),
             mpv_format::String => {

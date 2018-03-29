@@ -107,6 +107,7 @@ fn events_simple() {
         unsafe { mpv.wait_event(3.) }.unwrap().unwrap()
     );
 
+    mpv.set_property("ytdl", false).unwrap();
     mpv.playlist_load_files(&[
         (
             "https://www.youtube.com/watch?v=DLzxrzFCyOs",

@@ -263,7 +263,7 @@ impl Event {
     }
 
     fn from_raw(raw: &raw::mpv_event) -> Event {
-        debug_assert!(mpv_err((), raw.error).is_ok());
+        assert!(mpv_err((), raw.error).is_ok());
         match raw.event_id {
             mpv_event_id::LogMessage => Event::logmessage_from_raw(raw.data),
             mpv_event_id::StartFile => Event::StartFile,
@@ -281,7 +281,7 @@ impl Event {
     }
 
     fn endfile_from_raw(raw: *mut ctype::c_void) -> Event {
-        debug_assert!(!raw.is_null());
+        assert!(!raw.is_null());
         let raw = unsafe { &mut *(raw as *mut raw::mpv_event_end_file) };
 
         assert!(raw.reason.is_positive());
@@ -299,7 +299,7 @@ impl Event {
     }
 
     fn logmessage_from_raw(raw: *mut ctype::c_void) -> Event {
-        debug_assert!(!raw.is_null());
+        assert!(!raw.is_null());
         let raw = unsafe { &mut *(raw as *mut raw::mpv_event_log_message) };
         Event::LogMessage {
             prefix: unsafe { mpv_cstr_to_str!(CStr::from_ptr(raw.prefix)).unwrap().into() },
@@ -309,7 +309,7 @@ impl Event {
     }
 
     fn property_from_raw(raw: *mut ctype::c_void) -> Event {
-        debug_assert!(!raw.is_null());
+        assert!(!raw.is_null());
         let raw = unsafe { &mut *(raw as *mut raw::mpv_event_property) };
         Event::PropertyChange {
             name: unsafe { mpv_cstr_to_str!(CStr::from_ptr(raw.name)).unwrap().into() },
@@ -341,7 +341,7 @@ impl PropertyData {
     }
 
     fn from_raw(fmt: MpvFormat, ptr: *mut ctype::c_void) -> PropertyData {
-        debug_assert!(!ptr.is_null());
+        assert!(!ptr.is_null());
         match fmt {
             mpv_format::Flag => PropertyData::Flag(unsafe { *(ptr as *mut i64) } != 0),
             mpv_format::Int64 => PropertyData::Int64(unsafe { *(ptr as *mut _) }),
