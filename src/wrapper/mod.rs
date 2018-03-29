@@ -17,94 +17,43 @@
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 mod errors {
-    #![allow(missing_docs)]
-    #[cfg(feature = "events_complex")]
-    use super::events::events_complex::Event;
-    use raw::mpv_error;
     use std::ffi::NulError;
     use std::os::raw as ctype;
+    use std::rc::Rc;
     use std::str::Utf8Error;
 
-    // FIXME: Once error_chain issue 134 is solved, this should derive Clone + PartialEq,
-    // and use RCs instead of `Box`es. Remove temp impl Clone below then.
-    error_chain!{
-        foreign_links {
-            Nul(NulError);
-            Utf8(Utf8Error);
-            Native(mpv_error);
-        }
+    #[allow(missing_docs)]
+    pub type Result<T> = ::std::result::Result<T, Error>;
 
-        errors {
-            Loadfiles(index: usize, error: Box<Error>) {
-                description("Command failed during a `loadfiles` call.")
-            }
-            #[cfg(feature="events_complex")]
-            AlreadyObserved(e: Box<Event>) {
-                description("This event is already being observed by another `EventIter`.")
-            }
-            InvalidArgument {
-                description("An invalid argument was passed to an mpv API")
-            }
-            VersionMismatch(linked: ctype::c_ulong, loaded: ctype::c_ulong) {
-                description("The library was compiled against a different mpv version than \
-                            what is present on the system.")
-            }
-            InvalidUtf8 {
-                description("An unspecified error during utf-8 validity checking ocurred.")
-            }
-            Null {
-                description("Mpv returned null while creating the core.")
-            }
-        }
+    #[allow(missing_docs)]
+    #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+    pub enum Error {
+        Loadfiles {
+            index: usize,
+            error: Rc<Error>,
+        },
+        VersionMismatch {
+            linked: ctype::c_ulong,
+            loaded: ctype::c_ulong,
+        },
+        InvalidUtf8,
+        Null,
+        Raw(::MpvError),
     }
 
-    impl Clone for Error {
-        #[allow(match_ref_pats)]
-        fn clone(&self) -> Error {
-            match self.kind() {
-                &ErrorKind::Msg(ref e) => ErrorKind::Msg(e.clone()).into(),
-                &ErrorKind::Nul(ref e) => ErrorKind::Nul(e.clone()).into(),
-                &ErrorKind::Utf8(ref e) => ErrorKind::Utf8(*e).into(),
-                &ErrorKind::Native(ref e) => ErrorKind::Native(*e).into(),
-                &ErrorKind::Loadfiles(ref idx, ref err) => {
-                    ErrorKind::Loadfiles(*idx, err.clone()).into()
-                }
-                #[cfg(feature = "events_complex")]
-                &ErrorKind::AlreadyObserved(ref e) => ErrorKind::AlreadyObserved(e.clone()).into(),
-                &ErrorKind::InvalidArgument => ErrorKind::InvalidArgument.into(),
-                &ErrorKind::VersionMismatch(ref li, ref lo) => {
-                    ErrorKind::VersionMismatch(*li, *lo).into()
-                }
-                &ErrorKind::InvalidUtf8 => ErrorKind::InvalidUtf8.into(),
-                &ErrorKind::Null => ErrorKind::Null.into(),
-            }
+    impl From<NulError> for Error {
+        fn from(_other: NulError) -> Error {
+            Error::Null
         }
     }
-
-    impl PartialEq for Error {
-        fn eq(&self, rhs: &Error) -> bool {
-            match (self.kind(), rhs.kind()) {
-                (&ErrorKind::Msg(ref e1), &ErrorKind::Msg(ref e2)) => e1 == e2,
-                (&ErrorKind::Nul(ref e1), &ErrorKind::Nul(ref e2)) => e1 == e2,
-                (&ErrorKind::Utf8(ref e1), &ErrorKind::Utf8(ref e2)) => e1 == e2,
-                (&ErrorKind::Native(ref e1), &ErrorKind::Native(ref e2)) => e1 == e2,
-                (
-                    &ErrorKind::Loadfiles(ref idx1, ref err1),
-                    &ErrorKind::Loadfiles(ref idx2, ref err2),
-                ) => idx1 == idx2 && err1 == err2,
-                #[cfg(feature = "events_complex")]
-                (&ErrorKind::AlreadyObserved(ref e1), &ErrorKind::AlreadyObserved(ref e2)) => {
-                    e1 == e2
-                }
-                (&ErrorKind::InvalidArgument, &ErrorKind::InvalidArgument) => true,
-                (
-                    &ErrorKind::VersionMismatch(ref li1, ref lo1),
-                    &ErrorKind::VersionMismatch(ref li2, ref lo2),
-                ) => li1 == li2 && lo1 == lo2,
-                (&ErrorKind::InvalidUtf8, &ErrorKind::InvalidUtf8) => true,
-                (&ErrorKind::Null, &ErrorKind::Null) => true,
-                (_, _) => false,
-            }
+    impl From<Utf8Error> for Error {
+        fn from(_other: Utf8Error) -> Error {
+            Error::InvalidUtf8
+        }
+    }
+    impl From<::MpvError> for Error {
+        fn from(other: ::MpvError) -> Error {
+            Error::Raw(other)
         }
     }
 }
@@ -119,7 +68,7 @@ macro_rules! mpv_cstr_to_str {
             let r: Result<&str> = Ok(v);
             r
         } else {
-            Err(ErrorKind::InvalidUtf8.into())
+            Err(Error::InvalidUtf8)
         }
     };
 }
@@ -164,7 +113,7 @@ fn mpv_err<T>(ret: T, err_val: ctype::c_int) -> Result<T> {
     if err_val == 0 {
         Ok(ret)
     } else {
-        Err(ErrorKind::Native(mpv_error::from(err_val)).into())
+        Err(Error::Raw(mpv_error::from(err_val)).into())
     }
 }
 
@@ -407,12 +356,15 @@ impl Mpv {
     pub fn new() -> Result<Mpv> {
         let api_version = unsafe { mpv_client_api_version() };
         if ::MPV_CLIENT_API_VERSION != api_version {
-            return Err(ErrorKind::VersionMismatch(::MPV_CLIENT_API_VERSION, api_version).into());
+            return Err(Error::VersionMismatch {
+                linked: ::MPV_CLIENT_API_VERSION,
+                loaded: api_version,
+            });
         }
 
         let ctx = unsafe { mpv_create() };
         if ctx.is_null() {
-            return Err(ErrorKind::Null.into());
+            return Err(Error::Null.into());
         }
         mpv_err((), unsafe { mpv_initialize(ctx) }).or_else(|err| {
             unsafe { mpv_terminate_destroy(ctx) };
@@ -737,7 +689,10 @@ impl Mpv {
             );
 
             if ret.is_err() {
-                return Err(ErrorKind::Loadfiles(i, Box::new(ret.unwrap_err())).into());
+                return Err(Error::Loadfiles {
+                    index: i,
+                    error: ::std::rc::Rc::new(ret.unwrap_err()),
+                });
             }
         }
         Ok(())
@@ -789,6 +744,9 @@ impl Mpv {
     #[inline]
     /// Add and select the subtitle immediately.
     /// Specifying a language requires specifying a title.
+    ///
+    /// # Panics
+    /// If a language but not title was specified.
     pub fn subtitle_add_select<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'b str>>>(
         &self,
         path: &str,
@@ -798,7 +756,7 @@ impl Mpv {
         match (title.into(), lang.into()) {
             (None, None) => self.command("sub-add", &[&format!("\"{}\"", path), "select"]),
             (Some(t), None) => self.command("sub-add", &[&format!("\"{}\"", path), "select", t]),
-            (None, Some(_)) => Err(ErrorKind::InvalidArgument.into()),
+            (None, Some(_)) => panic!("Given subtitle language, but missing title"),
             (Some(t), Some(l)) => {
                 self.command("sub-add", &[&format!("\"{}\"", path), "select", t, l])
             }
@@ -810,6 +768,9 @@ impl Mpv {
     /// (Or in some special situations, let the default stream selection mechanism decide.)".
     ///
     /// Returns an `Error::InvalidArgument` if a language, but not a title, was provided.
+    ///
+    /// # Panics
+    /// If a language but not title was specified.
     pub fn subtitle_add_auto<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'b str>>>(
         &self,
         path: &str,
@@ -822,7 +783,7 @@ impl Mpv {
             (Some(t), Some(l)) => {
                 self.command("sub-add", &[&format!("\"{}\"", path), "auto", t, l])
             }
-            (None, Some(_)) => Err(ErrorKind::InvalidArgument.into()),
+            (None, Some(_)) => panic!("Given subtitle language, but missing title"),
         }
     }
 

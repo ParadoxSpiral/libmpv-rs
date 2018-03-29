@@ -16,6 +16,8 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
+#![allow(unused)]
+
 use super::*;
 
 use std::time::Duration;
@@ -133,7 +135,7 @@ fn events_simple() {
         unsafe { mpv.wait_event(10.) }.unwrap().unwrap()
     );
     assert_eq!(
-        Err(ErrorKind::Native(MpvError::MPV_ERROR_UNKNOWN_FORMAT).into()),
+        Err(Error::Raw(MpvError::MPV_ERROR_UNKNOWN_FORMAT)),
         unsafe { mpv.wait_event(20.) }.unwrap()
     );
     assert_eq!(Event::Idle, unsafe { mpv.wait_event(4.) }.unwrap().unwrap());

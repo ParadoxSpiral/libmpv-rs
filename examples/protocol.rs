@@ -16,12 +16,11 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-#![allow(unused_extern_crates)]
+#![allow(unused)]
 
 extern crate mpv;
 
 use mpv::*;
-use mpv::protocol::*;
 
 use std::env;
 use std::fs::File;
@@ -68,6 +67,8 @@ fn main() {
 
 #[cfg(feature = "custom_protocols")]
 fn main() {
+    use mpv::protocol::*;
+
     let path = format!(
         "filereader://{}",
         env::args()

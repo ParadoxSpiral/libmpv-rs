@@ -27,8 +27,7 @@ description = "Libmpv abstraction that's easy to use and can play next to all co
 keywords = ["media", "playback", "mpv", "libmpv"]
 
 [dependencies]
-error-chain = "0.10"
-parking_lot = "0.4"
+parking_lot = "0.5"
 mpv-sys = {version = "1", path = "mpv-sys/"}
 
 [dev-dependencies]

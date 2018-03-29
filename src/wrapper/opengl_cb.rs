@@ -40,7 +40,7 @@ impl Mpv {
         if self.opengl_guard
             .compare_and_swap(false, true, Ordering::AcqRel)
         {
-            bail!("Context already exists")
+            panic!("Context already exists")
         } else {
             OpenGlContext::new(self.ctx, procaddr, PhantomData::<&Self>)
         }

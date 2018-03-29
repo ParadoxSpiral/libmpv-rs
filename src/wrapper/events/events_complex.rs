@@ -41,12 +41,15 @@ impl Mpv {
     pub fn new() -> Result<Mpv> {
         let api_version = unsafe { mpv_client_api_version() };
         if ::MPV_CLIENT_API_VERSION != api_version {
-            return Err(ErrorKind::VersionMismatch(::MPV_CLIENT_API_VERSION, api_version).into());
+            return Err(Error::VersionMismatch {
+                linked: ::MPV_CLIENT_API_VERSION,
+                loaded: api_version,
+            });
         }
 
         let ctx = unsafe { mpv_create() };
         if ctx.is_null() {
-            return Err(ErrorKind::Null.into());
+            return Err(Error::Null);
         }
 
         let (ev_iter_notification, ev_to_observe, ev_to_observe_properties, ev_observed) = {
@@ -96,6 +99,9 @@ impl Mpv {
 
     #[inline]
     /// Observe given `Event`s via an `EventIter`.
+    ///
+    /// # Panics
+    /// If an event is set to be observed that has been previously set to be observed.
     pub fn observe_events(&self, events: &[Event]) -> Result<EventIter> {
         let mut observe = self.ev_to_observe.lock();
         let mut properties = self.ev_to_observe_properties.lock();
@@ -106,9 +112,9 @@ impl Mpv {
         let mut evs = Vec::with_capacity(len);
         let mut props = Vec::with_capacity(len);
         for elem in events {
-            if let Event::PropertyChange{ref name, ref data} = *elem {
+            if let Event::PropertyChange { ref name, ref data } = *elem {
                 if properties.contains_key(name) {
-                    return Err(ErrorKind::AlreadyObserved(Box::new(elem.clone())).into());
+                    panic!("Tried to observe {} twice", name);
                 } else {
                     mpv_err((), unsafe { mpv_request_event(self.ctx, elem.as_id(), 1) })?;
                     props.push((name, data));
@@ -118,7 +124,7 @@ impl Mpv {
             } else {
                 for id in &*observe {
                     if elem.as_id() == id.as_id() {
-                        return Err(ErrorKind::AlreadyObserved(Box::new(elem.clone())).into());
+                        panic!("Tried to observe {:?} twice", elem);
                     }
                 }
 
@@ -378,9 +384,9 @@ impl<'parent> Drop for EventIter<'parent> {
 
         // Returns true if outer and inner event match, if so, the event is unobserved.
         let mut compare_ev_unobserve = |outer_ev: &Event, inner_ev: &Event| {
-            if let Event::PropertyChange{ref name, ..} = *outer_ev {
+            if let Event::PropertyChange { ref name, .. } = *outer_ev {
                 let oname = name;
-                if let Event::PropertyChange{ref name, ..} = *inner_ev {
+                if let Event::PropertyChange { ref name, .. } = *inner_ev {
                     if oname == name {
                         unsafe {
                             mpv_unobserve_property(
@@ -465,9 +471,9 @@ impl<'parent> Iterator for EventIter<'parent> {
             } else {
                 // Return true where outer_ev == inner_ev, and push inner_ev to ret_events
                 let mut compare_ev = |outer_ev: &Event, inner_ev: &Event| {
-                    if let Event::PropertyChange{ref name, ..} = *outer_ev {
+                    if let Event::PropertyChange { ref name, .. } = *outer_ev {
                         let oname = name;
-                        if let Event::PropertyChange{ref name, ..} = *inner_ev {
+                        if let Event::PropertyChange { ref name, .. } = *inner_ev {
                             if oname == name {
                                 ret_events.push(inner_ev.clone());
                                 return true;

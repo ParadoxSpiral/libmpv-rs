@@ -42,8 +42,6 @@
 // - update constants in build.rs
 // - run tests and examples to test whether they still work
 
-#[macro_use]
-extern crate error_chain;
 extern crate mpv_sys as raw;
 extern crate parking_lot;
 
@@ -55,7 +53,7 @@ pub use raw::mpv_event_id as EventId;
 pub use raw::mpv_log_level as LogLevel;
 /// The reason an `Event::EndFile` was fired.
 pub use raw::mpv_end_file_reason as EndFileReason;
-/// An mpv error, used in `Error::Native`
+/// An mpv error, used in `Error::Raw`
 pub use raw::mpv_error as MpvError;
 mod wrapper;
 pub use wrapper::*;
