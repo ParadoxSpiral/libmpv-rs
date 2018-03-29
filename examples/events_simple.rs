@@ -37,7 +37,7 @@ fn main() {
 
     let path = env::args()
         .nth(1)
-        .expect("Expected path to media as argument, found nil.");
+        .unwrap_or_else(|| String::from("https://www.youtube.com/watch?v=DLzxrzFCyOs"));
 
     // Create an `Mpv` and set some properties.
     let mpv = Mpv::new().unwrap();
@@ -45,7 +45,6 @@ fn main() {
     mpv.set_property("cache-initial", 10).unwrap();
     mpv.set_property("volume", 15).unwrap();
     mpv.set_property("vo", "null").unwrap();
-    mpv.set_property("ytdl", true).unwrap();
 
     crossbeam::scope(|scope| {
         scope.spawn(|| {

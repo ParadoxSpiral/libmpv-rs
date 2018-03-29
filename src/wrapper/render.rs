@@ -1,6 +1,6 @@
 // Copyright (C) 2016  ParadoxSpiral
 //
-// This file is part of mpv-sys.
+// This file is part of mpv-rs.
 //
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -15,16 +15,3 @@
 // You should have received a copy of the GNU Lesser General Public
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-
-#![allow(non_upper_case_globals)]
-#![allow(non_camel_case_types)]
-#![allow(non_snake_case)]
-
-include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
-
-#[inline]
-/// Returns the associated error string.
-pub fn mpv_error_str(e: mpv_error) -> &'static str {
-    let raw = unsafe { mpv_error_string(e) };
-    unsafe { ::std::ffi::CStr::from_ptr(raw) }.to_str().unwrap()
-}

@@ -38,14 +38,13 @@ fn main() {
 
     let path = env::args()
         .nth(1)
-        .expect("Expected path to media as argument, found nil.");
+        .unwrap_or(String::from("https://www.youtube.com/watch?v=DLzxrzFCyOs"));
 
     // Create an `Mpv` and set some properties.
     let mpv = Mpv::new().unwrap();
     mpv.set_property("cache-initial", 10).unwrap();
     mpv.set_property("volume", 15).unwrap();
     mpv.set_property("vo", "null").unwrap();
-    mpv.set_property("ytdl", true).unwrap();
 
     // Create a crossbeam scope for convenience to use mpv in multiple threads.
     crossbeam::scope(|scope| {
@@ -57,7 +56,7 @@ fn main() {
                 Event::Seek,
                 Event::PlaybackRestart,
                 Event::EndFile {
-                    reason: EndFileReason::MPV_END_FILE_REASON_EOF,
+                    reason: mpv_end_file_reason::Eof,
                     error: None,
                 },
             ]).unwrap();
@@ -96,7 +95,7 @@ fn main() {
             }
         });
         scope.spawn(|| {
-            let iter = mpv.observe_events(&[Event::empty_logmessage(LogLevel::MPV_LOG_LEVEL_INFO)])
+            let iter = mpv.observe_events(&[Event::empty_logmessage(mpv_log_level::Info)])
                 .unwrap();
 
             for vec in iter {
@@ -104,7 +103,6 @@ fn main() {
             }
         });
 
-        // Add a file to play, ytdl was set to true for this.
         mpv.playlist_load_files(&[(&path, FileState::AppendPlay, None)])
             .unwrap();
 

@@ -18,8 +18,7 @@
 
 use parking_lot::{Condvar, Mutex};
 
-use raw::*;
-
+use super::*;
 use super::super::*;
 use {EndFileReason, LogLevel};
 
@@ -39,7 +38,7 @@ impl Mpv {
     ///
     /// This disables all events.
     pub fn new() -> Result<Mpv> {
-        let api_version = unsafe { mpv_client_api_version() };
+        let api_version = unsafe { raw::mpv_client_api_version() };
         if ::MPV_CLIENT_API_VERSION != api_version {
             return Err(Error::VersionMismatch {
                 linked: ::MPV_CLIENT_API_VERSION,
@@ -47,7 +46,7 @@ impl Mpv {
             });
         }
 
-        let ctx = unsafe { mpv_create() };
+        let ctx = unsafe { raw::mpv_create() };
         if ctx.is_null() {
             return Err(Error::Null);
         }
@@ -55,7 +54,7 @@ impl Mpv {
         let (ev_iter_notification, ev_to_observe, ev_to_observe_properties, ev_observed) = {
             let ev_iter_notification = Box::new((Mutex::new(false), Condvar::new()));
             unsafe {
-                mpv_set_wakeup_callback(
+                raw::mpv_set_wakeup_callback(
                     ctx,
                     Some(event_callback),
                     &ev_iter_notification.1 as *const Condvar as *mut Condvar as *mut _,
@@ -71,16 +70,14 @@ impl Mpv {
         };
 
         for i in 2..24 {
-            if let Err(e) = mpv_err((), unsafe {
-                mpv_request_event(ctx, mpv_event_id::from(i), 0)
-            }) {
-                unsafe { mpv_terminate_destroy(ctx) };
+            if let Err(e) = mpv_err((), unsafe { raw::mpv_request_event(ctx, i, 0) }) {
+                unsafe { raw::mpv_terminate_destroy(ctx) };
                 return Err(e);
             }
         }
 
-        mpv_err((), unsafe { mpv_initialize(ctx) }).or_else(|err| {
-            unsafe { mpv_terminate_destroy(ctx) };
+        mpv_err((), unsafe { raw::mpv_initialize(ctx) }).or_else(|err| {
+            unsafe { raw::mpv_terminate_destroy(ctx) };
             Err(err)
         })?;
 
@@ -116,7 +113,9 @@ impl Mpv {
                 if properties.contains_key(name) {
                     panic!("Tried to observe {} twice", name);
                 } else {
-                    mpv_err((), unsafe { mpv_request_event(self.ctx, elem.as_id(), 1) })?;
+                    mpv_err((), unsafe {
+                        raw::mpv_request_event(self.ctx, elem.as_id(), 1)
+                    })?;
                     props.push((name, data));
                     ids.push(elem.as_id());
                     evs.push(elem.clone());
@@ -131,11 +130,13 @@ impl Mpv {
                 if let Event::LogMessage { level: lvl, .. } = *elem {
                     let min_level = CString::new(mpv_log_level_as_str(lvl))?;
                     mpv_err((), unsafe {
-                        mpv_request_log_messages(self.ctx, min_level.as_ptr())
+                        raw::mpv_request_log_messages(self.ctx, min_level.as_ptr())
                     })?;
                 }
 
-                mpv_err((), unsafe { mpv_request_event(self.ctx, elem.as_id(), 1) })?;
+                mpv_err((), unsafe {
+                    raw::mpv_request_event(self.ctx, elem.as_id(), 1)
+                })?;
                 ids.push(elem.as_id());
                 evs.push(elem.clone());
             }
@@ -146,7 +147,7 @@ impl Mpv {
         for (i, elem) in props.iter().enumerate() {
             let name = CString::new(&elem.0[..])?;
             let err = mpv_err((), unsafe {
-                mpv_observe_property(
+                raw::mpv_observe_property(
                     self.ctx,
                     (start_id + i) as _,
                     name.as_ptr(),
@@ -156,7 +157,7 @@ impl Mpv {
             if err.is_err() {
                 // Ignore errors.
                 for (_, id) in props_ins {
-                    unsafe { mpv_unobserve_property(self.ctx, id) };
+                    unsafe { raw::mpv_unobserve_property(self.ctx, id) };
                 }
                 return Err(err.unwrap_err());
             }
@@ -245,46 +246,47 @@ impl Event {
         }
     }
 
-    fn as_id(&self) -> mpv_event_id {
+    fn as_id(&self) -> EventId {
         match *self {
-            Event::LogMessage { .. } => mpv_event_id::MPV_EVENT_LOG_MESSAGE,
-            Event::StartFile => mpv_event_id::MPV_EVENT_START_FILE,
-            Event::EndFile { .. } => mpv_event_id::MPV_EVENT_END_FILE,
-            Event::FileLoaded => mpv_event_id::MPV_EVENT_FILE_LOADED,
-            Event::Idle => mpv_event_id::MPV_EVENT_IDLE,
-            Event::Tick => mpv_event_id::MPV_EVENT_TICK,
-            Event::VideoReconfig => mpv_event_id::MPV_EVENT_VIDEO_RECONFIG,
-            Event::AudioReconfig => mpv_event_id::MPV_EVENT_AUDIO_RECONFIG,
-            Event::Seek => mpv_event_id::MPV_EVENT_SEEK,
-            Event::PlaybackRestart => mpv_event_id::MPV_EVENT_PLAYBACK_RESTART,
-            Event::PropertyChange { .. } => mpv_event_id::MPV_EVENT_PROPERTY_CHANGE,
+            Event::LogMessage { .. } => mpv_event_id::LogMessage,
+            Event::StartFile => mpv_event_id::StartFile,
+            Event::EndFile { .. } => mpv_event_id::EndFile,
+            Event::FileLoaded => mpv_event_id::FileLoaded,
+            Event::Idle => mpv_event_id::Idle,
+            Event::Tick => mpv_event_id::Tick,
+            Event::VideoReconfig => mpv_event_id::VideoReconfig,
+            Event::AudioReconfig => mpv_event_id::AudioReconfig,
+            Event::Seek => mpv_event_id::Seek,
+            Event::PlaybackRestart => mpv_event_id::PlaybackRestart,
+            Event::PropertyChange { .. } => mpv_event_id::PropertyChange,
         }
     }
 
-    fn from_raw(raw: &mpv_event) -> Event {
+    fn from_raw(raw: &raw::mpv_event) -> Event {
         debug_assert!(mpv_err((), raw.error).is_ok());
         match raw.event_id {
-            mpv_event_id::MPV_EVENT_LOG_MESSAGE => Event::logmessage_from_raw(raw.data),
-            mpv_event_id::MPV_EVENT_START_FILE => Event::StartFile,
-            mpv_event_id::MPV_EVENT_END_FILE => Event::endfile_from_raw(raw.data),
-            mpv_event_id::MPV_EVENT_FILE_LOADED => Event::FileLoaded,
-            mpv_event_id::MPV_EVENT_IDLE => Event::Idle,
-            mpv_event_id::MPV_EVENT_TICK => Event::Tick,
-            mpv_event_id::MPV_EVENT_VIDEO_RECONFIG => Event::VideoReconfig,
-            mpv_event_id::MPV_EVENT_AUDIO_RECONFIG => Event::AudioReconfig,
-            mpv_event_id::MPV_EVENT_SEEK => Event::Seek,
-            mpv_event_id::MPV_EVENT_PLAYBACK_RESTART => Event::PlaybackRestart,
-            mpv_event_id::MPV_EVENT_PROPERTY_CHANGE => Event::property_from_raw(raw.data),
+            mpv_event_id::LogMessage => Event::logmessage_from_raw(raw.data),
+            mpv_event_id::StartFile => Event::StartFile,
+            mpv_event_id::EndFile => Event::endfile_from_raw(raw.data),
+            mpv_event_id::FileLoaded => Event::FileLoaded,
+            mpv_event_id::Idle => Event::Idle,
+            mpv_event_id::Tick => Event::Tick,
+            mpv_event_id::VideoReconfig => Event::VideoReconfig,
+            mpv_event_id::AudioReconfig => Event::AudioReconfig,
+            mpv_event_id::Seek => Event::Seek,
+            mpv_event_id::PlaybackRestart => Event::PlaybackRestart,
+            mpv_event_id::PropertyChange => Event::property_from_raw(raw.data),
             _ => unreachable!(),
         }
     }
 
     fn endfile_from_raw(raw: *mut ctype::c_void) -> Event {
         debug_assert!(!raw.is_null());
-        let raw = unsafe { &mut *(raw as *mut mpv_event_end_file) };
+        let raw = unsafe { &mut *(raw as *mut raw::mpv_event_end_file) };
 
+        assert!(raw.reason.is_positive());
         Event::EndFile {
-            reason: mpv_end_file_reason::from(raw.reason as u32),
+            reason: raw.reason as _,
             error: {
                 let err = mpv_err((), raw.error);
                 if err.is_err() {
@@ -298,7 +300,7 @@ impl Event {
 
     fn logmessage_from_raw(raw: *mut ctype::c_void) -> Event {
         debug_assert!(!raw.is_null());
-        let raw = unsafe { &mut *(raw as *mut mpv_event_log_message) };
+        let raw = unsafe { &mut *(raw as *mut raw::mpv_event_log_message) };
         Event::LogMessage {
             prefix: unsafe { mpv_cstr_to_str!(CStr::from_ptr(raw.prefix)).unwrap().into() },
             level: raw.log_level,
@@ -308,7 +310,7 @@ impl Event {
 
     fn property_from_raw(raw: *mut ctype::c_void) -> Event {
         debug_assert!(!raw.is_null());
-        let raw = unsafe { &mut *(raw as *mut mpv_event_property) };
+        let raw = unsafe { &mut *(raw as *mut raw::mpv_event_property) };
         Event::PropertyChange {
             name: unsafe { mpv_cstr_to_str!(CStr::from_ptr(raw.name)).unwrap().into() },
             data: PropertyData::from_raw(raw.format, raw.data),
@@ -328,37 +330,38 @@ pub enum PropertyData {
 }
 
 impl PropertyData {
-    fn format(&self) -> mpv_format {
+    fn format(&self) -> MpvFormat {
         match *self {
-            PropertyData::String(_) => mpv_format::MPV_FORMAT_STRING,
-            PropertyData::OsdString(_) => mpv_format::MPV_FORMAT_OSD_STRING,
-            PropertyData::Flag(_) => mpv_format::MPV_FORMAT_FLAG,
-            PropertyData::Int64(_) => mpv_format::MPV_FORMAT_INT64,
-            PropertyData::Double(_) => mpv_format::MPV_FORMAT_DOUBLE,
+            PropertyData::String(_) => mpv_format::String,
+            PropertyData::OsdString(_) => mpv_format::OsdString,
+            PropertyData::Flag(_) => mpv_format::Flag,
+            PropertyData::Int64(_) => mpv_format::Int64,
+            PropertyData::Double(_) => mpv_format::Double,
         }
     }
 
-    fn from_raw(fmt: mpv_format, ptr: *mut ctype::c_void) -> PropertyData {
+    fn from_raw(fmt: MpvFormat, ptr: *mut ctype::c_void) -> PropertyData {
         debug_assert!(!ptr.is_null());
         match fmt {
-            mpv_format::MPV_FORMAT_FLAG => PropertyData::Flag(unsafe { *(ptr as *mut i64) } != 0),
-            mpv_format::MPV_FORMAT_INT64 => PropertyData::Int64(unsafe { *(ptr as *mut _) }),
-            mpv_format::MPV_FORMAT_DOUBLE => PropertyData::Double(unsafe { *(ptr as *mut _) }),
+            mpv_format::Flag => PropertyData::Flag(unsafe { *(ptr as *mut i64) } != 0),
+            mpv_format::Int64 => PropertyData::Int64(unsafe { *(ptr as *mut _) }),
+            mpv_format::Double => PropertyData::Double(unsafe { *(ptr as *mut _) }),
             _ => unreachable!(),
         }
     }
 }
 
-fn mpv_log_level_as_str(lvl: mpv_log_level) -> &'static str {
+fn mpv_log_level_as_str(lvl: LogLevel) -> &'static str {
     match lvl {
-        mpv_log_level::MPV_LOG_LEVEL_NONE => "no",
-        mpv_log_level::MPV_LOG_LEVEL_FATAL => "fatal",
-        mpv_log_level::MPV_LOG_LEVEL_ERROR => "error",
-        mpv_log_level::MPV_LOG_LEVEL_WARN => "warn",
-        mpv_log_level::MPV_LOG_LEVEL_INFO => "info",
-        mpv_log_level::MPV_LOG_LEVEL_V => "v",
-        mpv_log_level::MPV_LOG_LEVEL_DEBUG => "debug",
-        mpv_log_level::MPV_LOG_LEVEL_TRACE => "trace",
+        mpv_log_level::None => "no",
+        mpv_log_level::Fatal => "fatal",
+        mpv_log_level::Error => "error",
+        mpv_log_level::Warn => "warn",
+        mpv_log_level::Info => "info",
+        mpv_log_level::V => "v",
+        mpv_log_level::Debug => "debug",
+        mpv_log_level::Trace => "trace",
+        _ => unreachable!(),
     }
 }
 
@@ -366,7 +369,7 @@ fn mpv_log_level_as_str(lvl: mpv_log_level) -> &'static str {
 /// Once the `EventIter` is dropped, it's `Event`s are removed from
 /// the "to be observed" queue, therefore new `Event` invocations won't be observed.
 pub struct EventIter<'parent> {
-    ctx: *mut mpv_handle,
+    ctx: *mut raw::mpv_handle,
     first_iteration: bool,
     notification: &'parent (Mutex<bool>, Condvar),
     all_to_observe: &'parent Mutex<Vec<Event>>,
@@ -389,22 +392,20 @@ impl<'parent> Drop for EventIter<'parent> {
                 if let Event::PropertyChange { ref name, .. } = *inner_ev {
                     if oname == name {
                         unsafe {
-                            mpv_unobserve_property(
+                            raw::mpv_unobserve_property(
                                 self.ctx,
                                 all_to_observe_properties.remove(oname).unwrap(),
                             );
                         }
                         return true;
                     }
-                } else if mpv_event_id::MPV_EVENT_LOG_MESSAGE == outer_ev.as_id()
-                    && outer_ev == inner_ev
-                {
+                } else if mpv_event_id::LogMessage == outer_ev.as_id() && outer_ev == inner_ev {
                     let min_level = &*b"no\0";
-                    unsafe { mpv_request_log_messages(self.ctx, min_level.as_ptr() as _) };
+                    unsafe { raw::mpv_request_log_messages(self.ctx, min_level.as_ptr() as _) };
                     return true;
                 }
             } else if outer_ev == inner_ev {
-                unsafe { mpv_request_event(self.ctx, inner_ev.as_id(), 0) };
+                unsafe { raw::mpv_request_event(self.ctx, inner_ev.as_id(), 0) };
                 return true;
             }
             false
@@ -436,14 +437,14 @@ impl<'parent> Iterator for EventIter<'parent> {
                 let all_to_observe = self.all_to_observe.lock();
                 let mut last = false;
                 'events: loop {
-                    let event = unsafe { &*mpv_wait_event(self.ctx, 0f32 as _) };
+                    let event = unsafe { &*raw::mpv_wait_event(self.ctx, 0f32 as _) };
                     let ev_id = event.event_id;
 
-                    if ev_id == mpv_event_id::MPV_EVENT_QUEUE_OVERFLOW {
+                    if ev_id == mpv_event_id::QueueOverflow {
                         // The queue needs to be emptied asap to prevent loss of events
                         // This should happen very rarely, as the queue size is 1k (2016-10-12)
                         break;
-                    } else if ev_id == mpv_event_id::MPV_EVENT_NONE {
+                    } else if ev_id == mpv_event_id::None {
                         if last {
                             break;
                         } else {

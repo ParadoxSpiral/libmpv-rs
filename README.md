@@ -1,19 +1,16 @@
 # mpv-rs
 A libmpv abstraction written in rust that's easy to use and provides the ability to read next to all video and audio codecs.
 
-To get started you need libmpv installed on the system, or enable the "build_libmpv" feature-flag.
+# Dependencies
+Libmpv version 1.100 (mpv version 0.29) is the minimum required version. For ease of building, you can use the `build_libmpv` feature that is used to link against. Especially useful to cross compile to windows.
 
 # Examples
 To run an example, execute `cargo run [--release] --example x -- path`, where x is any of:
-* events: multi-threaded event enumeration
-* protocol: implementation of custom `filereader://` protocol that… reads files
-* sdl2: draw onto an sdl2 framebuffer, keybindings
+* `events_complex`: multi-threaded event enumeration
+* `events_simple`: single-threaded event enumeration
+* `protocol`: implementation of custom `filereader://` protocol that… reads files
+* `imgui`: minimalistic GUI using `imgui-rs`
 `path` should be a valid (local if using protocol) path, e.g. music, or a youtube video.
-
-# Dependencies
-Libmpv is required, and in the case of the last example sdl2.
-However, the feature-flag `build_libmpv` automatically downloads and links against a compatible libmpv.
-`static_libmpv` automatically builds and links against a static libmpv. This works cross-platform, but not across architectures.
 
 # Contributing
 All pull requests/issues welcome.

@@ -18,9 +18,14 @@
 
 [package]
 name = "mpv-sys"
-version = "1.0.0"
+version = "2.0.0"
 authors = ["ParadoxSpiral <ParadoxSpiral@riseup.net>"]
 build = "build.rs"
 
-[build-dependencies]
-bindgen = "0.29"
+[build-dependencies.bindgen]
+version = "0.35"
+optional = true
+
+[features]
+# You can either use the pregenerated bindings, or gen new ones with bindgen
+use-bindgen = ["bindgen"]

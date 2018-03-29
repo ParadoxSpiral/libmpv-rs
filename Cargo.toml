@@ -28,23 +28,25 @@ keywords = ["media", "playback", "mpv", "libmpv"]
 
 [dependencies]
 parking_lot = "0.5"
-mpv-sys = {version = "1", path = "mpv-sys/"}
+mpv-sys = {version = "2", path = "mpv-sys/"}
 
 [dev-dependencies]
-sdl2 = "0.30"
-crossbeam = "0.2"
+crossbeam = "0.3"
+imgui = "0.0.18"
 
-[build-dependencies]
-reqwest = "0.7"
-git2 = "0.6"
+[target.'cfg(windows)'.build-dependencies]
+reqwest = { version = "0.8", optional = true}
+
+[target.'cfg(not(windows))'.build-dependencies]
+git2 = { version = "0.7", optional = true }
 
 [features]
-default = ["events_simple", "custom_protocols", "opengl_callback"]
+default = ["events_simple", "custom_protocols", "render"]
 events_simple = [] # Enable simple event handling
 events_complex = [] # Enable complex event handling
 custom_protocols = [] # Enable custom protocol callbacks
-opengl_callback = [] # Enable the opengl callback
-build_libmpv = [] # build libmpv automatically at compile time
+render = [] # Enable custom rendering
+build_libmpv = ["reqwest", "git2"] # build libmpv automatically at compile time
 
 [badges]
 travis-ci = { repository = "https://github.com/ParadoxSpiral/mpv-rs", branch = "master" } 

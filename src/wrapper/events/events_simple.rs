@@ -16,9 +16,10 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-use raw::*;
+use raw;
 
 use ::*;
+use super::mpv_event_id;
 use super::super::*;
 
 use std::iter::Map;
@@ -38,27 +39,25 @@ pub enum PropertyData<'a> {
 }
 
 impl<'a> PropertyData<'a> {
-    fn from_raw(format: mpv_format, ptr: *mut ctype::c_void) -> Result<PropertyData<'a>> {
+    fn from_raw(format: MpvFormat, ptr: *mut ctype::c_void) -> Result<PropertyData<'a>> {
         debug_assert!(!ptr.is_null());
         match format {
-            mpv_format::MPV_FORMAT_FLAG => Ok(PropertyData::Flag(unsafe { *(ptr as *mut bool) })),
-            mpv_format::MPV_FORMAT_STRING => {
+            mpv_format::Flag => Ok(PropertyData::Flag(unsafe { *(ptr as *mut bool) })),
+            mpv_format::String => {
                 let char_ptr = unsafe { *(ptr as *mut *mut ctype::c_char) };
                 Ok(PropertyData::Str(mpv_cstr_to_str!(unsafe {
                     CStr::from_ptr(char_ptr)
                 })?))
             }
-            mpv_format::MPV_FORMAT_OSD_STRING => {
+            mpv_format::OsdString => {
                 let char_ptr = unsafe { *(ptr as *mut *mut ctype::c_char) };
                 Ok(PropertyData::OsdStr(mpv_cstr_to_str!(unsafe {
                     CStr::from_ptr(char_ptr)
                 })?))
             }
-            mpv_format::MPV_FORMAT_DOUBLE => {
-                Ok(PropertyData::Double(unsafe { *(ptr as *mut f64) }))
-            }
-            mpv_format::MPV_FORMAT_INT64 => Ok(PropertyData::Int64(unsafe { *(ptr as *mut i64) })),
-            mpv_format::MPV_FORMAT_NONE => unreachable!(),
+            mpv_format::Double => Ok(PropertyData::Double(unsafe { *(ptr as *mut f64) })),
+            mpv_format::Int64 => Ok(PropertyData::Int64(unsafe { *(ptr as *mut i64) })),
+            mpv_format::None => unreachable!(),
             _ => unimplemented!(),
         }
     }
@@ -122,20 +121,13 @@ pub enum Event<'a> {
     EndFile(EndFileReason),
     /// Event received when a file has been *loaded*, but has not been started
     FileLoaded,
-    TracksChanged,
-    /// Deprecated
-    TrackSwitched,
     /// Received when the player has no more files to play and is in an idle state
     Idle,
-    /// The player paused playback
-    Pause,
-    /// The player started playback again
     Unpause,
     Tick,
     ClientMessage(MessageIter<'a>),
     VideoReconfig,
     AudioReconfig,
-    MetadataUpdate,
     /// The player changed current position
     Seek,
     PlaybackRestart,
@@ -145,11 +137,10 @@ pub enum Event<'a> {
         change: PropertyData<'a>,
         reply_userdata: u64,
     },
-    ChapterChange,
     /// Received when the Event Queue is full
     QueueOverflow,
-    /// Unused event
-    Unused,
+    /// A deprecated or unknown event
+    Deprecated(super::EventId),
 }
 
 impl Mpv {
@@ -164,75 +155,64 @@ impl Mpv {
     /// An internally used API function is not thread-safe, thus using this method from multiple
     /// threads is UB.
     pub unsafe fn wait_event(&self, timeout: f64) -> Option<Result<Event>> {
-        let event = &*mpv_wait_event(self.ctx, timeout);
-        if event.event_id != mpv_event_id::MPV_EVENT_NONE {
+        let event = &*raw::mpv_wait_event(self.ctx, timeout);
+        if event.event_id != mpv_event_id::None {
             if let Err(e) = mpv_err((), event.error) {
                 return Some(Err(e));
             }
         }
 
         match event.event_id {
-            mpv_event_id::MPV_EVENT_NONE => None,
-            mpv_event_id::MPV_EVENT_SHUTDOWN => Some(Ok(Event::Shutdown)),
-            mpv_event_id::MPV_EVENT_LOG_MESSAGE => {
-                let log_message = *(event.data as *mut mpv_event_log_message);
-
+            mpv_event_id::None => None,
+            mpv_event_id::Shutdown => Some(Ok(Event::Shutdown)),
+            mpv_event_id::LogMessage => {
+                let log_message = *(event.data as *mut raw::mpv_event_log_message);
                 Some(
                     mpv_cstr_to_str!(CStr::from_ptr(log_message.prefix)).and_then(|prefix| {
-                        let level = mpv_cstr_to_str!(CStr::from_ptr(log_message.level))?;
-                        let text = mpv_cstr_to_str!(CStr::from_ptr(log_message.text))?;
                         Ok(Event::LogMessage {
-                            prefix: prefix,
-                            level: level,
-                            text: text,
+                            prefix,
+                            level: mpv_cstr_to_str!(CStr::from_ptr(log_message.level))?,
+                            text: mpv_cstr_to_str!(CStr::from_ptr(log_message.text))?,
                             log_level: log_message.log_level,
                         })
                     }),
                 )
             }
-            mpv_event_id::MPV_EVENT_GET_PROPERTY_REPLY => {
-                let property = *(event.data as *mut mpv_event_property);
-
+            mpv_event_id::GetPropertyReply => {
+                let property = *(event.data as *mut raw::mpv_event_property);
                 Some(
                     mpv_cstr_to_str!(CStr::from_ptr(property.name)).and_then(|name| {
                         Ok(Event::GetPropertyReply {
-                            name: name,
+                            name,
                             result: PropertyData::from_raw(property.format, property.data)?,
                             reply_userdata: event.reply_userdata,
                         })
                     }),
                 )
             }
-            mpv_event_id::MPV_EVENT_SET_PROPERTY_REPLY => Some(mpv_err(
+            mpv_event_id::SetPropertyReply => Some(mpv_err(
                 Event::SetPropertyReply(event.reply_userdata),
                 event.error,
             )),
-            mpv_event_id::MPV_EVENT_COMMAND_REPLY => Some(mpv_err(
+            mpv_event_id::CommandReply => Some(mpv_err(
                 Event::CommandReply(event.reply_userdata),
                 event.error,
             )),
-            mpv_event_id::MPV_EVENT_START_FILE => Some(Ok(Event::StartFile)),
-            mpv_event_id::MPV_EVENT_END_FILE => {
-                let end_file = *(event.data as *mut mpv_event_end_file);
-                let end_file_reason = mpv_end_file_reason::from(end_file.reason as u32);
-
+            mpv_event_id::StartFile => Some(Ok(Event::StartFile)),
+            mpv_event_id::EndFile => {
+                let end_file = *(event.data as *mut raw::mpv_event_end_file);
                 Some(if let Err(e) = mpv_err((), end_file.error) {
                     Err(e)
                 } else {
-                    Ok(Event::EndFile(end_file_reason))
+                    assert!(end_file.reason.is_positive());
+                    Ok(Event::EndFile(end_file.reason as _))
                 })
             }
-            mpv_event_id::MPV_EVENT_FILE_LOADED => Some(Ok(Event::FileLoaded)),
-            mpv_event_id::MPV_EVENT_TRACKS_CHANGED => Some(Ok(Event::TracksChanged)),
-            mpv_event_id::MPV_EVENT_TRACK_SWITCHED => Some(Ok(Event::TrackSwitched)),
-            mpv_event_id::MPV_EVENT_IDLE => Some(Ok(Event::Idle)),
-            mpv_event_id::MPV_EVENT_PAUSE => Some(Ok(Event::Pause)),
-            mpv_event_id::MPV_EVENT_UNPAUSE => Some(Ok(Event::Unpause)),
-            mpv_event_id::MPV_EVENT_TICK => Some(Ok(Event::Tick)),
-            mpv_event_id::MPV_EVENT_SCRIPT_INPUT_DISPATCH => Some(Ok(Event::Unused)),
-            mpv_event_id::MPV_EVENT_CLIENT_MESSAGE => {
-                let client_message = *(event.data as *mut mpv_event_client_message);
-
+            mpv_event_id::FileLoaded => Some(Ok(Event::FileLoaded)),
+            mpv_event_id::Idle => Some(Ok(Event::Idle)),
+            mpv_event_id::Tick => Some(Ok(Event::Tick)),
+            mpv_event_id::ClientMessage => {
+                let client_message = *(event.data as *mut raw::mpv_event_client_message);
                 Some(Ok(Event::ClientMessage(MessageIter(
                     slice::from_raw_parts_mut(client_message.args, client_message.num_args as _)
                         .iter()
@@ -240,25 +220,24 @@ impl Mpv {
                     client_message.num_args as _,
                 ))))
             }
-            mpv_event_id::MPV_EVENT_VIDEO_RECONFIG => Some(Ok(Event::VideoReconfig)),
-            mpv_event_id::MPV_EVENT_AUDIO_RECONFIG => Some(Ok(Event::AudioReconfig)),
-            mpv_event_id::MPV_EVENT_METADATA_UPDATE => Some(Ok(Event::MetadataUpdate)),
-            mpv_event_id::MPV_EVENT_SEEK => Some(Ok(Event::Seek)),
-            mpv_event_id::MPV_EVENT_PLAYBACK_RESTART => Some(Ok(Event::PlaybackRestart)),
-            mpv_event_id::MPV_EVENT_PROPERTY_CHANGE => {
-                let property = *(event.data as *mut mpv_event_property);
+            mpv_event_id::VideoReconfig => Some(Ok(Event::VideoReconfig)),
+            mpv_event_id::AudioReconfig => Some(Ok(Event::AudioReconfig)),
+            mpv_event_id::Seek => Some(Ok(Event::Seek)),
+            mpv_event_id::PlaybackRestart => Some(Ok(Event::PlaybackRestart)),
+            mpv_event_id::PropertyChange => {
+                let property = *(event.data as *mut raw::mpv_event_property);
                 Some(
                     mpv_cstr_to_str!(CStr::from_ptr(property.name)).and_then(|name| {
                         Ok(Event::PropertyChange {
-                            name: name,
+                            name,
                             change: PropertyData::from_raw(property.format, property.data)?,
                             reply_userdata: event.reply_userdata,
                         })
                     }),
                 )
             }
-            mpv_event_id::MPV_EVENT_CHAPTER_CHANGE => Some(Ok(Event::ChapterChange)),
-            mpv_event_id::MPV_EVENT_QUEUE_OVERFLOW => Some(Ok(Event::QueueOverflow)),
+            mpv_event_id::QueueOverflow => Some(Ok(Event::QueueOverflow)),
+            id => Some(Ok(Event::Deprecated(id))),
         }
     }
 
@@ -267,12 +246,12 @@ impl Mpv {
     pub fn observe_property(&self, name: &str, format: Format, id: u64) -> Result<()> {
         let name = CString::new(name)?;
         mpv_err((), unsafe {
-            mpv_observe_property(self.ctx, id, name.as_ptr(), format.as_mpv_format() as _)
+            raw::mpv_observe_property(self.ctx, id, name.as_ptr(), format.as_mpv_format() as _)
         })
     }
 
     /// Unobserve any property associated with `id`.
     pub fn unobserve_property(&self, id: u64) -> Result<()> {
-        mpv_err((), unsafe { mpv_unobserve_property(self.ctx, id) })
+        mpv_err((), unsafe { raw::mpv_unobserve_property(self.ctx, id) })
     }
 }

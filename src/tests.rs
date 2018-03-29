@@ -24,19 +24,11 @@ use std::time::Duration;
 use std::thread;
 
 #[test]
-fn version() {
-    assert_eq!(super::MPV_CLIENT_API_VERSION, unsafe {
-        raw::mpv_client_api_version()
-    });
-}
-
-#[test]
 fn properties() {
     let mpv = Mpv::new().unwrap();
     mpv.set_property("cache-initial", 1).unwrap();
     mpv.set_property("volume", 0).unwrap();
     mpv.set_property("vo", "null").unwrap();
-    mpv.set_property("ytdl", true).unwrap();
     mpv.set_property("ytdl-format", "best[width<240]").unwrap();
     mpv.set_property("sub-gauss", 0.6).unwrap();
 
@@ -135,7 +127,7 @@ fn events_simple() {
         unsafe { mpv.wait_event(10.) }.unwrap().unwrap()
     );
     assert_eq!(
-        Err(Error::Raw(MpvError::MPV_ERROR_UNKNOWN_FORMAT)),
+        Err(Error::Raw(mpv_error::UnknownFormat)),
         unsafe { mpv.wait_event(20.) }.unwrap()
     );
     assert_eq!(Event::Idle, unsafe { mpv.wait_event(4.) }.unwrap().unwrap());

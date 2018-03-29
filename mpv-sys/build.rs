@@ -16,21 +16,32 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
+#[cfg(feature = "bindgen")]
 extern crate bindgen;
 
 use std::env;
 use std::path::PathBuf;
 
+#[cfg(not(feature = "bindgen"))]
 fn main() {
-    println!("cargo:rustc-link-lib=mpv");
+    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let crate_path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+    ::std::fs::copy(crate_path.join("pregenerated_bindings.rs"), out_path.join("bindings.rs"))
+        .expect("Couldn't find pregenerated bindings!");
 
+    println!("cargo:rustc-link-lib=mpv");
+}
+
+#[cfg(feature = "bindgen")]
+fn main() {
     let bindings = bindgen::Builder::default()
-        .header("src/client.h")
-        .header("src/opengl_cb.h")
-        .header("src/stream_cb.h")
-        .hide_type("max_align_t")
+        .header("include/client.h")
+        .header("include/render.h")
+        .header("include/stream_cb.h")
+        .blacklist_type("max_align_t")
+        .blacklist_type("__fsid_t")
         .opaque_type("mpv_handle")
-        .opaque_type("mpv_opengl_cb_context")
+        .opaque_type("mpv_render_context")
         // This needs to be disabled until we do static builds
         //.clang_arg("-DMPV_ENABLE_DEPRECATED=0")
         .generate()
@@ -40,4 +51,6 @@ fn main() {
     bindings
         .write_to_file(out_path.join("bindings.rs"))
         .expect("Couldn't write bindings!");
+
+    println!("cargo:rustc-link-lib=mpv");
 }

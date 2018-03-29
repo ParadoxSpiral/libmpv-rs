@@ -20,10 +20,8 @@
 //! `PlaylistOp::Loadfiles`.
 
 use parking_lot::Mutex;
-use raw::*;
 
 use super::*;
-use super::mpv_err;
 
 use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
@@ -78,7 +76,7 @@ pub type StreamSize<T> = fn(&mut T) -> i64;
 unsafe extern "C" fn open_wrapper<T, U>(
     user_data: *mut ctype::c_void,
     uri: *mut ctype::c_char,
-    info: *mut mpv_stream_cb_info,
+    info: *mut raw::mpv_stream_cb_info,
 ) -> ctype::c_int
 where
     T: RefUnwindSafe,
@@ -102,7 +100,7 @@ where
     if ret.is_ok() {
         0
     } else {
-        mpv_error::MPV_ERROR_GENERIC as _
+        mpv_error::Generic as _
     }
 }
 
@@ -136,7 +134,7 @@ where
     let data = cookie as *mut ProtocolData<T, U>;
 
     if (*data).seek_fn.is_none() {
-        return mpv_error::MPV_ERROR_UNSUPPORTED as _;
+        return mpv_error::Unsupported as _;
     }
 
     let ret = panic::catch_unwind(|| {
@@ -146,7 +144,7 @@ where
     if ret.is_ok() {
         ret.unwrap()
     } else {
-        mpv_error::MPV_ERROR_GENERIC as _
+        mpv_error::Generic as _
     }
 }
 
@@ -158,7 +156,7 @@ where
     let data = cookie as *mut ProtocolData<T, U>;
 
     if (*data).size_fn.is_none() {
-        return mpv_error::MPV_ERROR_UNSUPPORTED as _;
+        return mpv_error::Unsupported as _;
     }
 
     let ret = panic::catch_unwind(|| {
@@ -168,7 +166,7 @@ where
     if ret.is_ok() {
         ret.unwrap()
     } else {
-        mpv_error::MPV_ERROR_UNSUPPORTED as _
+        mpv_error::Unsupported as _
     }
 }
 
@@ -200,7 +198,7 @@ struct ProtocolData<T, U> {
 /// This context holds state relevant to custom protocols.
 /// It is created by calling `Mpv::create_protocol_context`.
 pub struct ProtocolContext<'parent, T: RefUnwindSafe, U: RefUnwindSafe> {
-    ctx: *mut mpv_handle,
+    ctx: *mut raw::mpv_handle,
     protocols: Mutex<Vec<Protocol<T, U>>>,
     _does_not_outlive: PhantomData<&'parent Mpv>,
 }
@@ -210,7 +208,7 @@ unsafe impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> Sync for ProtocolContex
 
 impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> ProtocolContext<'parent, T, U> {
     fn new(
-        ctx: *mut mpv_handle,
+        ctx: *mut raw::mpv_handle,
         capacity: usize,
         marker: PhantomData<&'parent Mpv>,
     ) -> ProtocolContext<'parent, T, U> {
@@ -260,27 +258,24 @@ impl<T: RefUnwindSafe, U: RefUnwindSafe> Protocol<T, U> {
     ) -> Protocol<T, U> {
         let data = Box::into_raw(Box::new(ProtocolData {
             cookie: allocate(1),
-            user_data: user_data,
+            user_data,
 
-            open_fn: open_fn,
-            close_fn: close_fn,
-            read_fn: read_fn,
-            seek_fn: seek_fn,
-            size_fn: size_fn,
+            open_fn,
+            close_fn,
+            read_fn,
+            seek_fn,
+            size_fn,
         }));
 
-        Protocol {
-            name: name,
-            data: data,
-        }
+        Protocol { name, data }
     }
 
-    fn register(&self, ctx: *mut mpv_handle) -> Result<()> {
+    fn register(&self, ctx: *mut raw::mpv_handle) -> Result<()> {
         let name = CString::new(&self.name[..])?;
         unsafe {
             mpv_err(
                 (),
-                mpv_stream_cb_add_ro(
+                raw::mpv_stream_cb_add_ro(
                     ctx,
                     name.as_ptr(),
                     self.data as *mut _,
