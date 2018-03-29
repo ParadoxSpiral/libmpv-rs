@@ -11,6 +11,6 @@ before_install:
   - sudo apt-get install -qq youtube-dl lua50 liblua50 liblua50-dev  yasm autotools-dev libasound2 libatomic1 libc6 libegl1-mesa libegl1-mesa-drivers libenca0 libgl1-mesa-glx libguess1 libjack-jackd2-0 libjpeg8 liblcms2-2 liblircclient0 libmpg123-0 libpostproc52 libpulse0 libquvi7 libsdl2-2.0-0 libsdl2-dev  libtinfo5 libva-glx1 libva-x11-1 libva1 libvdpau1 libx11-6 libxext6 libxinerama1 libxkbcommon0 libxxf86vm1 zlib1g libfribidi-dev libfreetype6 libfreetype6-dev libfribidi-bin libfontconfig1-dev libfontconfig1 fontconfig libssl-dev
 
 script:
-  - RUST_BACKTRACE=1 travis_wait 35 cargo build --no-default-features --features "build_libmpv, events_complex, custom_protocols, render"
+  - RUST_BACKTRACE=1 travis_wait 35 "cargo build --no-default-features --features 'build_libmpv, events_complex, custom_protocols, render'"
   - RUST_BACKTRACE=1 cargo test --no-default-features --features "build_libmpv, events_complex, custom_protocols, render"
   - RUST_BACKTRACE=1 cargo doc --no-default-features --features "build_libmpv, events_complex, custom_protocols, render"

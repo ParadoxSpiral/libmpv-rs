@@ -29,8 +29,9 @@ use std::mem;
 use std::panic;
 use std::panic::RefUnwindSafe;
 use std::os::raw as ctype;
-use std::ptr;
+use std::ptr::{self, NonNull};
 use std::sync::atomic::Ordering;
+
 #[cfg(unix)]
 use std::ffi::OsStr;
 #[cfg(unix)]
@@ -198,7 +199,7 @@ struct ProtocolData<T, U> {
 /// This context holds state relevant to custom protocols.
 /// It is created by calling `Mpv::create_protocol_context`.
 pub struct ProtocolContext<'parent, T: RefUnwindSafe, U: RefUnwindSafe> {
-    ctx: *mut raw::mpv_handle,
+    ctx: NonNull<raw::mpv_handle>,
     protocols: Mutex<Vec<Protocol<T, U>>>,
     _does_not_outlive: PhantomData<&'parent Mpv>,
 }
@@ -208,7 +209,7 @@ unsafe impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> Sync for ProtocolContex
 
 impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> ProtocolContext<'parent, T, U> {
     fn new(
-        ctx: *mut raw::mpv_handle,
+        ctx: NonNull<raw::mpv_handle>,
         capacity: usize,
         marker: PhantomData<&'parent Mpv>,
     ) -> ProtocolContext<'parent, T, U> {
@@ -226,7 +227,7 @@ impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> ProtocolContext<'parent, T, U>
     /// already been registered.
     pub fn register(&self, protocol: Protocol<T, U>) -> Result<()> {
         let mut protocols = self.protocols.lock();
-        protocol.register(self.ctx)?;
+        protocol.register(self.ctx.as_ptr())?;
         protocols.push(protocol);
         Ok(())
     }

@@ -2,7 +2,9 @@
 A libmpv abstraction written in rust that's easy to use and provides the ability to read next to all video and audio codecs.
 
 # Dependencies
-Libmpv version 1.100 (mpv version 0.29) is the minimum required version. For ease of building, you can use the `build_libmpv` feature that is used to link against. Especially useful to cross compile to windows.
+Rust version >= 1.25. Libmpv version 1.100 (mpv version 0.29) is the minimum required version.
+
+For ease of building, you can use the `build_libmpv` feature that is used to link against. Especially useful to cross compile to windows.
 
 # Examples
 To run an example, execute `cargo run [--release] --example x -- path`, where x is any of:

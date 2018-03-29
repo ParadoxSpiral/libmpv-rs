@@ -142,14 +142,18 @@ fn events_simple() {
             None,
         ),
     ]).unwrap();
+    assert_eq!(
+        Event::StartFile,
+        unsafe { mpv.wait_event(10.) }.unwrap().unwrap()
+    );
     // The order of events is unfortunately non-deterministic.
-    for _ in 0..5 {
+    for _ in 0..7 {
         // A possible order is:
         //      StartFile -> AudioReconfig -> FileLoaded -> AudioReconfig -> PropertyChange
         assert_eq_any!(
             unsafe { mpv.wait_event(10.) }.unwrap().unwrap(),
-            Event::StartFile,
             Event::AudioReconfig,
+            Event::VideoReconfig,
             Event::FileLoaded,
             // Either both, or only the second title Event will trigger because of coalescence
             Event::PropertyChange {
@@ -164,18 +168,6 @@ fn events_simple() {
             }
         );
     }
-    assert_eq!(
-        Event::AudioReconfig,
-        unsafe { mpv.wait_event(10.) }.unwrap().unwrap()
-    );
-    assert_eq!(
-        Event::VideoReconfig,
-        unsafe { mpv.wait_event(10.) }.unwrap().unwrap()
-    );
-    assert_eq!(
-        Event::VideoReconfig,
-        unsafe { mpv.wait_event(10.) }.unwrap().unwrap()
-    );
     assert_eq!(
         Event::PlaybackRestart,
         unsafe { mpv.wait_event(10.) }.unwrap().unwrap()

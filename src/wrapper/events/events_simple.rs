@@ -155,7 +155,7 @@ impl Mpv {
     /// An internally used API function is not thread-safe, thus using this method from multiple
     /// threads is UB.
     pub unsafe fn wait_event(&self, timeout: f64) -> Option<Result<Event>> {
-        let event = &*raw::mpv_wait_event(self.ctx, timeout);
+        let event = &*raw::mpv_wait_event(self.ctx.as_ptr(), timeout);
         if event.event_id != mpv_event_id::None {
             if let Err(e) = mpv_err((), event.error) {
                 return Some(Err(e));
@@ -246,12 +246,12 @@ impl Mpv {
     pub fn observe_property(&self, name: &str, format: Format, id: u64) -> Result<()> {
         let name = CString::new(name)?;
         mpv_err((), unsafe {
-            raw::mpv_observe_property(self.ctx, id, name.as_ptr(), format.as_mpv_format() as _)
+            raw::mpv_observe_property(self.ctx.as_ptr(), id, name.as_ptr(), format.as_mpv_format() as _)
         })
     }
 
     /// Unobserve any property associated with `id`.
     pub fn unobserve_property(&self, id: u64) -> Result<()> {
-        mpv_err((), unsafe { raw::mpv_unobserve_property(self.ctx, id) })
+        mpv_err((), unsafe { raw::mpv_unobserve_property(self.ctx.as_ptr(), id) })
     }
 }
