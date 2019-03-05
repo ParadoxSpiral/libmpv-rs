@@ -26,19 +26,14 @@ readme = "README.md"
 description = "Libmpv abstraction that's easy to use and can play next to all codecs and containers"
 keywords = ["media", "playback", "mpv", "libmpv"]
 
+
 [dependencies]
-parking_lot = "0.5"
+parking_lot = "0.7"
 mpv-sys = {version = "2", path = "mpv-sys/"}
 
 [dev-dependencies]
 crossbeam = "0.3"
 imgui = "0.0.18"
-
-[target.'cfg(windows)'.build-dependencies]
-reqwest = { version = "0.8", optional = true}
-
-[target.'cfg(not(windows))'.build-dependencies]
-git2 = { version = "0.7", optional = true }
 
 [features]
 default = ["events_simple", "custom_protocols", "render"]
@@ -46,7 +41,7 @@ events_simple = [] # Enable simple event handling
 events_complex = [] # Enable complex event handling
 custom_protocols = [] # Enable custom protocol callbacks
 render = [] # Enable custom rendering
-build_libmpv = ["reqwest", "git2"] # build libmpv automatically at compile time
+build_libmpv = [] # build libmpv automatically, provided MPV_SOURCE is set
 
 [badges]
 travis-ci = { repository = "https://github.com/ParadoxSpiral/mpv-rs", branch = "master" } 
