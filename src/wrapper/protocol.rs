@@ -23,19 +23,15 @@ use parking_lot::Mutex;
 
 use super::*;
 
-use std::ffi::{CStr, CString};
+use std::alloc::{self, Layout};
+use std::ffi::CString;
 use std::marker::PhantomData;
 use std::mem;
+use std::os::raw as ctype;
 use std::panic;
 use std::panic::RefUnwindSafe;
-use std::os::raw as ctype;
 use std::ptr::{self, NonNull};
 use std::sync::atomic::Ordering;
-
-#[cfg(unix)]
-use std::ffi::OsStr;
-#[cfg(unix)]
-use std::os::unix::ffi::OsStrExt;
 
 impl Mpv {
     #[inline]
@@ -47,7 +43,8 @@ impl Mpv {
         T: RefUnwindSafe,
         U: RefUnwindSafe,
     {
-        if self.protocols_guard
+        if self
+            .protocols_guard
             .compare_and_swap(false, true, Ordering::AcqRel)
         {
             None
@@ -77,7 +74,7 @@ pub type StreamSize<T> = fn(&mut T) -> i64;
 unsafe extern "C" fn open_wrapper<T, U>(
     user_data: *mut ctype::c_void,
     uri: *mut ctype::c_char,
-    info: *mut raw::mpv_stream_cb_info,
+    info: *mut mpv_sys::mpv_stream_cb_info,
 ) -> ctype::c_int
 where
     T: RefUnwindSafe,
@@ -92,10 +89,10 @@ where
     (*info).close_fn = Some(close_wrapper::<T, U>);
 
     let ret = panic::catch_unwind(|| {
-        let uri = CStr::from_ptr(uri as *const _);
+        let uri = mpv_cstr_to_str!(uri as *const _).unwrap();
         ptr::write(
             (*data).cookie,
-            ((*data).open_fn)(&mut (*data).user_data, mpv_cstr_to_str!(uri).unwrap()),
+            ((*data).open_fn)(&mut (*data).user_data, uri),
         );
     });
     if ret.is_ok() {
@@ -138,10 +135,8 @@ where
         return mpv_error::Unsupported as _;
     }
 
-    let ret = panic::catch_unwind(|| {
-        debug_assert!(!(*data).cookie.is_null());
-        (*(*data).seek_fn.as_ref().unwrap())(&mut *(*data).cookie, offset)
-    });
+    let ret =
+        panic::catch_unwind(|| (*(*data).seek_fn.as_ref().unwrap())(&mut *(*data).cookie, offset));
     if ret.is_ok() {
         ret.unwrap()
     } else {
@@ -160,10 +155,7 @@ where
         return mpv_error::Unsupported as _;
     }
 
-    let ret = panic::catch_unwind(|| {
-        debug_assert!(!(*data).cookie.is_null());
-        (*(*data).size_fn.as_ref().unwrap())(&mut *(*data).cookie)
-    });
+    let ret = panic::catch_unwind(|| (*(*data).size_fn.as_ref().unwrap())(&mut *(*data).cookie));
     if ret.is_ok() {
         ret.unwrap()
     } else {
@@ -179,10 +171,7 @@ where
 {
     let data = cookie as *mut ProtocolData<T, U>;
 
-    panic::catch_unwind(|| {
-        debug_assert!(!(*data).cookie.is_null());
-        ((*data).close_fn)(Box::from_raw((*data).cookie))
-    });
+    panic::catch_unwind(|| ((*data).close_fn)(Box::from_raw((*data).cookie)));
 }
 
 struct ProtocolData<T, U> {
@@ -199,7 +188,7 @@ struct ProtocolData<T, U> {
 /// This context holds state relevant to custom protocols.
 /// It is created by calling `Mpv::create_protocol_context`.
 pub struct ProtocolContext<'parent, T: RefUnwindSafe, U: RefUnwindSafe> {
-    ctx: NonNull<raw::mpv_handle>,
+    ctx: NonNull<mpv_sys::mpv_handle>,
     protocols: Mutex<Vec<Protocol<T, U>>>,
     _does_not_outlive: PhantomData<&'parent Mpv>,
 }
@@ -209,7 +198,7 @@ unsafe impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> Sync for ProtocolContex
 
 impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> ProtocolContext<'parent, T, U> {
     fn new(
-        ctx: NonNull<raw::mpv_handle>,
+        ctx: NonNull<mpv_sys::mpv_handle>,
         capacity: usize,
         marker: PhantomData<&'parent Mpv>,
     ) -> ProtocolContext<'parent, T, U> {
@@ -257,8 +246,10 @@ impl<T: RefUnwindSafe, U: RefUnwindSafe> Protocol<T, U> {
         seek_fn: Option<StreamSeek<T>>,
         size_fn: Option<StreamSize<T>>,
     ) -> Protocol<T, U> {
+        let c_layout = Layout::from_size_align(mem::size_of::<T>(), mem::align_of::<T>()).unwrap();
+        let cookie = alloc::alloc(c_layout) as *mut T;
         let data = Box::into_raw(Box::new(ProtocolData {
-            cookie: allocate(1),
+            cookie,
             user_data,
 
             open_fn,
@@ -271,12 +262,12 @@ impl<T: RefUnwindSafe, U: RefUnwindSafe> Protocol<T, U> {
         Protocol { name, data }
     }
 
-    fn register(&self, ctx: *mut raw::mpv_handle) -> Result<()> {
+    fn register(&self, ctx: *mut mpv_sys::mpv_handle) -> Result<()> {
         let name = CString::new(&self.name[..])?;
         unsafe {
             mpv_err(
                 (),
-                raw::mpv_stream_cb_add_ro(
+                mpv_sys::mpv_stream_cb_add_ro(
                     ctx,
                     name.as_ptr(),
                     self.data as *mut _,
@@ -294,13 +285,4 @@ impl<T: RefUnwindSafe, U: RefUnwindSafe> Drop for Protocol<T, U> {
             // data.cookie will be consumed by the close callback
         };
     }
-}
-
-// Hack from https://github.com/rust-lang/rust/issues/27700#issuecomment-169014713 to not require
-// nightly.
-fn allocate<T>(count: usize) -> *mut T {
-    let mut v = Vec::with_capacity(count);
-    let ptr = v.as_mut_ptr();
-    mem::forget(v);
-    ptr
 }

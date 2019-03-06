@@ -16,12 +16,10 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-#![allow(unused)]
+use crate::*;
 
-use super::*;
-
-use std::time::Duration;
 use std::thread;
+use std::time::Duration;
 
 #[test]
 fn properties() {
@@ -42,13 +40,12 @@ fn properties() {
         f64::round(subg * f64::powi(10.0, 4)) / f64::powi(10.0, 4)
     );
 
-    mpv.playlist_load_files(&[
-        (
-            "https://www.youtube.com/watch?v=DLzxrzFCyOs",
-            FileState::AppendPlay,
-            None,
-        ),
-    ]).unwrap();
+    mpv.playlist_load_files(&[(
+        "https://www.youtube.com/watch?v=DLzxrzFCyOs",
+        FileState::AppendPlay,
+        None,
+    )])
+    .unwrap();
 
     thread::sleep(Duration::from_millis(250));
 
@@ -76,16 +73,17 @@ macro_rules! assert_eq_any {
 #[cfg_attr(feature = "events_simple", test)]
 fn events_simple() {
     // TODO: Expand to all Event variants
-    use events::events_simple::{Event, PropertyData};
+    use crate::events::simple::{Event, PropertyData};
 
     let mpv = Mpv::new().unwrap();
+    assert_eq!(Event::Idle, unsafe { mpv.wait_event(3.) }.unwrap().unwrap());
+
     mpv.disable_deprecated_events().unwrap();
     mpv.observe_property("volume", Format::Int64, 0).unwrap();
     mpv.observe_property("media-title", Format::String, 1)
         .unwrap();
     mpv.observe_property("sub-gauss", Format::Double, 2)
         .unwrap();
-    assert_eq!(Event::Idle, unsafe { mpv.wait_event(3.) }.unwrap().unwrap());
 
     mpv.set_property("cache-initial", 1).unwrap();
     mpv.set_property("volume", 0).unwrap();
@@ -108,13 +106,12 @@ fn events_simple() {
     );
 
     mpv.set_property("ytdl", false).unwrap();
-    mpv.playlist_load_files(&[
-        (
-            "https://www.youtube.com/watch?v=DLzxrzFCyOs",
-            FileState::AppendPlay,
-            None,
-        ),
-    ]).unwrap();
+    mpv.playlist_load_files(&[(
+        "https://www.youtube.com/watch?v=DLzxrzFCyOs",
+        FileState::AppendPlay,
+        None,
+    )])
+    .unwrap();
     assert_eq!(
         Event::StartFile,
         unsafe { mpv.wait_event(10.) }.unwrap().unwrap()
@@ -135,13 +132,12 @@ fn events_simple() {
 
     mpv.set_property("ytdl", true).unwrap();
     mpv.set_property("ytdl-format", "best[width<240]").unwrap();
-    mpv.playlist_load_files(&[
-        (
-            "https://www.youtube.com/watch?v=DLzxrzFCyOs",
-            FileState::AppendPlay,
-            None,
-        ),
-    ]).unwrap();
+    mpv.playlist_load_files(&[(
+        "https://www.youtube.com/watch?v=DLzxrzFCyOs",
+        FileState::AppendPlay,
+        None,
+    )])
+    .unwrap();
     assert_eq!(
         Event::StartFile,
         unsafe { mpv.wait_event(10.) }.unwrap().unwrap()

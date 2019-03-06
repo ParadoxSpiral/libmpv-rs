@@ -19,11 +19,12 @@
 [package]
 name = "mpv-sys"
 version = "2.0.0"
+edition = "2018"
 authors = ["ParadoxSpiral <ParadoxSpiral@riseup.net>"]
 build = "build.rs"
 
 [build-dependencies.bindgen]
-version = "0.35"
+version = "0.48"
 optional = true
 
 [features]

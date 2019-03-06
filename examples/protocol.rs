@@ -16,10 +16,6 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-#![allow(unused)]
-
-extern crate mpv;
-
 use mpv::*;
 
 use std::env;
@@ -27,45 +23,13 @@ use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::mem;
 use std::slice;
-use std::time::Duration;
 use std::thread;
+use std::time::Duration;
 
-fn open(_: &mut (), uri: &str) -> File {
-    // Open the file, and strip the `filereader://` part
-    let ret = File::open(&uri[13..]).unwrap();
+#[cfg(all(not(test), not(feature = "protocols")))]
+compile_error!("The feature `protocols` needs to be enabled for this example`");
 
-    println!("Opened file[{}], ready for orders o7", &uri[13..]);
-    ret
-}
-
-fn close(_: Box<File>) {
-    println!("Closing file, bye bye~~");
-}
-
-fn read(cookie: &mut File, buf: *mut i8, nbytes: u64) -> i64 {
-    unsafe {
-        let slice = slice::from_raw_parts_mut(buf, nbytes as _);
-        let forbidden_magic = mem::transmute::<&mut [i8], &mut [u8]>(slice);
-
-        cookie.read(forbidden_magic).unwrap() as _
-    }
-}
-
-fn seek(cookie: &mut File, offset: i64) -> i64 {
-    println!("Seeking to byte {}", offset);
-    cookie.seek(SeekFrom::Start(offset as u64)).unwrap() as _
-}
-
-fn size(cookie: &mut File) -> i64 {
-    cookie.metadata().unwrap().len() as _
-}
-
-#[cfg(not(feature = "custom_protocols"))]
-fn main() {
-    panic!("custom protocols not enabled!");
-}
-
-#[cfg(feature = "custom_protocols")]
+#[cfg(feature = "protocols")]
 fn main() {
     use mpv::protocol::*;
 
@@ -102,4 +66,34 @@ fn main() {
     mpv.seek_forward(15.).unwrap();
 
     thread::sleep(Duration::from_secs(5));
+}
+
+fn open(_: &mut (), uri: &str) -> File {
+    // Open the file, and strip the `filereader://` part
+    let ret = File::open(&uri[13..]).unwrap();
+
+    println!("Opened file[{}], ready for orders o7", &uri[13..]);
+    ret
+}
+
+fn close(_: Box<File>) {
+    println!("Closing file, bye bye~~");
+}
+
+fn read(cookie: &mut File, buf: *mut i8, nbytes: u64) -> i64 {
+    unsafe {
+        let slice = slice::from_raw_parts_mut(buf, nbytes as _);
+        let forbidden_magic = mem::transmute::<&mut [i8], &mut [u8]>(slice);
+
+        cookie.read(forbidden_magic).unwrap() as _
+    }
+}
+
+fn seek(cookie: &mut File, offset: i64) -> i64 {
+    println!("Seeking to byte {}", offset);
+    cookie.seek(SeekFrom::Start(offset as u64)).unwrap() as _
+}
+
+fn size(cookie: &mut File) -> i64 {
+    cookie.metadata().unwrap().len() as _
 }

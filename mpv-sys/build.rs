@@ -26,8 +26,11 @@ use std::path::PathBuf;
 fn main() {
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     let crate_path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    ::std::fs::copy(crate_path.join("pregenerated_bindings.rs"), out_path.join("bindings.rs"))
-        .expect("Couldn't find pregenerated bindings!");
+    ::std::fs::copy(
+        crate_path.join("pregenerated_bindings.rs"),
+        out_path.join("bindings.rs"),
+    )
+    .expect("Couldn't find pregenerated bindings!");
 
     println!("cargo:rustc-link-lib=mpv");
 }
@@ -39,7 +42,6 @@ fn main() {
         .header("include/render.h")
         .header("include/stream_cb.h")
         .blacklist_type("max_align_t")
-        .blacklist_type("__fsid_t")
         .opaque_type("mpv_handle")
         .opaque_type("mpv_render_context")
         // This needs to be disabled until we do static builds

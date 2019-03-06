@@ -38,7 +38,7 @@ mod errors {
         },
         InvalidUtf8,
         Null,
-        Raw(::MpvError),
+        Raw(crate::MpvError),
     }
 
     impl From<NulError> for Error {
@@ -51,8 +51,8 @@ mod errors {
             Error::InvalidUtf8
         }
     }
-    impl From<::MpvError> for Error {
-        fn from(other: ::MpvError) -> Error {
+    impl From<crate::MpvError> for Error {
+        fn from(other: crate::MpvError) -> Error {
             Error::Raw(other)
         }
     }
@@ -62,27 +62,31 @@ pub use self::errors::*;
 
 #[cfg(unix)]
 macro_rules! mpv_cstr_to_str {
-    ($cstr: expr) => {
-        if let Some(v) = OsStr::from_bytes($cstr.to_bytes()).to_str() {
+    ($cstr: expr) => {{
+        use std::{
+            ffi::{CStr, OsStr},
+            os::unix::ffi::OsStrExt,
+        };
+        if let Some(v) = OsStr::from_bytes(CStr::from_ptr($cstr).to_bytes()).to_str() {
             // Not sure why the type isn't inferred
             let r: Result<&str> = Ok(v);
             r
         } else {
             Err(Error::InvalidUtf8)
         }
-    };
+    }};
 }
 
 #[cfg(not(unix))]
 macro_rules! mpv_cstr_to_str {
     ($cstr: expr) => {
-        str::from_utf8($cstr.to_bytes())
+        str::from_utf8(std::ffi::CStr::from_ptr($cstr).to_bytes())
     };
 }
 
 /// Event handling
 pub mod events;
-#[cfg(feature = "custom_protocols")]
+#[cfg(feature = "protocols")]
 /// Custom protocols
 pub mod protocol;
 #[cfg(feature = "render")]
@@ -91,22 +95,16 @@ pub mod render;
 
 use super::*;
 
-#[cfg(feature = "events_complex")]
-use parking_lot;
-#[cfg(feature = "events_complex")]
-use parking_lot::Mutex;
+#[cfg(feature = "events_sync")]
+use parking_lot::{self, Mutex};
 
-use std::ffi::{CStr, CString};
+use std::ffi::CString;
 use std::mem;
 use std::ops::Deref;
 use std::os::raw as ctype;
 use std::ptr::{self, NonNull};
-#[cfg(any(feature = "custom_protocols", feature = "opengl_callback"))]
+#[cfg(feature = "protocols")]
 use std::sync::atomic::AtomicBool;
-#[cfg(unix)]
-use std::ffi::OsStr;
-#[cfg(unix)]
-use std::os::unix::ffi::OsStrExt;
 
 fn mpv_err<T>(ret: T, err: ctype::c_int) -> Result<T> {
     if err == 0 {
@@ -206,8 +204,8 @@ unsafe impl GetData for String {
         let ptr = &mut ptr::null();
         let _ = fun(ptr as *mut *const ctype::c_char as _)?;
 
-        let ret = mpv_cstr_to_str!(unsafe { CStr::from_ptr(*ptr) })?.to_owned();
-        unsafe { raw::mpv_free(*ptr as *mut _) };
+        let ret = unsafe { mpv_cstr_to_str!(*ptr) }?.to_owned();
+        unsafe { mpv_sys::mpv_free(*ptr as *mut _) };
         Ok(ret)
     }
 
@@ -241,7 +239,7 @@ impl<'a> Deref for MpvStr<'a> {
 }
 impl<'a> Drop for MpvStr<'a> {
     fn drop(&mut self) {
-        unsafe { raw::mpv_free(self.0.as_ptr() as *mut u8 as _) };
+        unsafe { mpv_sys::mpv_free(self.0.as_ptr() as *mut u8 as _) };
     }
 }
 
@@ -253,7 +251,7 @@ unsafe impl<'a> GetData for MpvStr<'a> {
         let ptr = &mut ptr::null();
         let _ = fun(ptr as *mut *const ctype::c_char as _)?;
 
-        Ok(MpvStr(mpv_cstr_to_str!(unsafe { CStr::from_ptr(*ptr) })?))
+        Ok(MpvStr(unsafe { mpv_cstr_to_str!(*ptr) }?))
     }
 
     #[inline]
@@ -317,22 +315,19 @@ impl FileState {
     }
 }
 
-/// TODO
 pub struct Mpv {
     /// The handle to the mpv core
-    pub ctx: NonNull<raw::mpv_handle>,
-    #[cfg(feature = "events_complex")]
+    pub ctx: NonNull<mpv_sys::mpv_handle>,
+    #[cfg(feature = "events_sync")]
     ev_iter_notification: Box<(Mutex<bool>, parking_lot::Condvar)>,
-    #[cfg(feature = "events_complex")]
-    ev_to_observe: Mutex<Vec<events::events_complex::Event>>,
-    #[cfg(feature = "events_complex")]
+    #[cfg(feature = "events_sync")]
+    ev_to_observe: Mutex<Vec<events::sync::Event>>,
+    #[cfg(feature = "events_sync")]
     ev_to_observe_properties: Mutex<::std::collections::HashMap<String, u64>>,
-    #[cfg(feature = "events_complex")]
-    ev_observed: Mutex<Vec<events::events_complex::Event>>,
-    #[cfg(feature = "custom_protocols")]
+    #[cfg(feature = "events_sync")]
+    ev_observed: Mutex<Vec<events::sync::Event>>,
+    #[cfg(feature = "protocols")]
     protocols_guard: AtomicBool,
-    #[cfg(feature = "opengl_callback")]
-    opengl_guard: AtomicBool,
 }
 
 unsafe impl Send for Mpv {}
@@ -342,40 +337,38 @@ impl Drop for Mpv {
     #[inline]
     fn drop(&mut self) {
         unsafe {
-            raw::mpv_terminate_destroy(self.ctx.as_ptr());
+            mpv_sys::mpv_terminate_destroy(self.ctx.as_ptr());
         }
     }
 }
 
 impl Mpv {
-    #[cfg(not(feature = "events_complex"))]
+    #[cfg(not(feature = "events_sync"))]
     #[inline]
     /// Create a new `Mpv`.
     /// The default settings can be probed by running: `$ mpv --show-profile=libmpv`
     pub fn new() -> Result<Mpv> {
-        let api_version = unsafe { raw::mpv_client_api_version() };
-        if ::MPV_CLIENT_API_VERSION != api_version {
+        let api_version = unsafe { mpv_sys::mpv_client_api_version() };
+        if crate::MPV_CLIENT_API_VERSION != api_version {
             return Err(Error::VersionMismatch {
-                linked: ::MPV_CLIENT_API_VERSION,
+                linked: crate::MPV_CLIENT_API_VERSION,
                 loaded: api_version,
             });
         }
 
-        let ctx = unsafe { raw::mpv_create() };
+        let ctx = unsafe { mpv_sys::mpv_create() };
         if ctx.is_null() {
             return Err(Error::Null);
         }
-        mpv_err((), unsafe { raw::mpv_initialize(ctx) }).or_else(|err| {
-            unsafe { raw::mpv_terminate_destroy(ctx) };
+        mpv_err((), unsafe { mpv_sys::mpv_initialize(ctx) }).or_else(|err| {
+            unsafe { mpv_sys::mpv_terminate_destroy(ctx) };
             Err(err)
         })?;
 
         Ok(Mpv {
             ctx: unsafe { NonNull::new_unchecked(ctx) },
-            #[cfg(feature = "custom_protocols")]
+            #[cfg(feature = "protocols")]
             protocols_guard: AtomicBool::new(false),
-            #[cfg(feature = "opengl_callback")]
-            opengl_guard: AtomicBool::new(false),
         })
     }
 
@@ -383,7 +376,9 @@ impl Mpv {
     /// Load a configuration file. The path has to be absolute, and a file.
     pub fn load_config(&self, path: &str) -> Result<()> {
         let file = CString::new(path)?.into_raw();
-        let ret = mpv_err((), unsafe { raw::mpv_load_config_file(self.ctx.as_ptr(), file) });
+        let ret = mpv_err((), unsafe {
+            mpv_sys::mpv_load_config_file(self.ctx.as_ptr(), file)
+        });
         unsafe { CString::from_raw(file) };
         ret
     }
@@ -406,7 +401,7 @@ impl Mpv {
         let raw = CString::new(cmd)?;
 
         mpv_err((), unsafe {
-            raw::mpv_command_string(self.ctx.as_ptr(), raw.as_ptr())
+            mpv_sys::mpv_command_string(self.ctx.as_ptr(), raw.as_ptr())
         })
     }
 
@@ -417,7 +412,7 @@ impl Mpv {
         let format = T::get_format().as_mpv_format() as _;
         data.call_as_c_void(|ptr| {
             mpv_err((), unsafe {
-                raw::mpv_set_property(self.ctx.as_ptr(), name.as_ptr(), format, ptr)
+                mpv_sys::mpv_set_property(self.ctx.as_ptr(), name.as_ptr(), format, ptr)
             })
         })
     }
@@ -430,7 +425,7 @@ impl Mpv {
         let format = T::get_format().as_mpv_format() as _;
         T::get_from_c_void(|ptr| {
             mpv_err((), unsafe {
-                raw::mpv_get_property(self.ctx.as_ptr(), name.as_ptr(), format, ptr)
+                mpv_sys::mpv_get_property(self.ctx.as_ptr(), name.as_ptr(), format, ptr)
             })
         })
     }
@@ -440,7 +435,7 @@ impl Mpv {
     ///
     /// This can be called at any time, even if it was stated that no API function should be called.
     pub fn get_internal_time(&self) -> i64 {
-        unsafe { raw::mpv_get_time_us(self.ctx.as_ptr()) }
+        unsafe { mpv_sys::mpv_get_time_us(self.ctx.as_ptr()) }
     }
 
     // --- Convenience property functions ---
@@ -484,7 +479,9 @@ impl Mpv {
     #[cfg(any(feature = "events_simple", feature = "events_complex"))]
     /// Enable an event.
     pub fn enable_event(&self, ev: events::EventId) -> Result<()> {
-        mpv_err((), unsafe { raw::mpv_request_event(self.ctx.as_ptr(), ev, 1) })
+        mpv_err((), unsafe {
+            mpv_sys::mpv_request_event(self.ctx.as_ptr(), ev, 1)
+        })
     }
 
     #[inline]
@@ -507,20 +504,22 @@ impl Mpv {
     #[cfg(any(feature = "events_simple", feature = "events_complex"))]
     /// Disable an event.
     pub fn disable_event(&self, ev: events::EventId) -> Result<()> {
-        mpv_err((), unsafe { raw::mpv_request_event(self.ctx.as_ptr(), ev, 0) })
+        mpv_err((), unsafe {
+            mpv_sys::mpv_request_event(self.ctx.as_ptr(), ev, 0)
+        })
     }
 
     #[inline]
     #[cfg(any(feature = "events_simple", feature = "events_complex"))]
     /// Diable all deprecated events.
     pub fn disable_deprecated_events(&self) -> Result<()> {
-        self.disable_event(raw::mpv_event_id_MPV_EVENT_TRACKS_CHANGED)?;
-        self.disable_event(raw::mpv_event_id_MPV_EVENT_TRACK_SWITCHED)?;
-        self.disable_event(raw::mpv_event_id_MPV_EVENT_PAUSE)?;
-        self.disable_event(raw::mpv_event_id_MPV_EVENT_UNPAUSE)?;
-        self.disable_event(raw::mpv_event_id_MPV_EVENT_SCRIPT_INPUT_DISPATCH)?;
-        self.disable_event(raw::mpv_event_id_MPV_EVENT_METADATA_UPDATE)?;
-        self.disable_event(raw::mpv_event_id_MPV_EVENT_CHAPTER_CHANGE)?;
+        self.disable_event(mpv_sys::mpv_event_id_MPV_EVENT_TRACKS_CHANGED)?;
+        self.disable_event(mpv_sys::mpv_event_id_MPV_EVENT_TRACK_SWITCHED)?;
+        self.disable_event(mpv_sys::mpv_event_id_MPV_EVENT_PAUSE)?;
+        self.disable_event(mpv_sys::mpv_event_id_MPV_EVENT_UNPAUSE)?;
+        self.disable_event(mpv_sys::mpv_event_id_MPV_EVENT_SCRIPT_INPUT_DISPATCH)?;
+        self.disable_event(mpv_sys::mpv_event_id_MPV_EVENT_METADATA_UPDATE)?;
+        self.disable_event(mpv_sys::mpv_event_id_MPV_EVENT_CHAPTER_CHANGE)?;
         Ok(())
     }
 

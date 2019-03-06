@@ -16,25 +16,20 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-#![allow(unused_extern_crates)]
-
-extern crate crossbeam;
-extern crate mpv;
-
-#[cfg(not(feature = "events_complex"))]
+#[cfg(not(feature = "events_sync"))]
 fn main() {
-    panic!("complex events not enabled!");
+    panic!("The feature `events_sync needs to be enabled for this example`");
 }
 
-#[cfg(feature = "events_complex")]
+#[cfg(feature = "events_sync")]
 fn main() {
+    use mpv::events::sync::*;
     use mpv::*;
-    use mpv::events::events_complex::*;
 
     use std::env;
     use std::process;
-    use std::time::Duration;
     use std::thread;
+    use std::time::Duration;
 
     let path = env::args()
         .nth(1)
@@ -50,16 +45,18 @@ fn main() {
     crossbeam::scope(|scope| {
         // Spin up 3 threads that observe different sets of `Event`s.
         scope.spawn(|| {
-            let iter = mpv.observe_events(&[
-                Event::FileLoaded,
-                Event::StartFile,
-                Event::Seek,
-                Event::PlaybackRestart,
-                Event::EndFile {
-                    reason: mpv_end_file_reason::Eof,
-                    error: None,
-                },
-            ]).unwrap();
+            let iter = mpv
+                .observe_events(&[
+                    Event::FileLoaded,
+                    Event::StartFile,
+                    Event::Seek,
+                    Event::PlaybackRestart,
+                    Event::EndFile {
+                        reason: mpv_end_file_reason::Eof,
+                        error: None,
+                    },
+                ])
+                .unwrap();
 
             for vec in iter {
                 // If any `Event` was an `Endfile`, . . .
@@ -85,17 +82,20 @@ fn main() {
         });
         scope.spawn(|| {
             // Here the value of the property is irrelevant: only the name is used.
-            let iter = mpv.observe_events(&[
-                Event::empty_propertychange("volume".into()),
-                Event::empty_propertychange("pause".into()),
-            ]).unwrap();
+            let iter = mpv
+                .observe_events(&[
+                    Event::empty_propertychange("volume".into()),
+                    Event::empty_propertychange("pause".into()),
+                ])
+                .unwrap();
 
             for vec in iter {
                 println!("properties: {:?}", vec);
             }
         });
         scope.spawn(|| {
-            let iter = mpv.observe_events(&[Event::empty_logmessage(mpv_log_level::Info)])
+            let iter = mpv
+                .observe_events(&[Event::empty_logmessage(mpv_log_level::Info)])
                 .unwrap();
 
             for vec in iter {

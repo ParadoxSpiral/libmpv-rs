@@ -16,24 +16,17 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-#![allow(unused_extern_crates)]
-
-extern crate crossbeam;
-extern crate mpv;
-
-#[cfg(not(feature = "events_simple"))]
-fn main() {
-    panic!("simple events not enabled!");
-}
+#[cfg(all(not(test), not(feature = "events_simple")))]
+compile_error!("The feature `events_simple needs to be enabled for this example`");
 
 #[cfg(feature = "events_simple")]
 fn main() {
+    use mpv::events::simple::*;
     use mpv::*;
-    use mpv::events::events_simple::*;
 
     use std::env;
-    use std::time::Duration;
     use std::thread;
+    use std::time::Duration;
 
     let path = env::args()
         .nth(1)

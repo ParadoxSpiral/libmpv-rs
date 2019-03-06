@@ -22,13 +22,6 @@ use std::env;
 #[cfg(all(feature = "build_libmpv", not(target_os = "windows")))]
 use std::process::Command;
 
-#[cfg(all(feature = "events_simple", feature = "events_complex"))]
-compile_error!(
-    "Using events_simple and events_complex at the same time is forbidden, because it \
-     will more likely than not result in a lot of hard to debug issues. This will later be \
-     relaxed to a per mpv instance const generic flag."
-);
-
 #[cfg(not(feature = "build_libmpv"))]
 fn main() {}
 

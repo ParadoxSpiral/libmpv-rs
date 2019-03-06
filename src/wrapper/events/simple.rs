@@ -16,16 +16,14 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-use raw;
-
-use ::*;
 use super::mpv_event_id;
-use super::super::*;
+use crate::{wrapper::mpv_err, *};
 
+use std::ffi::CString;
 use std::iter::Map;
+use std::os::raw as ctype;
 use std::slice;
 use std::slice::Iter;
-use std::os::raw as ctype;
 
 #[derive(Debug, Clone, PartialEq)]
 #[allow(missing_docs)]
@@ -45,15 +43,11 @@ impl<'a> PropertyData<'a> {
             mpv_format::Flag => Ok(PropertyData::Flag(unsafe { *(ptr as *mut bool) })),
             mpv_format::String => {
                 let char_ptr = unsafe { *(ptr as *mut *mut ctype::c_char) };
-                Ok(PropertyData::Str(mpv_cstr_to_str!(unsafe {
-                    CStr::from_ptr(char_ptr)
-                })?))
+                Ok(PropertyData::Str(unsafe { mpv_cstr_to_str!(char_ptr) }?))
             }
             mpv_format::OsdString => {
                 let char_ptr = unsafe { *(ptr as *mut *mut ctype::c_char) };
-                Ok(PropertyData::OsdStr(mpv_cstr_to_str!(unsafe {
-                    CStr::from_ptr(char_ptr)
-                })?))
+                Ok(PropertyData::OsdStr(unsafe { mpv_cstr_to_str!(char_ptr) }?))
             }
             mpv_format::Double => Ok(PropertyData::Double(unsafe { *(ptr as *mut f64) })),
             mpv_format::Int64 => Ok(PropertyData::Int64(unsafe { *(ptr as *mut i64) })),
@@ -63,6 +57,7 @@ impl<'a> PropertyData<'a> {
     }
 }
 
+// TODO: This could be an existencial type once stable
 #[derive(Clone, Debug)]
 /// Wrapper around an `Iterator` that yields the `str` of `Event::ClientMessage`
 pub struct MessageIter<'a>(
@@ -155,7 +150,7 @@ impl Mpv {
     /// An internally used API function is not thread-safe, thus using this method from multiple
     /// threads is UB.
     pub unsafe fn wait_event(&self, timeout: f64) -> Option<Result<Event>> {
-        let event = &*raw::mpv_wait_event(self.ctx.as_ptr(), timeout);
+        let event = &*mpv_sys::mpv_wait_event(self.ctx.as_ptr(), timeout);
         if event.event_id != mpv_event_id::None {
             if let Err(e) = mpv_err((), event.error) {
                 return Some(Err(e));
@@ -166,29 +161,25 @@ impl Mpv {
             mpv_event_id::None => None,
             mpv_event_id::Shutdown => Some(Ok(Event::Shutdown)),
             mpv_event_id::LogMessage => {
-                let log_message = *(event.data as *mut raw::mpv_event_log_message);
-                Some(
-                    mpv_cstr_to_str!(CStr::from_ptr(log_message.prefix)).and_then(|prefix| {
-                        Ok(Event::LogMessage {
-                            prefix,
-                            level: mpv_cstr_to_str!(CStr::from_ptr(log_message.level))?,
-                            text: mpv_cstr_to_str!(CStr::from_ptr(log_message.text))?,
-                            log_level: log_message.log_level,
-                        })
-                    }),
-                )
+                let log_message = *(event.data as *mut mpv_sys::mpv_event_log_message);
+                Some(mpv_cstr_to_str!(log_message.prefix).and_then(|prefix| {
+                    Ok(Event::LogMessage {
+                        prefix,
+                        level: mpv_cstr_to_str!(log_message.level)?,
+                        text: mpv_cstr_to_str!(log_message.text)?,
+                        log_level: log_message.log_level,
+                    })
+                }))
             }
             mpv_event_id::GetPropertyReply => {
-                let property = *(event.data as *mut raw::mpv_event_property);
-                Some(
-                    mpv_cstr_to_str!(CStr::from_ptr(property.name)).and_then(|name| {
-                        Ok(Event::GetPropertyReply {
-                            name,
-                            result: PropertyData::from_raw(property.format, property.data)?,
-                            reply_userdata: event.reply_userdata,
-                        })
-                    }),
-                )
+                let property = *(event.data as *mut mpv_sys::mpv_event_property);
+                Some(mpv_cstr_to_str!(property.name).and_then(|name| {
+                    Ok(Event::GetPropertyReply {
+                        name,
+                        result: PropertyData::from_raw(property.format, property.data)?,
+                        reply_userdata: event.reply_userdata,
+                    })
+                }))
             }
             mpv_event_id::SetPropertyReply => Some(mpv_err(
                 Event::SetPropertyReply(event.reply_userdata),
@@ -200,7 +191,7 @@ impl Mpv {
             )),
             mpv_event_id::StartFile => Some(Ok(Event::StartFile)),
             mpv_event_id::EndFile => {
-                let end_file = *(event.data as *mut raw::mpv_event_end_file);
+                let end_file = *(event.data as *mut mpv_sys::mpv_event_end_file);
                 Some(if let Err(e) = mpv_err((), end_file.error) {
                     Err(e)
                 } else {
@@ -212,11 +203,11 @@ impl Mpv {
             mpv_event_id::Idle => Some(Ok(Event::Idle)),
             mpv_event_id::Tick => Some(Ok(Event::Tick)),
             mpv_event_id::ClientMessage => {
-                let client_message = *(event.data as *mut raw::mpv_event_client_message);
+                let client_message = *(event.data as *mut mpv_sys::mpv_event_client_message);
                 Some(Ok(Event::ClientMessage(MessageIter(
                     slice::from_raw_parts_mut(client_message.args, client_message.num_args as _)
                         .iter()
-                        .map(|msg| mpv_cstr_to_str!(CStr::from_ptr(*msg))),
+                        .map(|msg| mpv_cstr_to_str!(*msg)),
                     client_message.num_args as _,
                 ))))
             }
@@ -225,16 +216,14 @@ impl Mpv {
             mpv_event_id::Seek => Some(Ok(Event::Seek)),
             mpv_event_id::PlaybackRestart => Some(Ok(Event::PlaybackRestart)),
             mpv_event_id::PropertyChange => {
-                let property = *(event.data as *mut raw::mpv_event_property);
-                Some(
-                    mpv_cstr_to_str!(CStr::from_ptr(property.name)).and_then(|name| {
-                        Ok(Event::PropertyChange {
-                            name,
-                            change: PropertyData::from_raw(property.format, property.data)?,
-                            reply_userdata: event.reply_userdata,
-                        })
-                    }),
-                )
+                let property = *(event.data as *mut mpv_sys::mpv_event_property);
+                Some(mpv_cstr_to_str!(property.name).and_then(|name| {
+                    Ok(Event::PropertyChange {
+                        name,
+                        change: PropertyData::from_raw(property.format, property.data)?,
+                        reply_userdata: event.reply_userdata,
+                    })
+                }))
             }
             mpv_event_id::QueueOverflow => Some(Ok(Event::QueueOverflow)),
             id => Some(Ok(Event::Deprecated(id))),
@@ -246,12 +235,19 @@ impl Mpv {
     pub fn observe_property(&self, name: &str, format: Format, id: u64) -> Result<()> {
         let name = CString::new(name)?;
         mpv_err((), unsafe {
-            raw::mpv_observe_property(self.ctx.as_ptr(), id, name.as_ptr(), format.as_mpv_format() as _)
+            mpv_sys::mpv_observe_property(
+                self.ctx.as_ptr(),
+                id,
+                name.as_ptr(),
+                format.as_mpv_format() as _,
+            )
         })
     }
 
     /// Unobserve any property associated with `id`.
     pub fn unobserve_property(&self, id: u64) -> Result<()> {
-        mpv_err((), unsafe { raw::mpv_unobserve_property(self.ctx.as_ptr(), id) })
+        mpv_err((), unsafe {
+            mpv_sys::mpv_unobserve_property(self.ctx.as_ptr(), id)
+        })
     }
 }
