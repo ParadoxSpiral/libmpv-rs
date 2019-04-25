@@ -192,12 +192,14 @@ impl Mpv {
             mpv_event_id::StartFile => Some(Ok(Event::StartFile)),
             mpv_event_id::EndFile => {
                 let end_file = *(event.data as *mut mpv_sys::mpv_event_end_file);
-                Some(if let Err(e) = mpv_err((), end_file.error) {
-                    Err(e)
+
+                if let Err(e) = mpv_err((), end_file.error) {
+                    Some(Err(e))
+                } else if end_file.reason.is_positive() {
+                    Some(Ok(Event::EndFile(end_file.reason as _)))
                 } else {
-                    assert!(end_file.reason.is_positive());
-                    Ok(Event::EndFile(end_file.reason as _))
-                })
+                    None
+                }
             }
             mpv_event_id::FileLoaded => Some(Ok(Event::FileLoaded)),
             mpv_event_id::Idle => Some(Ok(Event::Idle)),
@@ -217,13 +219,20 @@ impl Mpv {
             mpv_event_id::PlaybackRestart => Some(Ok(Event::PlaybackRestart)),
             mpv_event_id::PropertyChange => {
                 let property = *(event.data as *mut mpv_sys::mpv_event_property);
-                Some(mpv_cstr_to_str!(property.name).and_then(|name| {
-                    Ok(Event::PropertyChange {
-                        name,
-                        change: PropertyData::from_raw(property.format, property.data)?,
-                        reply_userdata: event.reply_userdata,
-                    })
-                }))
+
+                // This happens if the property is not available. For example,
+                // if you reached EndFile while observing a property.
+                if property.format == mpv_format::None {
+                    None
+                } else {
+                    Some(mpv_cstr_to_str!(property.name).and_then(|name| {
+                        Ok(Event::PropertyChange {
+                            name,
+                            change: PropertyData::from_raw(property.format, property.data)?,
+                            reply_userdata: event.reply_userdata,
+                        })
+                    }))
+                }
             }
             mpv_event_id::QueueOverflow => Some(Ok(Event::QueueOverflow)),
             id => Some(Ok(Event::Deprecated(id))),
