@@ -31,12 +31,12 @@ keywords = ["media", "playback", "mpv", "libmpv"]
 
 
 [dependencies]
-parking_lot = "0.7"
+parking_lot = "0.8"
 mpv-sys = {version = "2", path = "mpv-sys/"}
 
 [dev-dependencies]
-crossbeam = "0.3"
-imgui = "0.0.22"
+crossbeam = "0.7"
+imgui = "0.0.23"
 
 [features]
 default = ["events_simple", "protocols", "render"]

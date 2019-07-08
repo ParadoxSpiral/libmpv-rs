@@ -40,7 +40,7 @@ fn main() {
     mpv.set_property("vo", "null").unwrap();
 
     crossbeam::scope(|scope| {
-        scope.spawn(|| {
+        scope.spawn(|_| {
             mpv.playlist_load_files(&[(&path, FileState::AppendPlay, None)])
                 .unwrap();
 
@@ -53,7 +53,7 @@ fn main() {
             // Trigger `Event::EndFile`.
             mpv.playlist_next_force().unwrap();
         });
-        scope.spawn(|| loop {
+        scope.spawn(|_| loop {
             let ev = unsafe { mpv.wait_event(600.) };
             if let Some(Ok(Event::EndFile(r))) = ev {
                 println!("Exiting! Reason: {:?}", r);

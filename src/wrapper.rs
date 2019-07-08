@@ -99,7 +99,7 @@ use super::*;
 use parking_lot::{self, Mutex};
 
 use std::ffi::CString;
-use std::mem;
+use std::mem::MaybeUninit;
 use std::ops::Deref;
 use std::os::raw as ctype;
 use std::ptr::{self, NonNull};
@@ -119,9 +119,9 @@ fn mpv_err<T>(ret: T, err: ctype::c_int) -> Result<T> {
 pub unsafe trait GetData: Sized {
     #[doc(hidden)]
     fn get_from_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(mut fun: F) -> Result<Self> {
-        let mut ptr = unsafe { mem::zeroed() };
-        let _ = fun(&mut ptr as *mut Self as _)?;
-        Ok(ptr)
+        let mut val = MaybeUninit::uninit();
+        let _ = fun(val.as_mut_ptr() as *mut _)?;
+        Ok(unsafe { val.assume_init() })
     }
     fn get_format() -> Format;
 }
@@ -170,13 +170,9 @@ unsafe impl SetData for i64 {
 unsafe impl GetData for bool {
     #[inline]
     fn get_from_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(mut fun: F) -> Result<bool> {
-        let ptr = unsafe { &mut mem::zeroed() } as *mut i64;
-        let _ = fun(ptr as _)?;
-        Ok(match unsafe { *ptr } {
-            0 => false,
-            1 => true,
-            _ => unreachable!(),
-        })
+        let mut val = MaybeUninit::uninit();
+        let _ = fun(val.as_mut_ptr() as *mut _)?;
+        Ok(unsafe { val.assume_init() })
     }
 
     #[inline]

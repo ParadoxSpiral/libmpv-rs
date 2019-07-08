@@ -24,7 +24,7 @@ authors = ["ParadoxSpiral <ParadoxSpiral@riseup.net>"]
 build = "build.rs"
 
 [build-dependencies.bindgen]
-version = "0.48"
+version = "0.50"
 optional = true
 
 [features]
