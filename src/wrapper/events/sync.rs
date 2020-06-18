@@ -35,7 +35,7 @@ impl Mpv {
     /// This disables all events.
     pub fn new() -> Result<Mpv> {
         let api_version = unsafe { mpv_sys::mpv_client_api_version() };
-        if crate::MPV_CLIENT_API_VERSION != api_version {
+        if crate::MPV_CLIENT_API_MAJOR != api_version >> 16 {
             return Err(Error::VersionMismatch {
                 linked: crate::MPV_CLIENT_API_VERSION,
                 loaded: api_version,
