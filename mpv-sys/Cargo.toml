@@ -18,7 +18,7 @@
 
 [package]
 name = "mpv-sys"
-version = "2.0.0"
+version = "2.1.0"
 edition = "2018"
 authors = ["ParadoxSpiral <ParadoxSpiral@riseup.net>"]
 build = "build.rs"
@@ -26,6 +26,10 @@ build = "build.rs"
 [build-dependencies.bindgen]
 version = "0.50"
 optional = true
+
+# Workaround for https://github.com/rust-lang/rust-bindgen/issues/1313
+[lib]
+doctest = false
 
 [features]
 # You can either use the pregenerated bindings, or gen new ones with bindgen

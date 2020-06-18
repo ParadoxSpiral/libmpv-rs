@@ -52,7 +52,7 @@ use std::os::raw as ctype;
 #[allow(missing_docs)]
 pub const MPV_CLIENT_API_MAJOR: ctype::c_ulong = 1;
 #[allow(missing_docs)]
-pub const MPV_CLIENT_API_MINOR: ctype::c_ulong = 101;
+pub const MPV_CLIENT_API_MINOR: ctype::c_ulong = 108;
 #[allow(missing_docs)]
 pub const MPV_CLIENT_API_VERSION: ctype::c_ulong =
     MPV_CLIENT_API_MAJOR << 16 | MPV_CLIENT_API_MINOR;

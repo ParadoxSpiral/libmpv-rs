@@ -436,8 +436,7 @@ impl Mpv {
     #[cfg(any(feature = "events_simple", feature = "events_complex"))]
     /// Enable all, except deprecated, events.
     pub fn enable_all_events(&self) -> Result<()> {
-        for i in (1..9)
-            .chain(11..12)
+        for i in (2..9)
             .chain(14..15)
             .chain(16..19)
             .chain(20..23)
@@ -456,12 +455,12 @@ impl Mpv {
         })
     }
 
-    #[inline]
     #[cfg(any(feature = "events_simple", feature = "events_complex"))]
     /// Diable all deprecated events.
     pub fn disable_deprecated_events(&self) -> Result<()> {
         self.disable_event(mpv_sys::mpv_event_id_MPV_EVENT_TRACKS_CHANGED)?;
         self.disable_event(mpv_sys::mpv_event_id_MPV_EVENT_TRACK_SWITCHED)?;
+        self.disable_event(mpv_sys::mpv_event_id_MPV_EVENT_IDLE)?;
         self.disable_event(mpv_sys::mpv_event_id_MPV_EVENT_PAUSE)?;
         self.disable_event(mpv_sys::mpv_event_id_MPV_EVENT_UNPAUSE)?;
         self.disable_event(mpv_sys::mpv_event_id_MPV_EVENT_SCRIPT_INPUT_DISPATCH)?;

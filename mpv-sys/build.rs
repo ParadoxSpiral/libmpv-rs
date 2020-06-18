@@ -40,6 +40,7 @@ fn main() {
     let bindings = bindgen::Builder::default()
         .header("include/client.h")
         .header("include/render.h")
+        .header("include/render_gl.h")
         .header("include/stream_cb.h")
         .blacklist_type("max_align_t")
         .opaque_type("mpv_handle")
