@@ -16,9 +16,6 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-#[cfg(feature = "bindgen")]
-extern crate bindgen;
-
 use std::env;
 use std::path::PathBuf;
 
@@ -26,7 +23,7 @@ use std::path::PathBuf;
 fn main() {
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     let crate_path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    ::std::fs::copy(
+    std::fs::copy(
         crate_path.join("pregenerated_bindings.rs"),
         out_path.join("bindings.rs"),
     )
@@ -42,11 +39,8 @@ fn main() {
         .header("include/render.h")
         .header("include/render_gl.h")
         .header("include/stream_cb.h")
-        .blacklist_type("max_align_t")
         .opaque_type("mpv_handle")
         .opaque_type("mpv_render_context")
-        // This needs to be disabled until we do static builds
-        //.clang_arg("-DMPV_ENABLE_DEPRECATED=0")
         .generate()
         .expect("Unable to generate bindings");
 

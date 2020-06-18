@@ -19,8 +19,6 @@
 //! This allows registering custom protocols, which then can be used via
 //! `PlaylistOp::Loadfiles`.
 
-use parking_lot::Mutex;
-
 use super::*;
 
 use std::alloc::{self, Layout};
@@ -31,7 +29,7 @@ use std::os::raw as ctype;
 use std::panic;
 use std::panic::RefUnwindSafe;
 use std::ptr::{self, NonNull};
-use std::sync::atomic::Ordering;
+use std::sync::{Mutex, atomic::Ordering};
 
 impl Mpv {
     /// Create a context with which custom protocols can be registered.
@@ -214,7 +212,7 @@ impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> ProtocolContext<'parent, T, U>
     /// Returns `Error::Mpv(MpvError::InvalidParameter)` if a protocol with the same name has
     /// already been registered.
     pub fn register(&self, protocol: Protocol<T, U>) -> Result<()> {
-        let mut protocols = self.protocols.lock();
+        let mut protocols = self.protocols.lock().unwrap();
         protocol.register(self.ctx.as_ptr())?;
         protocols.push(protocol);
         Ok(())

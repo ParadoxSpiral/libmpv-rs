@@ -24,7 +24,7 @@ authors = ["ParadoxSpiral <ParadoxSpiral@riseup.net>"]
 build = "build.rs"
 
 [build-dependencies.bindgen]
-version = "0.50"
+version = "0.54"
 optional = true
 
 # Workaround for https://github.com/rust-lang/rust-bindgen/issues/1313
