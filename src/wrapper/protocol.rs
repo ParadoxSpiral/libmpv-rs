@@ -34,7 +34,6 @@ use std::ptr::{self, NonNull};
 use std::sync::atomic::Ordering;
 
 impl Mpv {
-    #[inline]
     /// Create a context with which custom protocols can be registered.
     ///
     /// Returns `None` if a context already exists
@@ -229,7 +228,6 @@ pub struct Protocol<T: Sized + RefUnwindSafe, U: RefUnwindSafe> {
 }
 
 impl<T: RefUnwindSafe, U: RefUnwindSafe> Protocol<T, U> {
-    #[inline]
     /// `name` is the prefix of the protocol, e.g. `name://path`.
     ///
     /// `user_data` is data that will be passed to `open_fn`.

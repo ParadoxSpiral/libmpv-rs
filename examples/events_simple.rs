@@ -39,6 +39,8 @@ fn main() {
     mpv.set_property("volume", 15).unwrap();
     mpv.set_property("vo", "null").unwrap();
 
+    mpv.observe_property("volume", Format::Int64, 0);
+
     crossbeam::scope(|scope| {
         scope.spawn(|_| {
             mpv.playlist_load_files(&[(&path, FileState::AppendPlay, None)])

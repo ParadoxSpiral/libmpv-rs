@@ -29,7 +29,6 @@ unsafe extern "C" fn event_callback(d: *mut ctype::c_void) {
 }
 
 impl Mpv {
-    #[inline]
     /// Create a new `Mpv`.
     /// The default settings can be probed by running: `$ mpv --show-profile=libmpv`
     ///
@@ -89,7 +88,6 @@ impl Mpv {
         })
     }
 
-    #[inline]
     /// Observe given `Event`s via an `EventIter`.
     ///
     /// # Panics

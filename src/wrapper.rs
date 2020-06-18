@@ -60,27 +60,11 @@ mod errors {
 
 pub use self::errors::*;
 
-#[cfg(unix)]
-macro_rules! mpv_cstr_to_str {
-    ($cstr: expr) => {{
-        use std::{
-            ffi::{CStr, OsStr},
-            os::unix::ffi::OsStrExt,
-        };
-        if let Some(v) = OsStr::from_bytes(CStr::from_ptr($cstr).to_bytes()).to_str() {
-            // Not sure why the type isn't inferred
-            let r: Result<&str> = Ok(v);
-            r
-        } else {
-            Err(Error::InvalidUtf8)
-        }
-    }};
-}
-
-#[cfg(not(unix))]
 macro_rules! mpv_cstr_to_str {
     ($cstr: expr) => {
-        str::from_utf8(std::ffi::CStr::from_ptr($cstr).to_bytes())
+        std::ffi::CStr::from_ptr($cstr)
+            .to_str()
+            .map_err(Error::from)
     };
 }
 
@@ -140,62 +124,53 @@ pub unsafe trait SetData: Sized {
 }
 
 unsafe impl GetData for f64 {
-    #[inline]
     fn get_format() -> Format {
         Format::Double
     }
 }
 
 unsafe impl SetData for f64 {
-    #[inline]
     fn get_format() -> Format {
         Format::Double
     }
 }
 
 unsafe impl GetData for i64 {
-    #[inline]
     fn get_format() -> Format {
         Format::Int64
     }
 }
 
 unsafe impl SetData for i64 {
-    #[inline]
     fn get_format() -> Format {
         Format::Int64
     }
 }
 
 unsafe impl GetData for bool {
-    #[inline]
     fn get_from_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(mut fun: F) -> Result<bool> {
         let mut val = MaybeUninit::uninit();
         let _ = fun(val.as_mut_ptr() as *mut _)?;
         Ok(unsafe { val.assume_init() })
     }
 
-    #[inline]
     fn get_format() -> Format {
         Format::Flag
     }
 }
 
 unsafe impl SetData for bool {
-    #[inline]
     fn call_as_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(self, mut fun: F) -> Result<T> {
         let mut cpy: i64 = if self { 1 } else { 0 };
         fun(&mut cpy as *mut i64 as *mut _)
     }
 
-    #[inline]
     fn get_format() -> Format {
         Format::Flag
     }
 }
 
 unsafe impl GetData for String {
-    #[inline]
     fn get_from_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(mut fun: F) -> Result<String> {
         let ptr = &mut ptr::null();
         let _ = fun(ptr as *mut *const ctype::c_char as _)?;
@@ -205,20 +180,17 @@ unsafe impl GetData for String {
         Ok(ret)
     }
 
-    #[inline]
     fn get_format() -> Format {
         Format::String
     }
 }
 
 unsafe impl SetData for String {
-    #[inline]
     fn call_as_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(self, mut fun: F) -> Result<T> {
         let string = CString::new(self)?;
         fun((&mut string.as_ptr()) as *mut *const ctype::c_char as *mut _)
     }
 
-    #[inline]
     fn get_format() -> Format {
         Format::String
     }
@@ -240,7 +212,6 @@ impl<'a> Drop for MpvStr<'a> {
 }
 
 unsafe impl<'a> GetData for MpvStr<'a> {
-    #[inline]
     fn get_from_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(
         mut fun: F,
     ) -> Result<MpvStr<'a>> {
@@ -250,20 +221,17 @@ unsafe impl<'a> GetData for MpvStr<'a> {
         Ok(MpvStr(unsafe { mpv_cstr_to_str!(*ptr) }?))
     }
 
-    #[inline]
     fn get_format() -> Format {
         Format::String
     }
 }
 
 unsafe impl<'a> SetData for &'a str {
-    #[inline]
     fn call_as_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(self, mut fun: F) -> Result<T> {
         let string = CString::new(self)?;
         fun((&mut string.as_ptr()) as *mut *const ctype::c_char as *mut _)
     }
 
-    #[inline]
     fn get_format() -> Format {
         Format::String
     }
@@ -330,7 +298,6 @@ unsafe impl Send for Mpv {}
 unsafe impl Sync for Mpv {}
 
 impl Drop for Mpv {
-    #[inline]
     fn drop(&mut self) {
         unsafe {
             mpv_sys::mpv_terminate_destroy(self.ctx.as_ptr());
@@ -340,7 +307,6 @@ impl Drop for Mpv {
 
 impl Mpv {
     #[cfg(not(feature = "events_sync"))]
-    #[inline]
     /// Create a new `Mpv`.
     /// The default settings can be probed by running: `$ mpv --show-profile=libmpv`
     pub fn new() -> Result<Mpv> {
@@ -368,7 +334,6 @@ impl Mpv {
         })
     }
 
-    #[inline]
     /// Load a configuration file. The path has to be absolute, and a file.
     pub fn load_config(&self, path: &str) -> Result<()> {
         let file = CString::new(path)?.into_raw();
@@ -379,29 +344,25 @@ impl Mpv {
         ret
     }
 
-    #[inline]
     /// Send a command to the `Mpv` instance. This uses `mpv_command_string` internally,
     /// so that the syntax is the same as described in the [manual for the input.conf]
     /// (https://mpv.io/manual/master/#list-of-input-commands).
     ///
     /// Note that you may have to escape strings with `""` when they contain spaces.
     pub fn command(&self, name: &str, args: &[&str]) -> Result<()> {
-        let mut cmd =
-            String::with_capacity(name.len() + args.iter().fold(0, |acc, e| acc + e.len() + 1));
-        cmd.push_str(name);
+        let mut cmd = name.to_owned();
 
         for elem in args {
             cmd.push_str(" ");
             cmd.push_str(elem);
         }
-        let raw = CString::new(cmd)?;
 
+        let raw = CString::new(cmd)?;
         mpv_err((), unsafe {
             mpv_sys::mpv_command_string(self.ctx.as_ptr(), raw.as_ptr())
         })
     }
 
-    #[inline]
     /// Set the value of a property.
     pub fn set_property<T: SetData>(&self, name: &str, data: T) -> Result<()> {
         let name = CString::new(name)?;
@@ -413,7 +374,6 @@ impl Mpv {
         })
     }
 
-    #[inline]
     /// Get the value of a property.
     pub fn get_property<T: GetData>(&self, name: &str) -> Result<T> {
         let name = CString::new(name)?;
@@ -426,7 +386,6 @@ impl Mpv {
         })
     }
 
-    #[inline]
     /// Internal time in microseconds, this has an arbitrary offset, and will never go backwards.
     ///
     /// This can be called at any time, even if it was stated that no API function should be called.
@@ -437,32 +396,27 @@ impl Mpv {
     // --- Convenience property functions ---
     //
 
-    #[inline]
     /// Add -or subtract- any value from a property. Over/underflow clamps to max/min.
     pub fn add_property(&self, property: &str, value: isize) -> Result<()> {
         self.command("add", &[property, &format!("{}", value)])
     }
 
-    #[inline]
     /// Cycle through a given property. `up` specifies direction. On
     /// overflow, set the property back to the minimum, on underflow set it to the maximum.
     pub fn cycle_property(&self, property: &str, up: bool) -> Result<()> {
         self.command("cycle", &[property, if up { "up" } else { "down" }])
     }
 
-    #[inline]
     /// Multiply any property with any positive factor.
     pub fn multiply_property(&self, property: &str, factor: usize) -> Result<()> {
         self.command("multiply", &[property, &format!("{}", factor)])
     }
 
-    #[inline]
     /// Pause playback at runtime.
     pub fn pause(&self) -> Result<()> {
         self.set_property("pause", true)
     }
 
-    #[inline]
     /// Unpause playback at runtime.
     pub fn unpause(&self) -> Result<()> {
         self.set_property("pause", false)
@@ -471,7 +425,6 @@ impl Mpv {
     // --- Convenience command functions ---
     //
 
-    #[inline]
     #[cfg(any(feature = "events_simple", feature = "events_complex"))]
     /// Enable an event.
     pub fn enable_event(&self, ev: events::EventId) -> Result<()> {
@@ -480,7 +433,6 @@ impl Mpv {
         })
     }
 
-    #[inline]
     #[cfg(any(feature = "events_simple", feature = "events_complex"))]
     /// Enable all, except deprecated, events.
     pub fn enable_all_events(&self) -> Result<()> {
@@ -496,7 +448,6 @@ impl Mpv {
         Ok(())
     }
 
-    #[inline]
     #[cfg(any(feature = "events_simple", feature = "events_complex"))]
     /// Disable an event.
     pub fn disable_event(&self, ev: events::EventId) -> Result<()> {
@@ -519,7 +470,6 @@ impl Mpv {
         Ok(())
     }
 
-    #[inline]
     #[cfg(any(feature = "events_simple", feature = "events_complex"))]
     /// Diable all events.
     pub fn disable_all_events(&self) -> Result<()> {
@@ -532,7 +482,6 @@ impl Mpv {
     // --- Seek functions ---
     //
 
-    #[inline]
     /// Seek forward relatively from current position in seconds.
     /// This is less exact than `seek_absolute`, see [mpv manual]
     /// (https://mpv.io/manual/master/#command-interface-
@@ -541,19 +490,16 @@ impl Mpv {
         self.command("seek", &[&format!("{}", secs), "relative"])
     }
 
-    #[inline]
     /// See `seek_forward`.
     pub fn seek_backward(&self, secs: ctype::c_double) -> Result<()> {
         self.command("seek", &[&format!("-{}", secs), "relative"])
     }
 
-    #[inline]
     /// Seek to a given absolute secs.
     pub fn seek_absolute(&self, secs: ctype::c_double) -> Result<()> {
         self.command("seek", &[&format!("{}", secs), "absolute"])
     }
 
-    #[inline]
     /// Seek to a given relative percent position (may be negative).
     /// If `percent` of the playtime is bigger than the remaining playtime, the next file is played.
     /// out of bounds values are clamped to either 0 or 100.
@@ -561,32 +507,27 @@ impl Mpv {
         self.command("seek", &[&format!("{}", percent), "relative-percent"])
     }
 
-    #[inline]
     /// Seek to the given percentage of the playtime.
     pub fn seek_percent_absolute(&self, percent: usize) -> Result<()> {
         self.command("seek", &[&format!("{}", percent), "relative-percent"])
     }
 
-    #[inline]
     /// Revert the previous `seek_` call, can also revert itself.
     pub fn seek_revert(&self) -> Result<()> {
         self.command("revert-seek", &[])
     }
 
-    #[inline]
     /// Mark the current position as the position that will be seeked to by `seek_revert`.
     pub fn seek_revert_mark(&self) -> Result<()> {
         self.command("revert-seek", &["mark"])
     }
 
-    #[inline]
     /// Seek exactly one frame, and pause.
     /// Noop on audio only streams.
     pub fn seek_frame(&self) -> Result<()> {
         self.command("frame-step", &[])
     }
 
-    #[inline]
     /// See `seek_frame`.
     /// [Note performance considerations.](https://mpv.io/manual/master/#command-interface-frame-back-step)
     pub fn seek_frame_backward(&self) -> Result<()> {
@@ -596,7 +537,6 @@ impl Mpv {
     // --- Screenshot functions ---
     //
 
-    #[inline]
     /// "Save the video image, in its original resolution, and with subtitles.
     /// Some video outputs may still include the OSD in the output under certain circumstances.".
     ///
@@ -613,7 +553,6 @@ impl Mpv {
         }
     }
 
-    #[inline]
     /// "Like subtitles, but typically without OSD or subtitles. The exact behavior
     /// depends on the selected video output."
     pub fn screenshot_video<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<()> {
@@ -624,7 +563,6 @@ impl Mpv {
         }
     }
 
-    #[inline]
     /// "Save the contents of the mpv window. Typically scaled, with OSD and subtitles. The exact
     /// behaviour depends on the selected video output, and if no support is available,
     /// this will act like video.".
@@ -639,33 +577,28 @@ impl Mpv {
     // --- Playlist functions ---
     //
 
-    #[inline]
     /// Play the next item of the current playlist.
     /// Does nothing if the current item is the last item.
     pub fn playlist_next_weak(&self) -> Result<()> {
         self.command("playlist-next", &["weak"])
     }
 
-    #[inline]
     /// Play the next item of the current playlist.
     /// Terminates playback if the current item is the last item.
     pub fn playlist_next_force(&self) -> Result<()> {
         self.command("playlist-next", &["force"])
     }
 
-    #[inline]
     /// See `playlist_next_weak`.
     pub fn playlist_previous_weak(&self) -> Result<()> {
         self.command("playlist-previous", &["weak"])
     }
 
-    #[inline]
     /// See `playlist_next_force`.
     pub fn playlist_previous_force(&self) -> Result<()> {
         self.command("playlist-previous", &["force"])
     }
 
-    #[inline]
     /// The given files are loaded sequentially, returning the index of the current file
     /// and the error in case of an error. [More information.](https://mpv.io/manual/master/#command-interface-[replace|append|append-play)
     ///
@@ -700,7 +633,6 @@ impl Mpv {
         Ok(())
     }
 
-    #[inline]
     /// Load the given playlist file, that either replaces the current playlist, or appends to it.
     pub fn playlist_load_list(&self, path: &str, replace: bool) -> Result<()> {
         if replace {
@@ -710,31 +642,26 @@ impl Mpv {
         }
     }
 
-    #[inline]
     /// Remove every, except the current, item from the playlist.
     pub fn playlist_clear(&self) -> Result<()> {
         self.command("playlist-clear", &[])
     }
 
-    #[inline]
     /// Remove the currently selected item from the playlist.
     pub fn playlist_remove_current(&self) -> Result<()> {
         self.command("playlist-remove", &["current"])
     }
 
-    #[inline]
     /// Remove item at `position` from the playlist.
     pub fn playlist_remove_index(&self, position: usize) -> Result<()> {
         self.command("playlist-remove", &[&format!("{}", position)])
     }
 
-    #[inline]
     /// Move item `old` to the position of item `new`.
     pub fn playlist_move(&self, old: usize, new: usize) -> Result<()> {
         self.command("playlist-move", &[&format!("{}", new), &format!("{}", old)])
     }
 
-    #[inline]
     /// Shuffle the playlist.
     pub fn playlist_shuffle(&self) -> Result<()> {
         self.command("playlist-shuffle", &[])
@@ -743,7 +670,6 @@ impl Mpv {
     // --- Subtitle functions ---
     //
 
-    #[inline]
     /// Add and select the subtitle immediately.
     /// Specifying a language requires specifying a title.
     ///
@@ -765,7 +691,6 @@ impl Mpv {
         }
     }
 
-    #[inline]
     /// See `AddSelect`. "Don't select the subtitle.
     /// (Or in some special situations, let the default stream selection mechanism decide.)".
     ///
@@ -789,7 +714,6 @@ impl Mpv {
         }
     }
 
-    #[inline]
     /// See `AddSelect`. "Select the subtitle. If a subtitle with the same file name was
     /// already added, that one is selected, instead of loading a duplicate entry.
     /// (In this case, title/language are ignored, and if the [sub] was changed since it was loaded,
@@ -798,7 +722,6 @@ impl Mpv {
         self.command("sub-add", &[&format!("\"{}\"", path), "cached"])
     }
 
-    #[inline]
     /// "Remove the given subtitle track. If the id argument is missing, remove the current
     /// track. (Works on external subtitle files only.)"
     pub fn subtitle_remove<A: Into<Option<usize>>>(&self, index: A) -> Result<()> {
@@ -809,7 +732,6 @@ impl Mpv {
         }
     }
 
-    #[inline]
     /// "Reload the given subtitle track. If the id argument is missing, reload the current
     /// track. (Works on external subtitle files only.)"
     pub fn subtitle_reload<A: Into<Option<usize>>>(&self, index: A) -> Result<()> {
@@ -820,14 +742,12 @@ impl Mpv {
         }
     }
 
-    #[inline]
     /// "Change subtitle timing such, that the subtitle event after the next `isize` subtitle
     /// events is displayed. `isize` can be negative to step backwards."
     pub fn subtitle_step(&self, skip: isize) -> Result<()> {
         self.command("sub-step", &[&format!("{}", skip)])
     }
 
-    #[inline]
     /// "Seek to the next subtitle. This is similar to sub-step, except that it seeks video and
     /// audio instead of adjusting the subtitle delay.
     /// For embedded subtitles (like with matroska), this works only with subtitle events that
@@ -836,7 +756,6 @@ impl Mpv {
         self.command("sub-seek", &["1"])
     }
 
-    #[inline]
     /// See `SeekForward`.
     pub fn subtitle_seek_backward(&self) -> Result<()> {
         self.command("sub-seek", &["-1"])
