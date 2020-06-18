@@ -168,7 +168,7 @@ where
     T: RefUnwindSafe,
     U: RefUnwindSafe,
 {
-    let data = cookie as *mut ProtocolData<T, U>;
+    let data = Box::from_raw(cookie as *mut ProtocolData<T, U>);
 
     panic::catch_unwind(|| ((*data).close_fn)(Box::from_raw((*data).cookie)));
 }
@@ -273,14 +273,5 @@ impl<T: RefUnwindSafe, U: RefUnwindSafe> Protocol<T, U> {
                 ),
             )
         }
-    }
-}
-
-impl<T: RefUnwindSafe, U: RefUnwindSafe> Drop for Protocol<T, U> {
-    fn drop(&mut self) {
-        unsafe {
-            Box::from_raw(self.data);
-            // data.cookie will be consumed by the close callback
-        };
     }
 }
