@@ -1,6 +1,6 @@
 // Copyright (C) 2016  ParadoxSpiral
 //
-// This file is part of mpv-rs.
+// This file is part of libmpv-rs.
 //
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -16,6 +16,7 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
+use crate::events::{Event, PropertyData};
 use crate::*;
 
 use std::thread;
@@ -24,7 +25,6 @@ use std::time::Duration;
 #[test]
 fn properties() {
     let mpv = Mpv::new().unwrap();
-    mpv.set_property("cache-initial", 1).unwrap();
     mpv.set_property("volume", 0).unwrap();
     mpv.set_property("vo", "null").unwrap();
     mpv.set_property("ytdl-format", "best[width<240]").unwrap();
@@ -41,133 +41,113 @@ fn properties() {
     );
 
     mpv.playlist_load_files(&[(
-        "https://www.youtube.com/watch?v=DLzxrzFCyOs",
+        "test-data/speech_12kbps_mb.wav",
         FileState::AppendPlay,
         None,
-    )])
-    .unwrap();
-
+    )]).unwrap();
     thread::sleep(Duration::from_millis(250));
 
     let title: MpvStr = mpv.get_property("media-title").unwrap();
-    assert!(
-        "Rick Astley - Never Gonna Give You Up [HQ]" == &*title || "watch?v=DLzxrzFCyOs" == &*title
+    assert_eq!(
+        &*title, "speech_12kbps_mb.wav"
     );
 }
 
-// Used to approximate correctness of non-deterministic event order
-macro_rules! assert_eq_any {
-    ($left:expr, $( $right:expr ),+) => (
-        {
-            let val = $left;
-            if $( val != $right )&&+ {
-                panic!("assertion failed: `(left == any [right])` (left: {:?}, right: {:?})",
-                       val,
-                       [$( $right ),+]);
+macro_rules! assert_event_occurs {
+    ($ctx:ident, $timeout:literal, $( $expected:pat),+) => {
+        loop {
+            match $ctx.wait_event($timeout) {
+                $( Some($expected) )|+ => {
+                    break;
+                },
+                None => {
+                    continue
+                },
+                other => panic!("Event did not occur, got: {:?}", other),
             }
         }
-    )
+    }
 }
 
-#[cfg(feature = "events_simple")]
-#[cfg_attr(feature = "events_simple", test)]
-fn events_simple() {
-    // TODO: Expand to all Event variants
-    use crate::events::simple::{Event, PropertyData};
-
+#[test]
+fn events() {
     let mpv = Mpv::new().unwrap();
-    assert_eq!(Event::Idle, unsafe { mpv.wait_event(3.) }.unwrap().unwrap());
+    let ev_ctx = mpv.create_event_context().unwrap();
+    ev_ctx.disable_deprecated_events().unwrap();
 
-    mpv.disable_deprecated_events().unwrap();
-    mpv.observe_property("volume", Format::Int64, 0).unwrap();
-    mpv.observe_property("media-title", Format::String, 1)
-        .unwrap();
-    mpv.observe_property("sub-gauss", Format::Double, 2)
+    ev_ctx.observe_property("volume", Format::Int64, 0).unwrap();
+    ev_ctx
+        .observe_property("media-title", Format::String, 1)
         .unwrap();
 
-    mpv.set_property("cache-initial", 1).unwrap();
-    mpv.set_property("volume", 0).unwrap();
     mpv.set_property("vo", "null").unwrap();
-    assert_eq!(
-        Event::PropertyChange {
+    mpv.set_property("ytdl", false).unwrap();
+
+    assert_event_occurs!(
+        ev_ctx,
+        3.,
+        Ok(Event::PropertyChange {
+            name: "volume",
+            change: PropertyData::Int64(100),
+            reply_userdata: 0,
+        })
+    );
+
+    mpv.set_property("volume", 0).unwrap();
+    assert_event_occurs!(
+        ev_ctx,
+        10.,
+        Ok(Event::PropertyChange {
             name: "volume",
             change: PropertyData::Int64(0),
             reply_userdata: 0,
-        },
-        unsafe { mpv.wait_event(3.) }.unwrap().unwrap()
+        })
     );
-    assert_eq!(
-        Event::PropertyChange {
-            name: "sub-gauss",
-            change: PropertyData::Double(0.),
-            reply_userdata: 2,
-        },
-        unsafe { mpv.wait_event(3.) }.unwrap().unwrap()
-    );
+    assert!(ev_ctx.wait_event(3.).is_none());
 
-    mpv.set_property("ytdl", false).unwrap();
     mpv.playlist_load_files(&[(
         "https://www.youtube.com/watch?v=DLzxrzFCyOs",
         FileState::AppendPlay,
         None,
     )])
     .unwrap();
-    assert_eq!(
-        Event::StartFile,
-        unsafe { mpv.wait_event(10.) }.unwrap().unwrap()
-    );
-    assert_eq!(
-        Event::PropertyChange {
+    assert_event_occurs!(ev_ctx, 10., Ok(Event::StartFile));
+    assert_event_occurs!(
+        ev_ctx,
+        10.,
+        Ok(Event::PropertyChange {
             name: "media-title",
             change: PropertyData::Str("watch?v=DLzxrzFCyOs"),
             reply_userdata: 1,
-        },
-        unsafe { mpv.wait_event(10.) }.unwrap().unwrap()
+        })
     );
-    assert_eq!(
-        Err(Error::Raw(mpv_error::UnknownFormat)),
-        unsafe { mpv.wait_event(20.) }.unwrap()
+    assert_event_occurs!(
+        ev_ctx,
+        20.,
+        Err(Error::Raw(mpv_error::UnknownFormat))
     );
-    assert_eq!(Event::Idle, unsafe { mpv.wait_event(4.) }.unwrap().unwrap());
+    assert!(ev_ctx.wait_event(3.).is_none());
 
-    mpv.set_property("ytdl", true).unwrap();
-    mpv.set_property("ytdl-format", "best[width<240]").unwrap();
     mpv.playlist_load_files(&[(
-        "https://www.youtube.com/watch?v=DLzxrzFCyOs",
+        "test-data/speech_12kbps_mb.wav",
         FileState::AppendPlay,
         None,
     )])
     .unwrap();
-    assert_eq!(
-        Event::StartFile,
-        unsafe { mpv.wait_event(10.) }.unwrap().unwrap()
+    assert_event_occurs!(ev_ctx, 10., Ok(Event::StartFile));
+    assert_event_occurs!(
+        ev_ctx,
+        3.,
+        Ok(Event::PropertyChange {
+            name: "media-title",
+            change: PropertyData::Str("speech_12kbps_mb.wav"),
+            reply_userdata: 1,
+        })
     );
-    // The order of events is unfortunately non-deterministic.
-    for _ in 0..7 {
-        // A possible order is:
-        //      StartFile -> AudioReconfig -> FileLoaded -> AudioReconfig -> PropertyChange
-        assert_eq_any!(
-            unsafe { mpv.wait_event(10.) }.unwrap().unwrap(),
-            Event::AudioReconfig,
-            Event::VideoReconfig,
-            Event::FileLoaded,
-            // Either both, or only the second title Event will trigger because of coalescence
-            Event::PropertyChange {
-                name: "media-title",
-                change: PropertyData::Str("watch?v=DLzxrzFCyOs"),
-                reply_userdata: 1,
-            },
-            Event::PropertyChange {
-                name: "media-title",
-                change: PropertyData::Str("Rick Astley - Never Gonna Give You Up [HQ]"),
-                reply_userdata: 1,
-            }
-        );
-    }
-    assert_eq!(
-        Event::PlaybackRestart,
-        unsafe { mpv.wait_event(10.) }.unwrap().unwrap()
-    );
-
-    assert_eq!(None, unsafe { mpv.wait_event(0.) });
+    assert_event_occurs!(ev_ctx, 3., Ok(Event::AudioReconfig));
+    assert_event_occurs!(ev_ctx, 3., Ok(Event::AudioReconfig));
+    assert_event_occurs!(ev_ctx, 3., Ok(Event::FileLoaded));
+    assert_event_occurs!(ev_ctx, 3., Ok(Event::AudioReconfig));
+    assert_event_occurs!(ev_ctx, 3., Ok(Event::PlaybackRestart));
+    assert!(ev_ctx.wait_event(3.).is_none());
 }

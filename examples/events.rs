@@ -1,6 +1,6 @@
 // Copyright (C) 2016  ParadoxSpiral
 //
-// This file is part of mpv-rs.
+// This file is part of libmpv-rs.
 //
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public
@@ -16,30 +16,26 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-#[cfg(all(not(test), not(feature = "events_simple")))]
-compile_error!("The feature `events_simple needs to be enabled for this example`");
+use mpv::events::*;
+use mpv::*;
 
-#[cfg(feature = "events_simple")]
+use std::env;
+use std::thread;
+use std::time::Duration;
+
 fn main() {
-    use mpv::events::simple::*;
-    use mpv::*;
-
-    use std::env;
-    use std::thread;
-    use std::time::Duration;
-
     let path = env::args()
         .nth(1)
         .unwrap_or_else(|| String::from("https://www.youtube.com/watch?v=DLzxrzFCyOs"));
 
     // Create an `Mpv` and set some properties.
     let mpv = Mpv::new().unwrap();
-    mpv.disable_deprecated_events().unwrap();
-    mpv.set_property("cache-initial", 10).unwrap();
     mpv.set_property("volume", 15).unwrap();
     mpv.set_property("vo", "null").unwrap();
 
-    mpv.observe_property("volume", Format::Int64, 0);
+    let ev_ctx = mpv.create_event_context().unwrap();
+    ev_ctx.disable_deprecated_events().unwrap();
+    ev_ctx.observe_property("volume", Format::Int64, 0).unwrap();
 
     crossbeam::scope(|scope| {
         scope.spawn(|_| {
@@ -55,8 +51,8 @@ fn main() {
             // Trigger `Event::EndFile`.
             mpv.playlist_next_force().unwrap();
         });
-        scope.spawn(|_| loop {
-            let ev = unsafe { mpv.wait_event(600.) };
+        scope.spawn(move |_| loop {
+            let ev = ev_ctx.wait_event(600.);
             if let Some(Ok(Event::EndFile(r))) = ev {
                 println!("Exiting! Reason: {:?}", r);
                 break;
@@ -66,5 +62,6 @@ fn main() {
                 println!("Event errored: {:?}", e);
             }
         });
-    });
+    })
+    .unwrap();
 }

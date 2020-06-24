@@ -79,9 +79,6 @@ pub mod render;
 
 use super::*;
 
-#[cfg(feature = "events_sync")]
-use parking_lot::{self, Mutex};
-
 use std::ffi::CString;
 use std::mem::MaybeUninit;
 use std::ops::Deref;
@@ -282,14 +279,7 @@ impl FileState {
 pub struct Mpv {
     /// The handle to the mpv core
     pub ctx: NonNull<mpv_sys::mpv_handle>,
-    #[cfg(feature = "events_sync")]
-    ev_iter_notification: Box<(Mutex<bool>, parking_lot::Condvar)>,
-    #[cfg(feature = "events_sync")]
-    ev_to_observe: Mutex<Vec<events::sync::Event>>,
-    #[cfg(feature = "events_sync")]
-    ev_to_observe_properties: Mutex<::std::collections::HashMap<String, u64>>,
-    #[cfg(feature = "events_sync")]
-    ev_observed: Mutex<Vec<events::sync::Event>>,
+    events_guard: AtomicBool,
     #[cfg(feature = "protocols")]
     protocols_guard: AtomicBool,
 }
@@ -306,7 +296,6 @@ impl Drop for Mpv {
 }
 
 impl Mpv {
-    #[cfg(not(feature = "events_sync"))]
     /// Create a new `Mpv`.
     /// The default settings can be probed by running: `$ mpv --show-profile=libmpv`
     pub fn new() -> Result<Mpv> {
@@ -329,6 +318,7 @@ impl Mpv {
 
         Ok(Mpv {
             ctx: unsafe { NonNull::new_unchecked(ctx) },
+            events_guard: AtomicBool::new(false),
             #[cfg(feature = "protocols")]
             protocols_guard: AtomicBool::new(false),
         })
@@ -420,62 +410,6 @@ impl Mpv {
     /// Unpause playback at runtime.
     pub fn unpause(&self) -> Result<()> {
         self.set_property("pause", false)
-    }
-
-    // --- Convenience command functions ---
-    //
-
-    #[cfg(any(feature = "events_simple", feature = "events_complex"))]
-    /// Enable an event.
-    pub fn enable_event(&self, ev: events::EventId) -> Result<()> {
-        mpv_err((), unsafe {
-            mpv_sys::mpv_request_event(self.ctx.as_ptr(), ev, 1)
-        })
-    }
-
-    #[cfg(any(feature = "events_simple", feature = "events_complex"))]
-    /// Enable all, except deprecated, events.
-    pub fn enable_all_events(&self) -> Result<()> {
-        for i in (2..9)
-            .chain(14..15)
-            .chain(16..19)
-            .chain(20..23)
-            .chain(23..26)
-        {
-            self.enable_event(i)?;
-        }
-        Ok(())
-    }
-
-    #[cfg(any(feature = "events_simple", feature = "events_complex"))]
-    /// Disable an event.
-    pub fn disable_event(&self, ev: events::EventId) -> Result<()> {
-        mpv_err((), unsafe {
-            mpv_sys::mpv_request_event(self.ctx.as_ptr(), ev, 0)
-        })
-    }
-
-    #[cfg(any(feature = "events_simple", feature = "events_complex"))]
-    /// Diable all deprecated events.
-    pub fn disable_deprecated_events(&self) -> Result<()> {
-        self.disable_event(mpv_sys::mpv_event_id_MPV_EVENT_TRACKS_CHANGED)?;
-        self.disable_event(mpv_sys::mpv_event_id_MPV_EVENT_TRACK_SWITCHED)?;
-        self.disable_event(mpv_sys::mpv_event_id_MPV_EVENT_IDLE)?;
-        self.disable_event(mpv_sys::mpv_event_id_MPV_EVENT_PAUSE)?;
-        self.disable_event(mpv_sys::mpv_event_id_MPV_EVENT_UNPAUSE)?;
-        self.disable_event(mpv_sys::mpv_event_id_MPV_EVENT_SCRIPT_INPUT_DISPATCH)?;
-        self.disable_event(mpv_sys::mpv_event_id_MPV_EVENT_METADATA_UPDATE)?;
-        self.disable_event(mpv_sys::mpv_event_id_MPV_EVENT_CHAPTER_CHANGE)?;
-        Ok(())
-    }
-
-    #[cfg(any(feature = "events_simple", feature = "events_complex"))]
-    /// Diable all events.
-    pub fn disable_all_events(&self) -> Result<()> {
-        for i in 1..26 {
-            self.disable_event(i as _)?;
-        }
-        Ok(())
     }
 
     // --- Seek functions ---

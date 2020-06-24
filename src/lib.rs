@@ -32,13 +32,6 @@
 //!
 //! See the 'examples' directory in the crate root.
 
-#[cfg(all(feature = "events_simple", feature = "events_sync"))]
-compile_error!(
-    "Using events_simple and events_sync at the same time is forbidden, because it \
-     will more likely than not result in a lot of hard to debug issues. This will later be \
-     relaxed to a per mpv instance const generic flag."
-);
-
 // TODO: clean up docs in general
 
 // Procedure for updating to new libmpv:
@@ -57,11 +50,11 @@ pub const MPV_CLIENT_API_MINOR: ctype::c_ulong = 108;
 pub const MPV_CLIENT_API_VERSION: ctype::c_ulong =
     MPV_CLIENT_API_MAJOR << 16 | MPV_CLIENT_API_MINOR;
 
+mod mpv;
 #[cfg(test)]
 mod tests;
-mod wrapper;
 
-pub use crate::wrapper::*;
+pub use crate::mpv::*;
 
 /// A format mpv can use.
 pub use mpv_sys::mpv_format as MpvFormat;

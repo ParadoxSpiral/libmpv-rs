@@ -39,9 +39,7 @@ crossbeam = "0.7"
 imgui = "0.0.23"
 
 [features]
-default = ["events_simple", "protocols", "render"]
-events_simple = [] # Enable simple event handling
-events_sync = [] # Enable complex event handling
+default = ["protocols", "render"]
 protocols = [] # Enable custom protocol callbacks
 render = [] # Enable custom rendering
 build_libmpv = [] # build libmpv automatically, provided MPV_SOURCE is set
