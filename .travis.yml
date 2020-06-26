@@ -1,14 +1,10 @@
 language: rust
-dist: trusty
-rust:
-  - stable
-
-git:
-  depth: 1
 
 before_install:
-  - sudo apt-get update -qq
-  - sudo apt-get install -qq mpv
+  - sudo apt-get update
+  - sudo apt-get -y install mpv libmpv-dev libmpv1
+
+script:
   - RUST_BACKTRACE=1 cargo build --release
   - RUST_BACKTRACE=1 cargo test
   - RUST_BACKTRACE=1 cargo doc
