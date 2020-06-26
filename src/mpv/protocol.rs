@@ -66,7 +66,7 @@ pub type StreamSize<T> = fn(&mut T) -> i64;
 unsafe extern "C" fn open_wrapper<T, U>(
     user_data: *mut ctype::c_void,
     uri: *mut ctype::c_char,
-    info: *mut mpv_sys::mpv_stream_cb_info,
+    info: *mut libmpv_sys::mpv_stream_cb_info,
 ) -> ctype::c_int
 where
     T: RefUnwindSafe,
@@ -181,7 +181,7 @@ struct ProtocolData<T, U> {
 /// This context holds state relevant to custom protocols.
 /// It is created by calling `Mpv::create_protocol_context`.
 pub struct ProtocolContext<'parent, T: RefUnwindSafe, U: RefUnwindSafe> {
-    ctx: NonNull<mpv_sys::mpv_handle>,
+    ctx: NonNull<libmpv_sys::mpv_handle>,
     protocols: Mutex<Vec<Protocol<T, U>>>,
     _does_not_outlive: PhantomData<&'parent Mpv>,
 }
@@ -191,7 +191,7 @@ unsafe impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> Sync for ProtocolContex
 
 impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> ProtocolContext<'parent, T, U> {
     fn new(
-        ctx: NonNull<mpv_sys::mpv_handle>,
+        ctx: NonNull<libmpv_sys::mpv_handle>,
         marker: PhantomData<&'parent Mpv>,
     ) -> ProtocolContext<'parent, T, U> {
         ProtocolContext {
@@ -253,12 +253,12 @@ impl<T: RefUnwindSafe, U: RefUnwindSafe> Protocol<T, U> {
         Protocol { name, data }
     }
 
-    fn register(&self, ctx: *mut mpv_sys::mpv_handle) -> Result<()> {
+    fn register(&self, ctx: *mut libmpv_sys::mpv_handle) -> Result<()> {
         let name = CString::new(&self.name[..])?;
         unsafe {
             mpv_err(
                 (),
-                mpv_sys::mpv_stream_cb_add_ro(
+                libmpv_sys::mpv_stream_cb_add_ro(
                     ctx,
                     name.as_ptr(),
                     self.data as *mut _,

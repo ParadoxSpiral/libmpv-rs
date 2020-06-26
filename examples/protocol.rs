@@ -29,7 +29,7 @@ compile_error!("The feature `protocols` needs to be enabled for this example`");
 
 #[cfg(feature = "protocols")]
 fn main() {
-    use mpv::{protocol::*, *};
+    use libmpv::{protocol::*, *};
 
     let path = format!(
         "filereader://{}",

@@ -49,61 +49,61 @@ mod tests;
 pub use crate::mpv::*;
 
 /// A format mpv can use.
-pub use mpv_sys::mpv_format as MpvFormat;
+pub use libmpv_sys::mpv_format as MpvFormat;
 pub mod mpv_format {
-    pub use mpv_sys::mpv_format_MPV_FORMAT_DOUBLE as Double;
-    pub use mpv_sys::mpv_format_MPV_FORMAT_FLAG as Flag;
-    pub use mpv_sys::mpv_format_MPV_FORMAT_INT64 as Int64;
-    pub use mpv_sys::mpv_format_MPV_FORMAT_NONE as None;
-    pub use mpv_sys::mpv_format_MPV_FORMAT_OSD_STRING as OsdString;
-    pub use mpv_sys::mpv_format_MPV_FORMAT_STRING as String;
+    pub use libmpv_sys::mpv_format_MPV_FORMAT_DOUBLE as Double;
+    pub use libmpv_sys::mpv_format_MPV_FORMAT_FLAG as Flag;
+    pub use libmpv_sys::mpv_format_MPV_FORMAT_INT64 as Int64;
+    pub use libmpv_sys::mpv_format_MPV_FORMAT_NONE as None;
+    pub use libmpv_sys::mpv_format_MPV_FORMAT_OSD_STRING as OsdString;
+    pub use libmpv_sys::mpv_format_MPV_FORMAT_STRING as String;
 }
 
-/// An mpv_sys mpv error.
-pub use mpv_sys::mpv_error as MpvError;
+/// An libmpv_sys mpv error.
+pub use libmpv_sys::mpv_error as MpvError;
 pub mod mpv_error {
-    pub use mpv_sys::mpv_error_MPV_ERROR_AO_INIT_FAILED as AoInitFailed;
-    pub use mpv_sys::mpv_error_MPV_ERROR_COMMAND as Command;
-    pub use mpv_sys::mpv_error_MPV_ERROR_EVENT_QUEUE_FULL as EventQueueFull;
-    pub use mpv_sys::mpv_error_MPV_ERROR_GENERIC as Generic;
-    pub use mpv_sys::mpv_error_MPV_ERROR_INVALID_PARAMETER as InvalidParameter;
-    pub use mpv_sys::mpv_error_MPV_ERROR_LOADING_FAILED as LoadingFailed;
-    pub use mpv_sys::mpv_error_MPV_ERROR_NOMEM as NoMem;
-    pub use mpv_sys::mpv_error_MPV_ERROR_NOTHING_TO_PLAY as NothingToPlay;
-    pub use mpv_sys::mpv_error_MPV_ERROR_NOT_IMPLEMENTED as NotImplemented;
-    pub use mpv_sys::mpv_error_MPV_ERROR_OPTION_ERROR as OptionError;
-    pub use mpv_sys::mpv_error_MPV_ERROR_OPTION_FORMAT as OptionFormat;
-    pub use mpv_sys::mpv_error_MPV_ERROR_OPTION_NOT_FOUND as OptionNotFound;
-    pub use mpv_sys::mpv_error_MPV_ERROR_PROPERTY_ERROR as PropertyError;
-    pub use mpv_sys::mpv_error_MPV_ERROR_PROPERTY_FORMAT as PropertyFormat;
-    pub use mpv_sys::mpv_error_MPV_ERROR_PROPERTY_NOT_FOUND as PropertyNotFound;
-    pub use mpv_sys::mpv_error_MPV_ERROR_PROPERTY_UNAVAILABLE as PropertyUnavailable;
-    pub use mpv_sys::mpv_error_MPV_ERROR_SUCCESS as Success;
-    pub use mpv_sys::mpv_error_MPV_ERROR_UNINITIALIZED as Uninitialized;
-    pub use mpv_sys::mpv_error_MPV_ERROR_UNKNOWN_FORMAT as UnknownFormat;
-    pub use mpv_sys::mpv_error_MPV_ERROR_UNSUPPORTED as Unsupported;
-    pub use mpv_sys::mpv_error_MPV_ERROR_VO_INIT_FAILED as VoInitFailed;
+    pub use libmpv_sys::mpv_error_MPV_ERROR_AO_INIT_FAILED as AoInitFailed;
+    pub use libmpv_sys::mpv_error_MPV_ERROR_COMMAND as Command;
+    pub use libmpv_sys::mpv_error_MPV_ERROR_EVENT_QUEUE_FULL as EventQueueFull;
+    pub use libmpv_sys::mpv_error_MPV_ERROR_GENERIC as Generic;
+    pub use libmpv_sys::mpv_error_MPV_ERROR_INVALID_PARAMETER as InvalidParameter;
+    pub use libmpv_sys::mpv_error_MPV_ERROR_LOADING_FAILED as LoadingFailed;
+    pub use libmpv_sys::mpv_error_MPV_ERROR_NOMEM as NoMem;
+    pub use libmpv_sys::mpv_error_MPV_ERROR_NOTHING_TO_PLAY as NothingToPlay;
+    pub use libmpv_sys::mpv_error_MPV_ERROR_NOT_IMPLEMENTED as NotImplemented;
+    pub use libmpv_sys::mpv_error_MPV_ERROR_OPTION_ERROR as OptionError;
+    pub use libmpv_sys::mpv_error_MPV_ERROR_OPTION_FORMAT as OptionFormat;
+    pub use libmpv_sys::mpv_error_MPV_ERROR_OPTION_NOT_FOUND as OptionNotFound;
+    pub use libmpv_sys::mpv_error_MPV_ERROR_PROPERTY_ERROR as PropertyError;
+    pub use libmpv_sys::mpv_error_MPV_ERROR_PROPERTY_FORMAT as PropertyFormat;
+    pub use libmpv_sys::mpv_error_MPV_ERROR_PROPERTY_NOT_FOUND as PropertyNotFound;
+    pub use libmpv_sys::mpv_error_MPV_ERROR_PROPERTY_UNAVAILABLE as PropertyUnavailable;
+    pub use libmpv_sys::mpv_error_MPV_ERROR_SUCCESS as Success;
+    pub use libmpv_sys::mpv_error_MPV_ERROR_UNINITIALIZED as Uninitialized;
+    pub use libmpv_sys::mpv_error_MPV_ERROR_UNKNOWN_FORMAT as UnknownFormat;
+    pub use libmpv_sys::mpv_error_MPV_ERROR_UNSUPPORTED as Unsupported;
+    pub use libmpv_sys::mpv_error_MPV_ERROR_VO_INIT_FAILED as VoInitFailed;
 }
 
 /// Log verbosity level.
-pub use mpv_sys::mpv_log_level as LogLevel;
+pub use libmpv_sys::mpv_log_level as LogLevel;
 pub mod mpv_log_level {
-    pub use mpv_sys::mpv_log_level_MPV_LOG_LEVEL_DEBUG as Debug;
-    pub use mpv_sys::mpv_log_level_MPV_LOG_LEVEL_ERROR as Error;
-    pub use mpv_sys::mpv_log_level_MPV_LOG_LEVEL_FATAL as Fatal;
-    pub use mpv_sys::mpv_log_level_MPV_LOG_LEVEL_INFO as Info;
-    pub use mpv_sys::mpv_log_level_MPV_LOG_LEVEL_NONE as None;
-    pub use mpv_sys::mpv_log_level_MPV_LOG_LEVEL_TRACE as Trace;
-    pub use mpv_sys::mpv_log_level_MPV_LOG_LEVEL_V as V;
-    pub use mpv_sys::mpv_log_level_MPV_LOG_LEVEL_WARN as Warn;
+    pub use libmpv_sys::mpv_log_level_MPV_LOG_LEVEL_DEBUG as Debug;
+    pub use libmpv_sys::mpv_log_level_MPV_LOG_LEVEL_ERROR as Error;
+    pub use libmpv_sys::mpv_log_level_MPV_LOG_LEVEL_FATAL as Fatal;
+    pub use libmpv_sys::mpv_log_level_MPV_LOG_LEVEL_INFO as Info;
+    pub use libmpv_sys::mpv_log_level_MPV_LOG_LEVEL_NONE as None;
+    pub use libmpv_sys::mpv_log_level_MPV_LOG_LEVEL_TRACE as Trace;
+    pub use libmpv_sys::mpv_log_level_MPV_LOG_LEVEL_V as V;
+    pub use libmpv_sys::mpv_log_level_MPV_LOG_LEVEL_WARN as Warn;
 }
 
 /// The reason a file stopped.
-pub use mpv_sys::mpv_end_file_reason as EndFileReason;
+pub use libmpv_sys::mpv_end_file_reason as EndFileReason;
 pub mod mpv_end_file_reason {
-    pub use mpv_sys::mpv_end_file_reason_MPV_END_FILE_REASON_EOF as Eof;
-    pub use mpv_sys::mpv_end_file_reason_MPV_END_FILE_REASON_ERROR as Error;
-    pub use mpv_sys::mpv_end_file_reason_MPV_END_FILE_REASON_QUIT as Quit;
-    pub use mpv_sys::mpv_end_file_reason_MPV_END_FILE_REASON_REDIRECT as Redirect;
-    pub use mpv_sys::mpv_end_file_reason_MPV_END_FILE_REASON_STOP as Stop;
+    pub use libmpv_sys::mpv_end_file_reason_MPV_END_FILE_REASON_EOF as Eof;
+    pub use libmpv_sys::mpv_end_file_reason_MPV_END_FILE_REASON_ERROR as Error;
+    pub use libmpv_sys::mpv_end_file_reason_MPV_END_FILE_REASON_QUIT as Quit;
+    pub use libmpv_sys::mpv_end_file_reason_MPV_END_FILE_REASON_REDIRECT as Redirect;
+    pub use libmpv_sys::mpv_end_file_reason_MPV_END_FILE_REASON_STOP as Stop;
 }
