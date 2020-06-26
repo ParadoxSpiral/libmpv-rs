@@ -16,7 +16,7 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-use std::{ffi::NulError, os::raw as ctype, rc::Rc, str::Utf8Error};
+use std::{error, ffi::NulError, fmt, os::raw as ctype, rc::Rc, str::Utf8Error};
 
 #[allow(missing_docs)]
 pub type Result<T> = ::std::result::Result<T, Error>;
@@ -36,6 +36,12 @@ pub enum Error {
     Raw(crate::MpvError),
 }
 
+impl fmt::Display for Error {
+    fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        todo!()
+    }
+}
+
 impl From<NulError> for Error {
     fn from(_other: NulError) -> Error {
         Error::Null
@@ -51,3 +57,5 @@ impl From<crate::MpvError> for Error {
         Error::Raw(other)
     }
 }
+
+impl error::Error for Error {}
