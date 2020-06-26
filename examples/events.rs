@@ -16,12 +16,9 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-use mpv::events::*;
-use mpv::*;
+use mpv::{events::*, *};
 
-use std::env;
-use std::thread;
-use std::time::Duration;
+use std::{env, thread, time::Duration};
 
 fn main() {
     let path = env::args()
@@ -33,7 +30,7 @@ fn main() {
     mpv.set_property("volume", 15).unwrap();
     mpv.set_property("vo", "null").unwrap();
 
-    let ev_ctx = mpv.create_event_context().unwrap();
+    let ev_ctx = mpv.create_event_context();
     ev_ctx.disable_deprecated_events().unwrap();
     ev_ctx.observe_property("volume", Format::Int64, 0).unwrap();
 

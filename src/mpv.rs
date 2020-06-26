@@ -16,50 +16,6 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-mod errors {
-    use std::ffi::NulError;
-    use std::os::raw as ctype;
-    use std::rc::Rc;
-    use std::str::Utf8Error;
-
-    #[allow(missing_docs)]
-    pub type Result<T> = ::std::result::Result<T, Error>;
-
-    #[allow(missing_docs)]
-    #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-    pub enum Error {
-        Loadfiles {
-            index: usize,
-            error: Rc<Error>,
-        },
-        VersionMismatch {
-            linked: ctype::c_ulong,
-            loaded: ctype::c_ulong,
-        },
-        InvalidUtf8,
-        Null,
-        Raw(crate::MpvError),
-    }
-
-    impl From<NulError> for Error {
-        fn from(_other: NulError) -> Error {
-            Error::Null
-        }
-    }
-    impl From<Utf8Error> for Error {
-        fn from(_other: Utf8Error) -> Error {
-            Error::InvalidUtf8
-        }
-    }
-    impl From<crate::MpvError> for Error {
-        fn from(other: crate::MpvError) -> Error {
-            Error::Raw(other)
-        }
-    }
-}
-
-pub use self::errors::*;
-
 macro_rules! mpv_cstr_to_str {
     ($cstr: expr) => {
         std::ffi::CStr::from_ptr($cstr)
@@ -68,24 +24,28 @@ macro_rules! mpv_cstr_to_str {
     };
 }
 
+mod errors;
+
 /// Event handling
 pub mod events;
+/// Custom protocols (`protocol://$url`) for playback
 #[cfg(feature = "protocols")]
-/// Custom protocols
 pub mod protocol;
-#[cfg(feature = "render")]
 /// Custom rendering
+#[cfg(feature = "render")]
 pub mod render;
 
+pub use self::errors::*;
 use super::*;
 
-use std::ffi::CString;
-use std::mem::MaybeUninit;
-use std::ops::Deref;
-use std::os::raw as ctype;
-use std::ptr::{self, NonNull};
-#[cfg(feature = "protocols")]
-use std::sync::atomic::AtomicBool;
+use std::{
+    ffi::CString,
+    mem::MaybeUninit,
+    ops::Deref,
+    os::raw as ctype,
+    ptr::{self, NonNull},
+    sync::atomic::AtomicBool,
+};
 
 fn mpv_err<T>(ret: T, err: ctype::c_int) -> Result<T> {
     if err == 0 {
@@ -95,7 +55,6 @@ fn mpv_err<T>(ret: T, err: ctype::c_int) -> Result<T> {
     }
 }
 
-#[allow(missing_docs)]
 /// This trait describes which types are allowed to be passed to getter mpv APIs.
 pub unsafe trait GetData: Sized {
     #[doc(hidden)]
@@ -107,7 +66,6 @@ pub unsafe trait GetData: Sized {
     fn get_format() -> Format;
 }
 
-#[allow(missing_docs)]
 /// This trait describes which types are allowed to be passed to setter mpv APIs.
 pub unsafe trait SetData: Sized {
     #[doc(hidden)]
@@ -234,7 +192,6 @@ unsafe impl<'a> SetData for &'a str {
     }
 }
 
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 /// Subset of `mpv_format` used by the public API.
 pub enum Format {
@@ -276,6 +233,7 @@ impl FileState {
     }
 }
 
+/// The central mpv context.
 pub struct Mpv {
     /// The handle to the mpv core
     pub ctx: NonNull<mpv_sys::mpv_handle>,
@@ -311,9 +269,9 @@ impl Mpv {
         if ctx.is_null() {
             return Err(Error::Null);
         }
-        mpv_err((), unsafe { mpv_sys::mpv_initialize(ctx) }).or_else(|err| {
+        mpv_err((), unsafe { mpv_sys::mpv_initialize(ctx) }).map_err(|err| {
             unsafe { mpv_sys::mpv_terminate_destroy(ctx) };
-            Err(err)
+            err
         })?;
 
         Ok(Mpv {
@@ -335,8 +293,7 @@ impl Mpv {
     }
 
     /// Send a command to the `Mpv` instance. This uses `mpv_command_string` internally,
-    /// so that the syntax is the same as described in the [manual for the input.conf]
-    /// (https://mpv.io/manual/master/#list-of-input-commands).
+    /// so that the syntax is the same as described in the [manual for the input.conf](https://mpv.io/manual/master/#list-of-input-commands).
     ///
     /// Note that you may have to escape strings with `""` when they contain spaces.
     pub fn command(&self, name: &str, args: &[&str]) -> Result<()> {
@@ -478,8 +435,8 @@ impl Mpv {
     /// extension is missing or unknown is arbitrary). If the file already exists, it's overwritten.
     /// Like all input command parameters, the filename is subject to property expansion as
     /// described in [Property Expansion](https://mpv.io/manual/master/#property-expansion)."
-    pub fn screenshot_subtitles<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<()> {
-        if let Some(path) = path.into() {
+    pub fn screenshot_subtitles(&self, path: Option<&str>) -> Result<()> {
+        if let Some(path) = path {
             self.command("screenshot", &[&format!("\"{}\"", path), "subtitles"])
         } else {
             self.command("screenshot", &["subtitles"])
@@ -488,8 +445,8 @@ impl Mpv {
 
     /// "Like subtitles, but typically without OSD or subtitles. The exact behavior
     /// depends on the selected video output."
-    pub fn screenshot_video<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<()> {
-        if let Some(path) = path.into() {
+    pub fn screenshot_video(&self, path: Option<&str>) -> Result<()> {
+        if let Some(path) = path {
             self.command("screenshot", &[&format!("\"{}\"", path), "video"])
         } else {
             self.command("screenshot", &["video"])
@@ -499,8 +456,8 @@ impl Mpv {
     /// "Save the contents of the mpv window. Typically scaled, with OSD and subtitles. The exact
     /// behaviour depends on the selected video output, and if no support is available,
     /// this will act like video.".
-    pub fn screenshot_window<'a, A: Into<Option<&'a str>>>(&self, path: A) -> Result<()> {
-        if let Some(path) = path.into() {
+    pub fn screenshot_window(&self, path: Option<&str>) -> Result<()> {
+        if let Some(path) = path {
             self.command("screenshot", &[&format!("\"{}\"", path), "window"])
         } else {
             self.command("screenshot", &["window"])
@@ -544,22 +501,19 @@ impl Mpv {
     /// # Peculiarities
     /// `loadfile` is kind of asynchronous, any additional option is set during loading,
     /// [specifics](https://github.com/mpv-player/mpv/issues/4089).
-    pub fn playlist_load_files<'a, A>(&self, files: &[(&str, FileState, A)]) -> Result<()>
-    where
-        A: Into<Option<&'a str>> + Clone,
-    {
+    pub fn playlist_load_files(&self, files: &[(&str, FileState, Option<&str>)]) -> Result<()> {
         for (i, elem) in files.iter().enumerate() {
-            let args = elem.2.clone().into().unwrap_or("");
+            let args = elem.2.unwrap_or("");
 
             let ret = self.command(
                 "loadfile",
                 &[&format!("\"{}\"", elem.0), elem.1.val(), args],
             );
 
-            if ret.is_err() {
+            if let Err(err) = ret {
                 return Err(Error::Loadfiles {
                     index: i,
-                    error: ::std::rc::Rc::new(ret.unwrap_err()),
+                    error: ::std::rc::Rc::new(err),
                 });
             }
         }
@@ -608,13 +562,13 @@ impl Mpv {
     ///
     /// # Panics
     /// If a language but not title was specified.
-    pub fn subtitle_add_select<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'b str>>>(
+    pub fn subtitle_add_select(
         &self,
         path: &str,
-        title: A,
-        lang: B,
+        title: Option<&str>,
+        lang: Option<&str>,
     ) -> Result<()> {
-        match (title.into(), lang.into()) {
+        match (title, lang) {
             (None, None) => self.command("sub-add", &[&format!("\"{}\"", path), "select"]),
             (Some(t), None) => self.command("sub-add", &[&format!("\"{}\"", path), "select", t]),
             (None, Some(_)) => panic!("Given subtitle language, but missing title"),
@@ -631,13 +585,13 @@ impl Mpv {
     ///
     /// # Panics
     /// If a language but not title was specified.
-    pub fn subtitle_add_auto<'a, 'b, A: Into<Option<&'a str>>, B: Into<Option<&'b str>>>(
+    pub fn subtitle_add_auto(
         &self,
         path: &str,
-        title: A,
-        lang: B,
+        title: Option<&str>,
+        lang: Option<&str>,
     ) -> Result<()> {
-        match (title.into(), lang.into()) {
+        match (title, lang) {
             (None, None) => self.command("sub-add", &[&format!("\"{}\"", path), "auto"]),
             (Some(t), None) => self.command("sub-add", &[&format!("\"{}\"", path), "auto", t]),
             (Some(t), Some(l)) => {
@@ -657,8 +611,8 @@ impl Mpv {
 
     /// "Remove the given subtitle track. If the id argument is missing, remove the current
     /// track. (Works on external subtitle files only.)"
-    pub fn subtitle_remove<A: Into<Option<usize>>>(&self, index: A) -> Result<()> {
-        if let Some(idx) = index.into() {
+    pub fn subtitle_remove(&self, index: Option<usize>) -> Result<()> {
+        if let Some(idx) = index {
             self.command("sub-remove", &[&format!("{}", idx)])
         } else {
             self.command("sub-remove", &[])
@@ -667,8 +621,8 @@ impl Mpv {
 
     /// "Reload the given subtitle track. If the id argument is missing, reload the current
     /// track. (Works on external subtitle files only.)"
-    pub fn subtitle_reload<A: Into<Option<usize>>>(&self, index: A) -> Result<()> {
-        if let Some(idx) = index.into() {
+    pub fn subtitle_reload(&self, index: Option<usize>) -> Result<()> {
+        if let Some(idx) = index {
             self.command("sub-reload", &[&format!("{}", idx)])
         } else {
             self.command("sub-reload", &[])

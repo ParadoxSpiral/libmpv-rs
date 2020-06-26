@@ -44,13 +44,12 @@ fn properties() {
         "test-data/speech_12kbps_mb.wav",
         FileState::AppendPlay,
         None,
-    )]).unwrap();
+    )])
+    .unwrap();
     thread::sleep(Duration::from_millis(250));
 
     let title: MpvStr = mpv.get_property("media-title").unwrap();
-    assert_eq!(
-        &*title, "speech_12kbps_mb.wav"
-    );
+    assert_eq!(&*title, "speech_12kbps_mb.wav");
 }
 
 macro_rules! assert_event_occurs {
@@ -72,7 +71,7 @@ macro_rules! assert_event_occurs {
 #[test]
 fn events() {
     let mpv = Mpv::new().unwrap();
-    let ev_ctx = mpv.create_event_context().unwrap();
+    let ev_ctx = mpv.create_event_context();
     ev_ctx.disable_deprecated_events().unwrap();
 
     ev_ctx.observe_property("volume", Format::Int64, 0).unwrap();
@@ -121,11 +120,7 @@ fn events() {
             reply_userdata: 1,
         })
     );
-    assert_event_occurs!(
-        ev_ctx,
-        20.,
-        Err(Error::Raw(mpv_error::UnknownFormat))
-    );
+    assert_event_occurs!(ev_ctx, 20., Err(Error::Raw(mpv_error::UnknownFormat)));
     assert!(ev_ctx.wait_event(3.).is_none());
 
     mpv.playlist_load_files(&[(

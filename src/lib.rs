@@ -16,8 +16,6 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-#![warn(missing_docs)]
-
 //! This crate provides abstractions for
 //! [libmpv](https://github.com/mpv-player/mpv/tree/master/libmpv) of the
 //! [mpv media player](https://github.com/mpv-player/mpv).
@@ -32,21 +30,15 @@
 //!
 //! See the 'examples' directory in the crate root.
 
-// TODO: clean up docs in general
-
 // Procedure for updating to new libmpv:
 // - make any nessecary API change (if so, bump crate version)
 // - update MPV_CLIENT_API consts in lib.rs
-// - update constants in build.rs
 // - run tests and examples to test whether they still work
 
 use std::os::raw as ctype;
 
-#[allow(missing_docs)]
 pub const MPV_CLIENT_API_MAJOR: ctype::c_ulong = 1;
-#[allow(missing_docs)]
 pub const MPV_CLIENT_API_MINOR: ctype::c_ulong = 108;
-#[allow(missing_docs)]
 pub const MPV_CLIENT_API_VERSION: ctype::c_ulong =
     MPV_CLIENT_API_MAJOR << 16 | MPV_CLIENT_API_MINOR;
 
@@ -59,7 +51,6 @@ pub use crate::mpv::*;
 /// A format mpv can use.
 pub use mpv_sys::mpv_format as MpvFormat;
 pub mod mpv_format {
-    #![allow(missing_docs)]
     pub use mpv_sys::mpv_format_MPV_FORMAT_DOUBLE as Double;
     pub use mpv_sys::mpv_format_MPV_FORMAT_FLAG as Flag;
     pub use mpv_sys::mpv_format_MPV_FORMAT_INT64 as Int64;
@@ -68,10 +59,9 @@ pub mod mpv_format {
     pub use mpv_sys::mpv_format_MPV_FORMAT_STRING as String;
 }
 
-/// A mpv_sys mpv error.
+/// An mpv_sys mpv error.
 pub use mpv_sys::mpv_error as MpvError;
 pub mod mpv_error {
-    #![allow(missing_docs)]
     pub use mpv_sys::mpv_error_MPV_ERROR_AO_INIT_FAILED as AoInitFailed;
     pub use mpv_sys::mpv_error_MPV_ERROR_COMMAND as Command;
     pub use mpv_sys::mpv_error_MPV_ERROR_EVENT_QUEUE_FULL as EventQueueFull;
@@ -98,7 +88,6 @@ pub mod mpv_error {
 /// Log verbosity level.
 pub use mpv_sys::mpv_log_level as LogLevel;
 pub mod mpv_log_level {
-    #![allow(missing_docs)]
     pub use mpv_sys::mpv_log_level_MPV_LOG_LEVEL_DEBUG as Debug;
     pub use mpv_sys::mpv_log_level_MPV_LOG_LEVEL_ERROR as Error;
     pub use mpv_sys::mpv_log_level_MPV_LOG_LEVEL_FATAL as Fatal;
@@ -112,7 +101,6 @@ pub mod mpv_log_level {
 /// The reason a file stopped.
 pub use mpv_sys::mpv_end_file_reason as EndFileReason;
 pub mod mpv_end_file_reason {
-    #![allow(missing_docs)]
     pub use mpv_sys::mpv_end_file_reason_MPV_END_FILE_REASON_EOF as Eof;
     pub use mpv_sys::mpv_end_file_reason_MPV_END_FILE_REASON_ERROR as Error;
     pub use mpv_sys::mpv_end_file_reason_MPV_END_FILE_REASON_QUIT as Quit;

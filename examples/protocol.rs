@@ -16,22 +16,20 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-use mpv::*;
-
-use std::env;
-use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
-use std::mem;
-use std::slice;
-use std::thread;
-use std::time::Duration;
+use std::{
+    env,
+    fs::File,
+    io::{Read, Seek, SeekFrom},
+    mem, thread,
+    time::Duration,
+};
 
 #[cfg(all(not(test), not(feature = "protocols")))]
 compile_error!("The feature `protocols` needs to be enabled for this example`");
 
 #[cfg(feature = "protocols")]
 fn main() {
-    use mpv::protocol::*;
+    use mpv::{protocol::*, *};
 
     let path = format!(
         "filereader://{}",
@@ -55,7 +53,7 @@ fn main() {
     let mpv = Mpv::new().unwrap();
     mpv.set_property("volume", 25).unwrap();
 
-    let proto_ctx = mpv.create_protocol_context(1).unwrap();
+    let proto_ctx = mpv.create_protocol_context();
     proto_ctx.register(protocol).unwrap();
 
     mpv.playlist_load_files(&[(&path, FileState::AppendPlay, None)])
@@ -80,10 +78,9 @@ fn close(_: Box<File>) {
     println!("Closing file, bye bye~~");
 }
 
-fn read(cookie: &mut File, buf: *mut i8, nbytes: u64) -> i64 {
+fn read(cookie: &mut File, buf: &mut [i8]) -> i64 {
     unsafe {
-        let slice = slice::from_raw_parts_mut(buf, nbytes as _);
-        let forbidden_magic = mem::transmute::<&mut [i8], &mut [u8]>(slice);
+        let forbidden_magic = mem::transmute::<&mut [i8], &mut [u8]>(buf);
 
         cookie.read(forbidden_magic).unwrap() as _
     }

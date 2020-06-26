@@ -16,9 +16,6 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-//! This allows registering custom protocols, which then can be used via
-//! `PlaylistOp::Loadfiles`.
-
 use super::*;
 
 use std::alloc::{self, Layout};
@@ -29,13 +26,15 @@ use std::os::raw as ctype;
 use std::panic;
 use std::panic::RefUnwindSafe;
 use std::ptr::{self, NonNull};
-use std::sync::{Mutex, atomic::Ordering};
+use std::slice;
+use std::sync::{atomic::Ordering, Mutex};
 
 impl Mpv {
     /// Create a context with which custom protocols can be registered.
     ///
-    /// Returns `None` if a context already exists
-    pub fn create_protocol_context<T, U>(&self, capacity: usize) -> Option<ProtocolContext<T, U>>
+    /// # Panics
+    /// Panics if a context already exists
+    pub fn create_protocol_context<T, U>(&self) -> ProtocolContext<T, U>
     where
         T: RefUnwindSafe,
         U: RefUnwindSafe,
@@ -44,13 +43,9 @@ impl Mpv {
             .protocols_guard
             .compare_and_swap(false, true, Ordering::AcqRel)
         {
-            None
+            panic!("Protocol context already created")
         } else {
-            Some(ProtocolContext::new(
-                self.ctx,
-                capacity,
-                PhantomData::<&Self>,
-            ))
+            ProtocolContext::new(self.ctx, PhantomData::<&Self>)
         }
     }
 }
@@ -62,9 +57,9 @@ pub type StreamClose<T> = fn(Box<T>);
 /// Seek to the given offset. Return the new offset, or either `MpvError::Generic` if seeking
 /// failed or panic.
 pub type StreamSeek<T> = fn(&mut T, i64) -> i64;
-/// Read nbytes into the given buffer.
+/// Target buffer with fixed capacity.
 /// Return either the number of read bytes, `0` on EOF, or either `-1` or panic on error.
-pub type StreamRead<T> = fn(&mut T, *mut ctype::c_char, u64) -> i64;
+pub type StreamRead<T> = fn(&mut T, &mut [ctype::c_char]) -> i64;
 /// Return the total size of the stream in bytes. Panic on error.
 pub type StreamSize<T> = fn(&mut T) -> i64;
 
@@ -92,6 +87,7 @@ where
             ((*data).open_fn)(&mut (*data).user_data, uri),
         );
     });
+
     if ret.is_ok() {
         0
     } else {
@@ -111,11 +107,11 @@ where
     let data = cookie as *mut ProtocolData<T, U>;
 
     let ret = panic::catch_unwind(|| {
-        debug_assert!(!(*data).cookie.is_null());
-        ((*data).read_fn)(&mut *(*data).cookie, buf, nbytes)
+        let slice = slice::from_raw_parts_mut(buf, nbytes as _);
+        ((*data).read_fn)(&mut *(*data).cookie, slice)
     });
-    if ret.is_ok() {
-        ret.unwrap()
+    if let Ok(ret) = ret {
+        ret
     } else {
         -1
     }
@@ -134,8 +130,8 @@ where
 
     let ret =
         panic::catch_unwind(|| (*(*data).seek_fn.as_ref().unwrap())(&mut *(*data).cookie, offset));
-    if ret.is_ok() {
-        ret.unwrap()
+    if let Ok(ret) = ret {
+        ret
     } else {
         mpv_error::Generic as _
     }
@@ -153,8 +149,8 @@ where
     }
 
     let ret = panic::catch_unwind(|| (*(*data).size_fn.as_ref().unwrap())(&mut *(*data).cookie));
-    if ret.is_ok() {
-        ret.unwrap()
+    if let Ok(ret) = ret {
+        ret
     } else {
         mpv_error::Unsupported as _
     }
@@ -196,12 +192,11 @@ unsafe impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> Sync for ProtocolContex
 impl<'parent, T: RefUnwindSafe, U: RefUnwindSafe> ProtocolContext<'parent, T, U> {
     fn new(
         ctx: NonNull<mpv_sys::mpv_handle>,
-        capacity: usize,
         marker: PhantomData<&'parent Mpv>,
     ) -> ProtocolContext<'parent, T, U> {
         ProtocolContext {
             ctx,
-            protocols: Mutex::new(Vec::with_capacity(capacity)),
+            protocols: Mutex::new(Vec::new()),
             _does_not_outlive: marker,
         }
     }

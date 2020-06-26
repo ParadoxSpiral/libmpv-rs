@@ -30,7 +30,6 @@ use std::sync::atomic::Ordering;
 /// An `Event`'s ID.
 pub use mpv_sys::mpv_event_id as EventId;
 pub mod mpv_event_id {
-    #![allow(missing_docs)]
     pub use mpv_sys::mpv_event_id_MPV_EVENT_AUDIO_RECONFIG as AudioReconfig;
     pub use mpv_sys::mpv_event_id_MPV_EVENT_CLIENT_MESSAGE as ClientMessage;
     pub use mpv_sys::mpv_event_id_MPV_EVENT_COMMAND_REPLY as CommandReply;
@@ -52,26 +51,27 @@ pub mod mpv_event_id {
 }
 
 impl Mpv {
-    /// Create a context with which custom protocols can be registered.
+    /// Create a context that can be used to wait for events and control which events are listened
+    /// for.
     ///
-    /// Returns `None` if a context already exists
-    pub fn create_event_context(&self) -> Option<EventContext> {
+    /// # Panics
+    /// Panics if a context already exists
+    pub fn create_event_context(&self) -> EventContext {
         if self
             .events_guard
             .compare_and_swap(false, true, Ordering::AcqRel)
         {
-            None
+            panic!("Event context already creates")
         } else {
-            Some(EventContext {
+            EventContext {
                 ctx: self.ctx,
                 _does_not_outlive: PhantomData::<&Self>,
-            })
+            }
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-#[allow(missing_docs)]
 /// Data that is returned by both `GetPropertyReply` and `PropertyChange` events.
 pub enum PropertyData<'a> {
     Str(&'a str),
@@ -102,7 +102,6 @@ impl<'a> PropertyData<'a> {
     }
 }
 
-#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub enum Event<'a> {
     /// Received when the player is shutting down
@@ -148,6 +147,7 @@ pub enum Event<'a> {
     Deprecated(mpv_event),
 }
 
+/// Context to listen to events.
 pub struct EventContext<'parent> {
     ctx: NonNull<mpv_sys::mpv_handle>,
     _does_not_outlive: PhantomData<&'parent Mpv>,
