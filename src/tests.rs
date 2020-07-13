@@ -19,6 +19,7 @@
 use crate::events::{Event, PropertyData};
 use crate::*;
 
+use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;
 
@@ -145,4 +146,75 @@ fn events() {
     assert_event_occurs!(ev_ctx, 3., Ok(Event::AudioReconfig));
     assert_event_occurs!(ev_ctx, 3., Ok(Event::PlaybackRestart));
     assert!(ev_ctx.wait_event(3.).is_none());
+}
+
+#[test]
+fn node_map() -> Result<()> {
+    let mpv = Mpv::new()?;
+
+    mpv.playlist_load_files(&[(
+        "test-data/speech_12kbps_mb.wav",
+        FileState::AppendPlay,
+        None,
+    )])?;
+
+    thread::sleep(Duration::from_millis(250));
+    let audio_params: MpvNode = mpv.get_property("audio-params")?;
+
+    if let MpvNodeValue::Map(data) = audio_params.value()? {
+        let params: HashMap<&str, MpvNode> = data.collect();
+
+        assert_eq!(params.len(), 5);
+
+        let format = params.get("format").unwrap().value()?;
+        assert!(matches!(format, MpvNodeValue::String("s16")));
+
+        let samplerate = params.get("samplerate").unwrap().value()?;
+        assert!(matches!(samplerate, MpvNodeValue::Int64(48_000)));
+
+        let channels = params.get("channels").unwrap().value()?;
+        assert!(matches!(channels, MpvNodeValue::String("mono")));
+
+        let hr_channels = params.get("hr-channels").unwrap().value()?;
+        assert!(matches!(hr_channels, MpvNodeValue::String("mono")));
+
+        let channel_count = params.get("channel-count").unwrap().value()?;
+        assert!(matches!(channel_count, MpvNodeValue::Int64(1)));
+
+        Ok(())
+    } else {
+        Err(Error::Raw(mpv_error::UnknownFormat))
+    }
+}
+
+#[test]
+fn node_array() -> Result<()> {
+    let mpv = Mpv::new()?;
+
+    mpv.playlist_load_files(&[(
+        "test-data/speech_12kbps_mb.wav",
+        FileState::AppendPlay,
+        None,
+    )])?;
+
+    thread::sleep(Duration::from_millis(250));
+    let playlist: MpvNode = mpv.get_property("playlist")?;
+
+    match playlist.value()? {
+        MpvNodeValue::Array(data) => {
+            let items: Vec<MpvNode> = data.collect();
+            assert_eq!(items.len(), 1);
+
+            match items[0].value()? {
+                MpvNodeValue::Map(data) => {
+                    let track: HashMap<&str, MpvNode> = data.collect();
+                    let filename = track.get("filename").unwrap().value()?;
+                    assert!(matches!(filename, MpvNodeValue::String("test-data/speech_12kbps_mb.wav")));
+                    Ok(())
+                }
+                _ => Err(Error::Raw(mpv_error::UnknownFormat)),
+            }
+        }
+        _ => Err(Error::Raw(mpv_error::UnknownFormat)),
+    }
 }

@@ -16,6 +16,9 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
+use std::convert::TryInto;
+use std::marker::PhantomData;
+
 macro_rules! mpv_cstr_to_str {
     ($cstr: expr) => {
         std::ffi::CStr::from_ptr($cstr)
@@ -96,6 +99,114 @@ unsafe impl GetData for i64 {
     }
 }
 
+#[derive(Debug)]
+pub enum MpvNodeValue<'a> {
+    String(&'a str),
+    Flag(bool),
+    Int64(i64),
+    Double(f64),
+    Array(MpvNodeArrayIter),
+    Map(MpvNodeMapIter<'a>),
+    None,
+}
+
+#[derive(Debug)]
+pub struct MpvNodeArrayIter {
+    curr: i32,
+    list: libmpv_sys::mpv_node_list,
+}
+
+impl Iterator for MpvNodeArrayIter {
+    type Item = MpvNode;
+
+    fn next(&mut self) -> Option<MpvNode> {
+        if self.curr >= self.list.num {
+            None
+        } else {
+            let offset = self.curr.try_into().ok()?;
+            self.curr += 1;
+            Some(MpvNode(unsafe { *self.list.values.offset(offset) }))
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct MpvNodeMapIter<'a> {
+    curr: i32,
+    list: libmpv_sys::mpv_node_list,
+    phantom: PhantomData<&'a str>,
+}
+
+impl<'a> Iterator for MpvNodeMapIter<'a> {
+    type Item = (&'a str, MpvNode);
+
+    fn next(&mut self) -> Option<(&'a str, MpvNode)> {
+        if self.curr >= self.list.num {
+            None
+        } else {
+            let offset = self.curr.try_into().ok()?;
+            let (key, value) = unsafe {
+                (
+                    mpv_cstr_to_str!(*self.list.keys.offset(offset)),
+                    *self.list.values.offset(offset),
+                )
+            };
+            self.curr += 1;
+            Some((key.ok()?, MpvNode(value)))
+        }
+    }
+}
+
+pub struct MpvNode(libmpv_sys::mpv_node);
+
+impl Drop for MpvNode {
+    fn drop(&mut self) {
+        unsafe { libmpv_sys::mpv_free_node_contents(&mut self.0 as *mut libmpv_sys::mpv_node) };
+    }
+}
+
+impl MpvNode {
+    pub fn value(&self) -> Result<MpvNodeValue<'_>> {
+        let node = self.0;
+        Ok(match node.format {
+            mpv_format::Flag => MpvNodeValue::Flag(unsafe { node.u.flag } == 1),
+            mpv_format::Int64 => MpvNodeValue::Int64(unsafe { node.u.int64 }),
+            mpv_format::Double => MpvNodeValue::Double(unsafe { node.u.double_ }),
+            mpv_format::String => {
+                let text = unsafe { mpv_cstr_to_str!(node.u.string) }?;
+                MpvNodeValue::String(text)
+            }
+
+            mpv_format::Array => MpvNodeValue::Array(MpvNodeArrayIter {
+                list: unsafe { *node.u.list },
+                curr: 0,
+            }),
+
+            mpv_format::Map => MpvNodeValue::Map(MpvNodeMapIter {
+                list: unsafe { *node.u.list },
+                curr: 0,
+                phantom: PhantomData,
+            }),
+            mpv_format::None => MpvNodeValue::None,
+            _ => return Err(Error::Raw(mpv_error::PropertyError)),
+        })
+    }
+}
+
+unsafe impl GetData for MpvNode {
+    fn get_from_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(
+        mut fun: F,
+    ) -> Result<MpvNode> {
+        let mut val = MaybeUninit::uninit();
+        let _ = fun(val.as_mut_ptr() as *mut _)?;
+        Ok(MpvNode(unsafe { val.assume_init() }))
+    }
+
+    fn get_format() -> Format {
+        Format::Node
+    }
+}
+
 unsafe impl SetData for i64 {
     fn get_format() -> Format {
         Format::Int64
@@ -103,12 +214,6 @@ unsafe impl SetData for i64 {
 }
 
 unsafe impl GetData for bool {
-    fn get_from_c_void<T, F: FnMut(*mut ctype::c_void) -> Result<T>>(mut fun: F) -> Result<bool> {
-        let mut val = MaybeUninit::uninit();
-        let _ = fun(val.as_mut_ptr() as *mut _)?;
-        Ok(unsafe { val.assume_init() })
-    }
-
     fn get_format() -> Format {
         Format::Flag
     }
@@ -152,6 +257,7 @@ unsafe impl SetData for String {
 }
 
 /// Wrapper around an `&str` returned by mpv, that properly deallocates it with mpv's allocator.
+#[derive(Debug, Hash, Eq, PartialEq)]
 pub struct MpvStr<'a>(&'a str);
 impl<'a> Deref for MpvStr<'a> {
     type Target = str;
@@ -199,6 +305,7 @@ pub enum Format {
     Flag,
     Int64,
     Double,
+    Node,
 }
 
 impl Format {
@@ -208,6 +315,7 @@ impl Format {
             Format::Flag => mpv_format::Flag,
             Format::Int64 => mpv_format::Int64,
             Format::Double => mpv_format::Double,
+            Format::Node => mpv_format::Node,
         }
     }
 }
