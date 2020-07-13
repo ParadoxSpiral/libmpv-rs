@@ -54,6 +54,9 @@ pub mod mpv_format {
     pub use libmpv_sys::mpv_format_MPV_FORMAT_DOUBLE as Double;
     pub use libmpv_sys::mpv_format_MPV_FORMAT_FLAG as Flag;
     pub use libmpv_sys::mpv_format_MPV_FORMAT_INT64 as Int64;
+    pub use libmpv_sys::mpv_format_MPV_FORMAT_NODE as Node;
+    pub use libmpv_sys::mpv_format_MPV_FORMAT_NODE_ARRAY as Array;
+    pub use libmpv_sys::mpv_format_MPV_FORMAT_NODE_MAP as Map;
     pub use libmpv_sys::mpv_format_MPV_FORMAT_NONE as None;
     pub use libmpv_sys::mpv_format_MPV_FORMAT_OSD_STRING as OsdString;
     pub use libmpv_sys::mpv_format_MPV_FORMAT_STRING as String;
