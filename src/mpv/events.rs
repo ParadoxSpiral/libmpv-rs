@@ -245,7 +245,8 @@ impl<'parent> EventContext<'parent> {
             mpv_event_id::None => None,
             mpv_event_id::Shutdown => Some(Ok(Event::Shutdown)),
             mpv_event_id::LogMessage => {
-                let log_message = unsafe { *(event.data as *mut libmpv_sys::mpv_event_log_message) };
+                let log_message =
+                    unsafe { *(event.data as *mut libmpv_sys::mpv_event_log_message) };
 
                 let prefix = unsafe { mpv_cstr_to_str!(log_message.prefix) };
                 Some(prefix.and_then(|prefix| {

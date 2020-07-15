@@ -47,6 +47,7 @@ impl From<NulError> for Error {
         Error::Null
     }
 }
+
 impl From<Utf8Error> for Error {
     fn from(_other: Utf8Error) -> Error {
         Error::InvalidUtf8

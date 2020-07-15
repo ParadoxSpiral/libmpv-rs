@@ -105,18 +105,19 @@ pub enum MpvNodeValue<'a> {
     Flag(bool),
     Int64(i64),
     Double(f64),
-    Array(MpvNodeArrayIter),
+    Array(MpvNodeArrayIter<'a>),
     Map(MpvNodeMapIter<'a>),
     None,
 }
 
 #[derive(Debug)]
-pub struct MpvNodeArrayIter {
+pub struct MpvNodeArrayIter<'parent> {
     curr: i32,
     list: libmpv_sys::mpv_node_list,
+    _does_not_outlive: PhantomData<&'parent MpvNode>,
 }
 
-impl Iterator for MpvNodeArrayIter {
+impl Iterator for MpvNodeArrayIter<'_> {
     type Item = MpvNode;
 
     fn next(&mut self) -> Option<MpvNode> {
@@ -131,16 +132,16 @@ impl Iterator for MpvNodeArrayIter {
 }
 
 #[derive(Debug)]
-pub struct MpvNodeMapIter<'a> {
+pub struct MpvNodeMapIter<'parent> {
     curr: i32,
     list: libmpv_sys::mpv_node_list,
-    phantom: PhantomData<&'a str>,
+    _does_not_outlive: PhantomData<&'parent MpvNode>,
 }
 
-impl<'a> Iterator for MpvNodeMapIter<'a> {
-    type Item = (&'a str, MpvNode);
+impl<'parent> Iterator for MpvNodeMapIter<'parent> {
+    type Item = (&'parent str, MpvNode);
 
-    fn next(&mut self) -> Option<(&'a str, MpvNode)> {
+    fn next(&mut self) -> Option<(&'parent str, MpvNode)> {
         if self.curr >= self.list.num {
             None
         } else {
@@ -180,16 +181,63 @@ impl MpvNode {
             mpv_format::Array => MpvNodeValue::Array(MpvNodeArrayIter {
                 list: unsafe { *node.u.list },
                 curr: 0,
+                _does_not_outlive: PhantomData,
             }),
 
             mpv_format::Map => MpvNodeValue::Map(MpvNodeMapIter {
                 list: unsafe { *node.u.list },
                 curr: 0,
-                phantom: PhantomData,
+                _does_not_outlive: PhantomData,
             }),
             mpv_format::None => MpvNodeValue::None,
             _ => return Err(Error::Raw(mpv_error::PropertyError)),
         })
+    }
+
+    pub fn to_bool(&self) -> Option<bool> {
+        if let MpvNodeValue::Flag(value) = self.value().ok()? {
+            Some(value)
+        } else {
+            None
+        }
+    }
+    pub fn to_i64(&self) -> Option<i64> {
+        if let MpvNodeValue::Int64(value) = self.value().ok()? {
+            Some(value)
+        } else {
+            None
+        }
+    }
+    pub fn to_f64(&self) -> Option<f64> {
+        if let MpvNodeValue::Double(value) = self.value().ok()? {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    pub fn to_str(&self) -> Option<&str> {
+        if let MpvNodeValue::String(value) = self.value().ok()? {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    pub fn to_array(&self) -> Option<MpvNodeArrayIter<'_>> {
+        if let MpvNodeValue::Array(value) = self.value().ok()? {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    pub fn to_map(&self) -> Option<MpvNodeMapIter<'_>> {
+        if let MpvNodeValue::Map(value) = self.value().ok()? {
+            Some(value)
+        } else {
+            None
+        }
     }
 }
 
