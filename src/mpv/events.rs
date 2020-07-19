@@ -71,7 +71,7 @@ impl Mpv {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, Debug)]
 /// Data that is returned by both `GetPropertyReply` and `PropertyChange` events.
 pub enum PropertyData<'a> {
     Str(&'a str),
@@ -79,23 +79,27 @@ pub enum PropertyData<'a> {
     Flag(bool),
     Int64(i64),
     Double(ctype::c_double),
+    Node(&'a MpvNode),
 }
 
 impl<'a> PropertyData<'a> {
-    fn from_raw(format: MpvFormat, ptr: *mut ctype::c_void) -> Result<PropertyData<'a>> {
+    // SAFETY: meant to extract the data from an event property. See `mpv_event_property` in
+    // `client.h`
+    unsafe fn from_raw(format: MpvFormat, ptr: *mut ctype::c_void) -> Result<PropertyData<'a>> {
         assert!(!ptr.is_null());
         match format {
-            mpv_format::Flag => Ok(PropertyData::Flag(unsafe { *(ptr as *mut bool) })),
+            mpv_format::Flag => Ok(PropertyData::Flag(*(ptr as *mut bool))),
             mpv_format::String => {
-                let char_ptr = unsafe { *(ptr as *mut *mut ctype::c_char) };
-                Ok(PropertyData::Str(unsafe { mpv_cstr_to_str!(char_ptr) }?))
+                let char_ptr = *(ptr as *mut *mut ctype::c_char);
+                Ok(PropertyData::Str(mpv_cstr_to_str!(char_ptr)?))
             }
             mpv_format::OsdString => {
-                let char_ptr = unsafe { *(ptr as *mut *mut ctype::c_char) };
-                Ok(PropertyData::OsdStr(unsafe { mpv_cstr_to_str!(char_ptr) }?))
+                let char_ptr = *(ptr as *mut *mut ctype::c_char);
+                Ok(PropertyData::OsdStr(mpv_cstr_to_str!(char_ptr)?))
             }
-            mpv_format::Double => Ok(PropertyData::Double(unsafe { *(ptr as *mut f64) })),
-            mpv_format::Int64 => Ok(PropertyData::Int64(unsafe { *(ptr as *mut i64) })),
+            mpv_format::Double => Ok(PropertyData::Double(*(ptr as *mut f64))),
+            mpv_format::Int64 => Ok(PropertyData::Int64(*(ptr as *mut i64))),
+            mpv_format::Node => Ok(PropertyData::Node(&*(ptr as *mut MpvNode))),
             mpv_format::None => unreachable!(),
             _ => unimplemented!(),
         }
@@ -263,9 +267,12 @@ impl<'parent> EventContext<'parent> {
 
                 let name = unsafe { mpv_cstr_to_str!(property.name) };
                 Some(name.and_then(|name| {
+                    // SAFETY: safe because we are passing format + data from an mpv_event_property
+                    let result = unsafe { PropertyData::from_raw(property.format, property.data) }?;
+
                     Ok(Event::GetPropertyReply {
                         name,
-                        result: PropertyData::from_raw(property.format, property.data)?,
+                        result,
                         reply_userdata: event.reply_userdata,
                     })
                 }))
@@ -319,9 +326,13 @@ impl<'parent> EventContext<'parent> {
                 } else {
                     let name = unsafe { mpv_cstr_to_str!(property.name) };
                     Some(name.and_then(|name| {
+                        // SAFETY: safe because we are passing format + data from an mpv_event_property
+                        let change =
+                            unsafe { PropertyData::from_raw(property.format, property.data) }?;
+
                         Ok(Event::PropertyChange {
                             name,
-                            change: PropertyData::from_raw(property.format, property.data)?,
+                            change,
                             reply_userdata: event.reply_userdata,
                         })
                     }))
