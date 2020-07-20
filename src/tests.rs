@@ -24,6 +24,22 @@ use std::thread;
 use std::time::Duration;
 
 #[test]
+fn initializer() {
+    let mpv = Mpv::with_initializer(|init| {
+        init.set_property("osc", true)?;
+        init.set_property("input-default-bindings", true)?;
+        init.set_property("volume", 30)?;
+
+        Ok(())
+    })
+    .unwrap();
+
+    assert_eq!(true, mpv.get_property("osc").unwrap());
+    assert_eq!(true, mpv.get_property("input-default-bindings").unwrap());
+    assert_eq!(30i64, mpv.get_property("volume").unwrap());
+}
+
+#[test]
 fn properties() {
     let mpv = Mpv::new().unwrap();
     mpv.set_property("volume", 0).unwrap();

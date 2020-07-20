@@ -389,6 +389,24 @@ impl FileState {
     }
 }
 
+/// Context passed to the `initializer` of `Mpv::with_initialzer`.
+pub struct MpvInitializer {
+    ctx: *mut libmpv_sys::mpv_handle,
+}
+
+impl MpvInitializer {
+    /// Set the value of a property.
+    pub fn set_property<T: SetData>(&self, name: &str, data: T) -> Result<()> {
+        let name = CString::new(name)?;
+        let format = T::get_format().as_mpv_format() as _;
+        data.call_as_c_void(|ptr| {
+            mpv_err((), unsafe {
+                libmpv_sys::mpv_set_property(self.ctx, name.as_ptr(), format, ptr)
+            })
+        })
+    }
+}
+
 /// The central mpv context.
 pub struct Mpv {
     /// The handle to the mpv core
@@ -411,8 +429,16 @@ impl Drop for Mpv {
 
 impl Mpv {
     /// Create a new `Mpv`.
-    /// The default settings can be probed by running: `$ mpv --show-profile=libmpv`
+    /// The default settings can be probed by running: `$ mpv --show-profile=libmpv`.
     pub fn new() -> Result<Mpv> {
+        Mpv::with_initializer(|_| Ok(()))
+    }
+
+    /// Create a new `Mpv`.
+    /// The same as `Mpv::new`, but you can set properties before `Mpv` is initialized.
+    pub fn with_initializer<F: FnOnce(MpvInitializer) -> Result<()>>(
+        initializer: F,
+    ) -> Result<Mpv> {
         let api_version = unsafe { libmpv_sys::mpv_client_api_version() };
         if crate::MPV_CLIENT_API_MAJOR != api_version >> 16 {
             return Err(Error::VersionMismatch {
@@ -425,6 +451,8 @@ impl Mpv {
         if ctx.is_null() {
             return Err(Error::Null);
         }
+
+        initializer(MpvInitializer { ctx })?;
         mpv_err((), unsafe { libmpv_sys::mpv_initialize(ctx) }).map_err(|err| {
             unsafe { libmpv_sys::mpv_terminate_destroy(ctx) };
             err
