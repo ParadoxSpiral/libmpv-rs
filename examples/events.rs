@@ -30,7 +30,7 @@ fn main() {
     mpv.set_property("volume", 15).unwrap();
     mpv.set_property("vo", "null").unwrap();
 
-    let ev_ctx = mpv.create_event_context();
+    let mut ev_ctx = mpv.create_event_context();
     ev_ctx.disable_deprecated_events().unwrap();
     ev_ctx.observe_property("volume", Format::Int64, 0).unwrap();
 
