@@ -99,7 +99,7 @@ unsafe impl GetData for i64 {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum MpvNodeValue<'a> {
     String(&'a str),
     Flag(bool),
@@ -110,7 +110,7 @@ pub enum MpvNodeValue<'a> {
     None,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct MpvNodeArrayIter<'parent> {
     curr: i32,
     list: libmpv_sys::mpv_node_list,
@@ -131,7 +131,7 @@ impl Iterator for MpvNodeArrayIter<'_> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct MpvNodeMapIter<'parent> {
     curr: i32,
     list: libmpv_sys::mpv_node_list,
@@ -158,7 +158,7 @@ impl<'parent> Iterator for MpvNodeMapIter<'parent> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct MpvNode(libmpv_sys::mpv_node);
 
 impl Drop for MpvNode {

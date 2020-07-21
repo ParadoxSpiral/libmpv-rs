@@ -71,7 +71,7 @@ impl Mpv {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 /// Data that is returned by both `GetPropertyReply` and `PropertyChange` events.
 pub enum PropertyData<'a> {
     Str(&'a str),
@@ -106,7 +106,7 @@ impl<'a> PropertyData<'a> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Event<'a> {
     /// Received when the player is shutting down
     Shutdown,
