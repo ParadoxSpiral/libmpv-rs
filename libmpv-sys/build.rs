@@ -39,6 +39,7 @@ fn main() {
         .header("include/render.h")
         .header("include/render_gl.h")
         .header("include/stream_cb.h")
+        .impl_debug(true)
         .opaque_type("mpv_handle")
         .opaque_type("mpv_render_context")
         .generate()

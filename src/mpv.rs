@@ -158,6 +158,7 @@ impl<'parent> Iterator for MpvNodeMapIter<'parent> {
     }
 }
 
+#[derive(Debug)]
 pub struct MpvNode(libmpv_sys::mpv_node);
 
 impl Drop for MpvNode {
