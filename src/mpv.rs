@@ -666,12 +666,12 @@ impl Mpv {
 
     /// See `playlist_next_weak`.
     pub fn playlist_previous_weak(&self) -> Result<()> {
-        self.command("playlist-previous", &["weak"])
+        self.command("playlist-prev", &["weak"])
     }
 
     /// See `playlist_next_force`.
     pub fn playlist_previous_force(&self) -> Result<()> {
-        self.command("playlist-previous", &["force"])
+        self.command("playlist-prev", &["force"])
     }
 
     /// The given files are loaded sequentially, returning the index of the current file

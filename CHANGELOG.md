@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+* Fix `playlist_previous_*` commands using wrong mpv command ([issue](https://github.com/ParadoxSpiral/libmpv-rs/issues/17))
 
 ## Version 2.0.0
 * Add method `Mpv::with_initializer` to set options before initialization
