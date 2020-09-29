@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+
+## Version 2.0.1
 * Fix `playlist_previous_*` commands using wrong mpv command ([issue](https://github.com/ParadoxSpiral/libmpv-rs/issues/17))
 * Use local libmpv-sys as dependency except on crates.io
 
