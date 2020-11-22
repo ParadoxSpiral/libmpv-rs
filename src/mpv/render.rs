@@ -16,18 +16,18 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-use libmpv_sys;
 use std::convert::From;
 use std::ffi::{c_void, CStr, CString};
 use std::ptr;
 use std::collections::HashMap;
 use std::mem::MaybeUninit;
-use crate::Result;
+use libmpv_sys::*;
+use crate::{Result, mpv::mpv_err};
 
 type DeleterFn = unsafe fn(*mut c_void);
 
 pub struct RenderContext {
-    ctx: *mut libmpv_sys::mpv_render_context,
+    ctx: *mut mpv_render_context,
     // This is our little dirty bag of raw pointers that need specific
     // deallocation. The rendercontext typically took ownership of these when
     // renderparams were passed.
@@ -121,7 +121,7 @@ unsafe extern "C" fn gpa_wrapper<GLContext>(ctx: *mut c_void, name: *const i8) -
     )
 }
 
-impl<C> From<&OpenGLInitParams<C>> for libmpv_sys::mpv_opengl_init_params {
+impl<C> From<&OpenGLInitParams<C>> for mpv_opengl_init_params {
     fn from(val: &OpenGLInitParams<C>) -> Self {
         Self {
             get_proc_address: Some(gpa_wrapper::<OpenGLInitParams<C>>),
@@ -131,7 +131,7 @@ impl<C> From<&OpenGLInitParams<C>> for libmpv_sys::mpv_opengl_init_params {
     }
 }
 
-impl<C> From<&RenderParam<C>> for libmpv_sys::mpv_render_param {
+impl<C> From<&RenderParam<C>> for mpv_render_param {
     fn from(val: &RenderParam<C>) -> Self {
         let type_ = u32::from(val);
         let data = match val {
@@ -141,7 +141,7 @@ impl<C> From<&RenderParam<C>> for libmpv_sys::mpv_render_param {
                 api_type.as_ptr() as *mut c_void
             }
             RenderParam::InitParams(params) => {
-                Box::into_raw(Box::new(libmpv_sys::mpv_opengl_init_params::from(params))) as *mut c_void
+                Box::into_raw(Box::new(mpv_opengl_init_params::from(params))) as *mut c_void
             }
             RenderParam::FBO(fbo) => Box::into_raw(Box::new(fbo)) as *mut c_void,
             RenderParam::FlipY(flip) => {
@@ -176,14 +176,13 @@ unsafe fn free_void_data<T>(ptr: *mut c_void) {
 }
 
 impl RenderContext {
-    pub(crate) fn new<C>(mpv: &mut libmpv_sys::mpv_handle, params: &Vec<RenderParam<C>>) -> Result<Self> {
-        use crate::mpv::mpv_err;
-        let mut raw_params: Vec<libmpv_sys::mpv_render_param> = Vec::new();
+    pub(crate) fn new<C>(mpv: &mut mpv_handle, params: &Vec<RenderParam<C>>) -> Result<Self> {
+        let mut raw_params: Vec<mpv_render_param> = Vec::new();
         raw_params.reserve(params.len() + 1);
         let mut raw_ptrs: HashMap<*mut c_void, DeleterFn> = HashMap::new();
 
         for p in params.iter() {
-            let raw_param: libmpv_sys::mpv_render_param = p.into();
+            let raw_param: mpv_render_param = p.into();
 
             // The render params are type-erased after they are passed to mpv. This is where we last
             // know their real types, so we keep a deleter here.
@@ -203,16 +202,25 @@ impl RenderContext {
             raw_params.push(raw_param);
         }
         // the raw array must end with type = 0
-        raw_params.push(libmpv_sys::mpv_render_param { type_: 0, data: ptr::null_mut() });
+        raw_params.push(mpv_render_param { type_: 0, data: ptr::null_mut() });
 
         unsafe {
-            let raw_array = Box::into_raw(raw_params.into_boxed_slice()) as *mut libmpv_sys::mpv_render_param;
-            let ctx: libmpv_sys::mpv_render_context = MaybeUninit::uninit().assume_init();
+            let raw_array = Box::into_raw(raw_params.into_boxed_slice()) as *mut mpv_render_param;
+            let ctx: mpv_render_context = MaybeUninit::uninit().assume_init();
             let ctx = Box::new(ctx);
             let mut ctx = Box::into_raw(ctx);
             mpv_err(
                 Self { ctx, raw_ptrs },
-                libmpv_sys::mpv_render_context_create(&mut ctx, &mut *mpv, raw_array)
+                mpv_render_context_create(&mut ctx, &mut *mpv, raw_array)
+            )
+        }
+    }
+
+    pub fn set_parameter<C>(&self, param: &RenderParam<C>) -> Result<()> {
+        unsafe {
+            mpv_err(
+                (),
+                mpv_render_context_set_parameter(self.ctx, mpv_render_param::from(param))
             )
         }
     }
