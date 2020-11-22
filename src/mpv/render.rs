@@ -22,6 +22,7 @@ use std::ffi::{c_void, CStr, CString};
 use std::ptr;
 use std::collections::HashMap;
 use std::mem::MaybeUninit;
+use crate::Result;
 
 pub struct RenderContext {
     ctx: *mut libmpv_sys::mpv_render_context,
@@ -173,7 +174,7 @@ unsafe fn free_void_data<T>(ptr: *mut c_void) {
 }
 
 impl RenderContext {
-    pub(crate) fn new<C>(mpv: &mut libmpv_sys::mpv_handle, params: &Vec<RenderParam<C>>) -> Self {
+    pub(crate) fn new<C>(mpv: &mut libmpv_sys::mpv_handle, params: &Vec<RenderParam<C>>) -> Result<Self> {
         use crate::mpv::mpv_err;
         let mut raw_params: Vec<libmpv_sys::mpv_render_param> = Vec::new();
         raw_params.reserve(params.len() + 1);
@@ -190,7 +191,7 @@ impl RenderContext {
                 RenderParam::FlipY(_) => Some(free_void_data::<i32>),
                 RenderParam::Depth(_) => Some(free_void_data::<i32>),
                 RenderParam::ICCProfile(_) => Some(free_void_data::<Box<[u8]>>),
-                RenderParam::AmbientLight(lux) => Some(free_void_data::<i32>),
+                RenderParam::AmbientLight(_) => Some(free_void_data::<i32>),
                 _ => None
             };
             if let Some(deleter) = deleter {
@@ -207,14 +208,20 @@ impl RenderContext {
             let ctx: libmpv_sys::mpv_render_context = MaybeUninit::uninit().assume_init();
             let ctx = Box::new(ctx);
             let mut ctx = Box::into_raw(ctx);
-            let res = mpv_err(
+            mpv_err(
                 Self { ctx, raw_ptrs },
                 libmpv_sys::mpv_render_context_create(&mut ctx, &mut *mpv, raw_array)
-            );
+            )
         }
-
-        unimplemented!()
     }
+}
 
-    unsafe fn dealloc_renderparams(&self) {}
+impl Drop for RenderContext{
+    fn drop(&mut self) {
+        unsafe {
+            for (ptr, deleter) in self.raw_ptrs.iter() {
+                (deleter)(*ptr);
+            }
+        }
+    }
 }
