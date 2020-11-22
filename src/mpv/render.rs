@@ -20,9 +20,14 @@ use libmpv_sys;
 use std::convert::From;
 use std::ffi::{c_void, CStr, CString};
 use std::ptr;
+use std::collections::HashMap;
 
 pub struct RenderContext {
     ctx: *mut libmpv_sys::mpv_render_context,
+    // This is our little dirty bag of raw pointers that need specific
+    // deallocation. The rendercontext typically took ownership of these when
+    // renderparams were passed.
+    raw_ptrs: HashMap<*mut c_void, fn(*mut c_void)>
 }
 
 /// For initializing the mpv OpenGL state via RenderParam::OpenGLInitParams
@@ -60,7 +65,7 @@ pub enum RenderFrameInfo {
 pub enum RenderParam<GLContext> {
     Invalid,
     ApiType(&'static str),
-    InitParams(Box<OpenGLInitParams<GLContext>>),
+    InitParams(OpenGLInitParams<GLContext>),
     FBO(FBO),
     FlipY(bool),
     Depth(i32),
@@ -112,24 +117,23 @@ unsafe extern "C" fn gpa_wrapper<GLContext>(ctx: *mut c_void, name: *const i8) -
     )
 }
 
-impl<C> From<Box<OpenGLInitParams<C>>> for libmpv_sys::mpv_opengl_init_params {
-    fn from(val: Box<OpenGLInitParams<C>>) -> Self {
+impl<C> From<&OpenGLInitParams<C>> for libmpv_sys::mpv_opengl_init_params {
+    fn from(val: &OpenGLInitParams<C>) -> Self {
         Self {
-            get_proc_address: Some(gpa_wrapper::<Box<OpenGLInitParams<C>>>),
-            // NOTE: this variable is leaked, it will have to be cleaned up later!
-            get_proc_address_ctx: Box::into_raw(val) as *mut c_void,
+            get_proc_address: Some(gpa_wrapper::<OpenGLInitParams<C>>),
+            get_proc_address_ctx: Box::into_raw(Box::new(val)) as *mut c_void,
             extra_exts: ptr::null(),
         }
     }
 }
 
-impl<C> From<RenderParam<C>> for libmpv_sys::mpv_render_param {
-    fn from(val: RenderParam<C>) -> Self {
-        let type_ = u32::from(&val);
+impl<C> From<&RenderParam<C>> for libmpv_sys::mpv_render_param {
+    fn from(val: &RenderParam<C>) -> Self {
+        let type_ = u32::from(val);
         let data = match val {
             RenderParam::Invalid => ptr::null_mut(),
             RenderParam::ApiType(api_type) => {
-                let api_type = CString::new(api_type).expect("Converting to API type to CString");
+                let api_type = CString::new(*api_type).expect("Converting to API type to CString");
                 api_type.as_ptr() as *mut c_void
             }
             RenderParam::InitParams(params) => {
@@ -137,23 +141,23 @@ impl<C> From<RenderParam<C>> for libmpv_sys::mpv_render_param {
             }
             RenderParam::FBO(fbo) => Box::into_raw(Box::new(fbo)) as *mut c_void,
             RenderParam::FlipY(flip) => {
-                Box::into_raw(if flip { Box::new(1) } else { Box::new(0) }) as *mut c_void
+                Box::into_raw(if *flip { Box::new(1) } else { Box::new(0) }) as *mut c_void
             }
             RenderParam::Depth(depth) => Box::into_raw(Box::new(depth)) as *mut c_void,
             RenderParam::ICCProfile(bytes) => {
-                Box::into_raw(bytes.into_boxed_slice()) as *mut c_void
+                Box::into_raw(bytes.clone().into_boxed_slice()) as *mut c_void
             }
             RenderParam::AmbientLight(lux) => Box::into_raw(Box::new(lux)) as *mut c_void,
-            RenderParam::X11Display(ptr) => ptr as *mut _,
-            RenderParam::WaylandDisplay(ptr) => ptr as *mut _,
+            RenderParam::X11Display(ptr) => *ptr as *mut _,
+            RenderParam::WaylandDisplay(ptr) => *ptr as *mut _,
             RenderParam::AdvancedControl(adv_ctrl) => {
-                Box::into_raw(if adv_ctrl { Box::new(1) } else { Box::new(0) }) as *mut c_void
+                Box::into_raw(if *adv_ctrl { Box::new(1) } else { Box::new(0) }) as *mut c_void
             }
-            RenderParam::NextFrameInfo(frame_info) => Box::into_raw(frame_info) as *mut c_void,
+            RenderParam::NextFrameInfo(frame_info) => Box::into_raw(Box::new(frame_info.clone())) as *mut c_void,
             RenderParam::BlockForTargetTime(block) => {
-                Box::into_raw(if block { Box::new(1) } else { Box::new(0) }) as *mut c_void
+                Box::into_raw(if *block { Box::new(1) } else { Box::new(0) }) as *mut c_void
             }
-            RenderParam::SkipRendering(skip_rendering) => Box::into_raw(if skip_rendering {
+            RenderParam::SkipRendering(skip_rendering) => Box::into_raw(if *skip_rendering {
                 Box::new(1)
             } else {
                 Box::new(0)
@@ -164,7 +168,13 @@ impl<C> From<RenderParam<C>> for libmpv_sys::mpv_render_param {
 }
 
 impl RenderContext {
-    pub(crate) fn new<C>(mpv: libmpv_sys::mpv_handle, params: Vec<RenderParam<C>>) -> Self {
+    pub(crate) fn new<C>(mpv: &libmpv_sys::mpv_handle, params: &Vec<RenderParam<C>>) -> Self {
+        let mut raw_params: Vec<libmpv_sys::mpv_render_param> = Vec::new();
+
+        for p in params.iter() {
+            raw_params.push(p.into());
+        }
+
         unimplemented!()
     }
 
