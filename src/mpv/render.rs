@@ -16,13 +16,13 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
+use crate::{mpv::mpv_err, Result};
+use libmpv_sys::*;
+use std::collections::HashMap;
 use std::convert::From;
 use std::ffi::{c_void, CStr, CString};
-use std::ptr;
-use std::collections::HashMap;
 use std::mem::MaybeUninit;
-use libmpv_sys::*;
-use crate::{Result, mpv::mpv_err};
+use std::ptr;
 
 type DeleterFn = unsafe fn(*mut c_void);
 
@@ -31,7 +31,7 @@ pub struct RenderContext {
     // This is our little dirty bag of raw pointers that need specific
     // deallocation. The rendercontext typically took ownership of these when
     // renderparams were passed.
-    raw_ptrs: HashMap<*mut c_void, DeleterFn>
+    raw_ptrs: HashMap<*mut c_void, DeleterFn>,
 }
 
 /// For initializing the mpv OpenGL state via RenderParam::OpenGLInitParams
@@ -58,12 +58,35 @@ pub struct FBO {
     pub height: i32,
 }
 
-#[repr(u8)]
-pub enum RenderFrameInfo {
-    Present = 1 << 0,
-    Redraw = 1 << 1,
-    Repeat = 1 << 2,
-    BlockVSync = 1 << 3,
+#[repr(u32)]
+pub enum RenderFrameInfoFlag {
+    Present = mpv_render_frame_info_flag_MPV_RENDER_FRAME_INFO_PRESENT,
+    Redraw = mpv_render_frame_info_flag_MPV_RENDER_FRAME_INFO_REDRAW,
+    Repeat = mpv_render_frame_info_flag_MPV_RENDER_FRAME_INFO_REPEAT,
+    BlockVSync = mpv_render_frame_info_flag_MPV_RENDER_FRAME_INFO_BLOCK_VSYNC,
+}
+
+impl From<u64> for RenderFrameInfoFlag {
+    // mpv_render_frame_info_flag is u32, but mpv_render_frame_info.flags is u64 o\
+    fn from(val: u64) -> Self {
+        let val = val as u32;
+        match val {
+            mpv_render_frame_info_flag_MPV_RENDER_FRAME_INFO_PRESENT => {
+                RenderFrameInfoFlag::Present
+            }
+            mpv_render_frame_info_flag_MPV_RENDER_FRAME_INFO_REDRAW => RenderFrameInfoFlag::Redraw,
+            mpv_render_frame_info_flag_MPV_RENDER_FRAME_INFO_REPEAT => RenderFrameInfoFlag::Repeat,
+            mpv_render_frame_info_flag_MPV_RENDER_FRAME_INFO_BLOCK_VSYNC => {
+                RenderFrameInfoFlag::BlockVSync
+            }
+            _ => panic!("Tried converting invalid value to RenderFrameInfoFlag"),
+        }
+    }
+}
+
+pub struct RenderFrameInfo {
+    pub flags: RenderFrameInfoFlag,
+    pub target_time: i64,
 }
 
 pub enum RenderParam<GLContext> {
@@ -157,7 +180,9 @@ impl<C> From<&RenderParam<C>> for mpv_render_param {
             RenderParam::AdvancedControl(adv_ctrl) => {
                 Box::into_raw(if *adv_ctrl { Box::new(1) } else { Box::new(0) }) as *mut c_void
             }
-            RenderParam::NextFrameInfo(frame_info) => Box::into_raw(Box::new(frame_info.clone())) as *mut c_void,
+            RenderParam::NextFrameInfo(frame_info) => {
+                Box::into_raw(Box::new(frame_info.clone())) as *mut c_void
+            }
             RenderParam::BlockForTargetTime(block) => {
                 Box::into_raw(if *block { Box::new(1) } else { Box::new(0) }) as *mut c_void
             }
@@ -193,7 +218,7 @@ impl RenderContext {
                 RenderParam::Depth(_) => Some(free_void_data::<i32>),
                 RenderParam::ICCProfile(_) => Some(free_void_data::<Box<[u8]>>),
                 RenderParam::AmbientLight(_) => Some(free_void_data::<i32>),
-                _ => None
+                _ => None,
             };
             if let Some(deleter) = deleter {
                 raw_ptrs.insert(raw_param.data, deleter);
@@ -202,7 +227,10 @@ impl RenderContext {
             raw_params.push(raw_param);
         }
         // the raw array must end with type = 0
-        raw_params.push(mpv_render_param { type_: 0, data: ptr::null_mut() });
+        raw_params.push(mpv_render_param {
+            type_: 0,
+            data: ptr::null_mut(),
+        });
 
         unsafe {
             let raw_array = Box::into_raw(raw_params.into_boxed_slice()) as *mut mpv_render_param;
@@ -211,7 +239,7 @@ impl RenderContext {
             let mut ctx = Box::into_raw(ctx);
             mpv_err(
                 Self { ctx, raw_ptrs },
-                mpv_render_context_create(&mut ctx, &mut *mpv, raw_array)
+                mpv_render_context_create(&mut ctx, &mut *mpv, raw_array),
             )
         }
     }
@@ -220,13 +248,35 @@ impl RenderContext {
         unsafe {
             mpv_err(
                 (),
-                mpv_render_context_set_parameter(self.ctx, mpv_render_param::from(param))
+                mpv_render_context_set_parameter(self.ctx, mpv_render_param::from(param)),
             )
         }
     }
+
+    pub fn get_info<C>(&self, param: &RenderParam<C>) -> Result<RenderParam<C>> {
+        let param = param.clone();
+        let raw_param = mpv_render_param::from(param);
+        let res = unsafe { mpv_err((), mpv_render_context_get_info(self.ctx, raw_param)) };
+        if res.is_ok() {
+            match param {
+                RenderParam::NextFrameInfo(_) => {
+                    let raw_frame_info = raw_param.data as *mut mpv_render_frame_info;
+                    unsafe {
+                        let raw_frame_info = *raw_frame_info;
+                        return Ok(RenderParam::NextFrameInfo(Box::new(RenderFrameInfo {
+                            flags: raw_frame_info.flags.into(),
+                            target_time: raw_frame_info.target_time,
+                        })));
+                    }
+                }
+                _ => panic!("I don't know how to handle this info type."),
+            }
+        }
+        panic!("todo")
+    }
 }
 
-impl Drop for RenderContext{
+impl Drop for RenderContext {
     fn drop(&mut self) {
         unsafe {
             for (ptr, deleter) in self.raw_ptrs.iter() {
