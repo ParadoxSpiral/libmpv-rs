@@ -21,11 +21,9 @@ use libmpv_sys::mpv_event;
 use crate::{mpv::mpv_err, *};
 
 use std::ffi::CString;
-use std::marker::PhantomData;
 use std::os::raw as ctype;
 use std::ptr::NonNull;
 use std::slice;
-use std::sync::atomic::Ordering;
 
 /// An `Event`'s ID.
 pub use libmpv_sys::mpv_event_id as EventId;
@@ -48,27 +46,6 @@ pub mod mpv_event_id {
     pub use libmpv_sys::mpv_event_id_MPV_EVENT_START_FILE as StartFile;
     pub use libmpv_sys::mpv_event_id_MPV_EVENT_TICK as Tick;
     pub use libmpv_sys::mpv_event_id_MPV_EVENT_VIDEO_RECONFIG as VideoReconfig;
-}
-
-impl Mpv {
-    /// Create a context that can be used to wait for events and control which events are listened
-    /// for.
-    ///
-    /// # Panics
-    /// Panics if a context already exists
-    pub fn create_event_context(&self) -> EventContext {
-        if self
-            .events_guard
-            .compare_and_swap(false, true, Ordering::AcqRel)
-        {
-            panic!("Event context already creates")
-        } else {
-            EventContext {
-                ctx: self.ctx,
-                _does_not_outlive: PhantomData::<&Self>,
-            }
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -152,14 +129,17 @@ pub enum Event<'a> {
 }
 
 /// Context to listen to events.
-pub struct EventContext<'parent> {
+pub struct EventContext {
     ctx: NonNull<libmpv_sys::mpv_handle>,
-    _does_not_outlive: PhantomData<&'parent Mpv>,
 }
 
-unsafe impl<'parent> Send for EventContext<'parent> {}
+unsafe impl Send for EventContext {}
 
-impl<'parent> EventContext<'parent> {
+impl EventContext {
+    pub(crate) fn new(ctx: NonNull<libmpv_sys::mpv_handle>) -> Self {
+        EventContext { ctx }
+    }
+
     /// Enable an event.
     pub fn enable_event(&self, ev: events::EventId) -> Result<()> {
         mpv_err((), unsafe {

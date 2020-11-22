@@ -39,6 +39,7 @@ pub mod protocol;
 pub mod render;
 
 pub use self::errors::*;
+use self::events::EventContext;
 use super::*;
 
 use std::{
@@ -406,13 +407,23 @@ impl MpvInitializer {
             })
         })
     }
+    /// Set the value of an option
+    pub fn set_option<T: SetData>(&self, name: &str, data: T) -> Result<()> {
+        let name = CString::new(name)?;
+        let format = T::get_format().as_mpv_format() as _;
+        data.call_as_c_void(|ptr| {
+            mpv_err((), unsafe {
+                libmpv_sys::mpv_set_option(self.ctx, name.as_ptr(), format, ptr)
+            })
+        })
+    }
 }
 
 /// The central mpv context.
 pub struct Mpv {
     /// The handle to the mpv core
     pub ctx: NonNull<libmpv_sys::mpv_handle>,
-    events_guard: AtomicBool,
+    event_context: EventContext,
     #[cfg(feature = "protocols")]
     protocols_guard: AtomicBool,
 }
@@ -459,9 +470,11 @@ impl Mpv {
             err
         })?;
 
+        let ctx = unsafe { NonNull::new_unchecked(ctx) };
+
         Ok(Mpv {
-            ctx: unsafe { NonNull::new_unchecked(ctx) },
-            events_guard: AtomicBool::new(false),
+            ctx,
+            event_context: EventContext::new(ctx),
             #[cfg(feature = "protocols")]
             protocols_guard: AtomicBool::new(false),
         })
@@ -477,6 +490,14 @@ impl Mpv {
         ret
     }
 
+    pub fn event_context(&self) -> &EventContext {
+        &self.event_context
+    }
+
+    pub fn event_context_mut(&mut self) -> &mut EventContext {
+        &mut self.event_context
+    }
+
     /// Send a command to the `Mpv` instance. This uses `mpv_command_string` internally,
     /// so that the syntax is the same as described in the [manual for the input.conf](https://mpv.io/manual/master/#list-of-input-commands).
     ///
@@ -485,7 +506,7 @@ impl Mpv {
         let mut cmd = name.to_owned();
 
         for elem in args {
-            cmd.push_str(" ");
+            cmd.push(' ');
             cmd.push_str(elem);
         }
 
