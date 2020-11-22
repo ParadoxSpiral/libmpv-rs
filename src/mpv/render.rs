@@ -24,12 +24,14 @@ use std::collections::HashMap;
 use std::mem::MaybeUninit;
 use crate::Result;
 
+type DeleterFn = unsafe fn(*mut c_void);
+
 pub struct RenderContext {
     ctx: *mut libmpv_sys::mpv_render_context,
     // This is our little dirty bag of raw pointers that need specific
     // deallocation. The rendercontext typically took ownership of these when
     // renderparams were passed.
-    raw_ptrs: HashMap<*mut c_void, unsafe fn(*mut c_void)>
+    raw_ptrs: HashMap<*mut c_void, DeleterFn>
 }
 
 /// For initializing the mpv OpenGL state via RenderParam::OpenGLInitParams
@@ -178,14 +180,14 @@ impl RenderContext {
         use crate::mpv::mpv_err;
         let mut raw_params: Vec<libmpv_sys::mpv_render_param> = Vec::new();
         raw_params.reserve(params.len() + 1);
-        let mut raw_ptrs: HashMap<*mut c_void, unsafe fn(*mut c_void)> = HashMap::new();
+        let mut raw_ptrs: HashMap<*mut c_void, DeleterFn> = HashMap::new();
 
         for p in params.iter() {
             let raw_param: libmpv_sys::mpv_render_param = p.into();
 
             // The render params are type-erased after they are passed to mpv. This is where we last
             // know their real types, so we keep a deleter here.
-            let deleter: Option<unsafe fn(*mut c_void)> = match p {
+            let deleter: Option<DeleterFn> = match p {
                 RenderParam::InitParams(_) => Some(free_void_data::<OpenGLInitParams<C>>),
                 RenderParam::FBO(_) => Some(free_void_data::<FBO>),
                 RenderParam::FlipY(_) => Some(free_void_data::<i32>),
