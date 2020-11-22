@@ -28,7 +28,7 @@ pub struct RenderContext {
     // This is our little dirty bag of raw pointers that need specific
     // deallocation. The rendercontext typically took ownership of these when
     // renderparams were passed.
-    raw_ptrs: HashMap<*mut c_void, fn(*mut c_void)>
+    raw_ptrs: HashMap<*mut c_void, unsafe fn(*mut c_void)>
 }
 
 /// For initializing the mpv OpenGL state via RenderParam::OpenGLInitParams
@@ -168,13 +168,36 @@ impl<C> From<&RenderParam<C>> for libmpv_sys::mpv_render_param {
     }
 }
 
+unsafe fn free_void_data<T>(ptr: *mut c_void) {
+    Box::<T>::from_raw(ptr as *mut T);
+}
+
 impl RenderContext {
     pub(crate) fn new<C>(mpv: &mut libmpv_sys::mpv_handle, params: &Vec<RenderParam<C>>) -> Self {
+        use crate::mpv::mpv_err;
         let mut raw_params: Vec<libmpv_sys::mpv_render_param> = Vec::new();
         raw_params.reserve(params.len() + 1);
+        let mut raw_ptrs: HashMap<*mut c_void, unsafe fn(*mut c_void)> = HashMap::new();
 
         for p in params.iter() {
-            raw_params.push(p.into());
+            let raw_param: libmpv_sys::mpv_render_param = p.into();
+
+            // The render params are type-erased after they are passed to mpv. This is where we last
+            // know their real types, so we keep a deleter here.
+            let deleter: Option<unsafe fn(*mut c_void)> = match p {
+                RenderParam::InitParams(_) => Some(free_void_data::<OpenGLInitParams<C>>),
+                RenderParam::FBO(_) => Some(free_void_data::<FBO>),
+                RenderParam::FlipY(_) => Some(free_void_data::<i32>),
+                RenderParam::Depth(_) => Some(free_void_data::<i32>),
+                RenderParam::ICCProfile(_) => Some(free_void_data::<Box<[u8]>>),
+                RenderParam::AmbientLight(lux) => Some(free_void_data::<i32>),
+                _ => None
+            };
+            if let Some(deleter) = deleter {
+                raw_ptrs.insert(raw_param.data, deleter);
+            }
+
+            raw_params.push(raw_param);
         }
         // the raw array must end with type = 0
         raw_params.push(libmpv_sys::mpv_render_param { type_: 0, data: ptr::null_mut() });
@@ -184,7 +207,10 @@ impl RenderContext {
             let ctx: libmpv_sys::mpv_render_context = MaybeUninit::uninit().assume_init();
             let ctx = Box::new(ctx);
             let mut ctx = Box::into_raw(ctx);
-            libmpv_sys::mpv_render_context_create(&mut ctx, &mut *mpv, raw_array);
+            let res = mpv_err(
+                Self { ctx, raw_ptrs },
+                libmpv_sys::mpv_render_context_create(&mut ctx, &mut *mpv, raw_array)
+            );
         }
 
         unimplemented!()
