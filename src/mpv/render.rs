@@ -17,12 +17,12 @@
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 use crate::{mpv::mpv_err, Result, Error};
-use libmpv_sys::*;
 use std::collections::HashMap;
 use std::convert::From;
 use std::ffi::{c_void, CStr, CString};
 use std::mem::MaybeUninit;
 use std::ptr;
+use libmpv_sys::{self, mpv_render_frame_info, mpv_render_param, mpv_opengl_init_params, mpv_render_context, mpv_handle};
 
 type DeleterFn = unsafe fn(*mut c_void);
 
@@ -60,10 +60,10 @@ pub struct FBO {
 
 #[repr(u32)]
 pub enum RenderFrameInfoFlag {
-    Present = mpv_render_frame_info_flag_MPV_RENDER_FRAME_INFO_PRESENT,
-    Redraw = mpv_render_frame_info_flag_MPV_RENDER_FRAME_INFO_REDRAW,
-    Repeat = mpv_render_frame_info_flag_MPV_RENDER_FRAME_INFO_REPEAT,
-    BlockVSync = mpv_render_frame_info_flag_MPV_RENDER_FRAME_INFO_BLOCK_VSYNC,
+    Present = libmpv_sys::mpv_render_frame_info_flag_MPV_RENDER_FRAME_INFO_PRESENT,
+    Redraw = libmpv_sys::mpv_render_frame_info_flag_MPV_RENDER_FRAME_INFO_REDRAW,
+    Repeat = libmpv_sys::mpv_render_frame_info_flag_MPV_RENDER_FRAME_INFO_REPEAT,
+    BlockVSync = libmpv_sys::mpv_render_frame_info_flag_MPV_RENDER_FRAME_INFO_BLOCK_VSYNC,
 }
 
 impl From<u64> for RenderFrameInfoFlag {
@@ -71,12 +71,12 @@ impl From<u64> for RenderFrameInfoFlag {
     fn from(val: u64) -> Self {
         let val = val as u32;
         match val {
-            mpv_render_frame_info_flag_MPV_RENDER_FRAME_INFO_PRESENT => {
+            libmpv_sys::mpv_render_frame_info_flag_MPV_RENDER_FRAME_INFO_PRESENT => {
                 RenderFrameInfoFlag::Present
             }
-            mpv_render_frame_info_flag_MPV_RENDER_FRAME_INFO_REDRAW => RenderFrameInfoFlag::Redraw,
-            mpv_render_frame_info_flag_MPV_RENDER_FRAME_INFO_REPEAT => RenderFrameInfoFlag::Repeat,
-            mpv_render_frame_info_flag_MPV_RENDER_FRAME_INFO_BLOCK_VSYNC => {
+            libmpv_sys::mpv_render_frame_info_flag_MPV_RENDER_FRAME_INFO_REDRAW => RenderFrameInfoFlag::Redraw,
+            libmpv_sys::mpv_render_frame_info_flag_MPV_RENDER_FRAME_INFO_REPEAT => RenderFrameInfoFlag::Repeat,
+            libmpv_sys::mpv_render_frame_info_flag_MPV_RENDER_FRAME_INFO_BLOCK_VSYNC => {
                 RenderFrameInfoFlag::BlockVSync
             }
             _ => panic!("Tried converting invalid value to RenderFrameInfoFlag"),
@@ -239,7 +239,7 @@ impl RenderContext {
             let mut ctx = Box::into_raw(ctx);
             mpv_err(
                 Self { ctx, raw_ptrs },
-                mpv_render_context_create(&mut ctx, &mut *mpv, raw_array),
+                libmpv_sys::mpv_render_context_create(&mut ctx, &mut *mpv, raw_array),
             )
         }
     }
@@ -248,7 +248,7 @@ impl RenderContext {
         unsafe {
             mpv_err(
                 (),
-                mpv_render_context_set_parameter(self.ctx, mpv_render_param::from(param)),
+                libmpv_sys::mpv_render_context_set_parameter(self.ctx, mpv_render_param::from(param)),
             )
         }
     }
@@ -256,7 +256,7 @@ impl RenderContext {
     pub fn get_info<C>(&self, param: &RenderParam<C>) -> Result<RenderParam<C>> {
         let param = param.clone();
         let raw_param = mpv_render_param::from(param);
-        let res = unsafe { mpv_render_context_get_info(self.ctx, raw_param) };
+        let res = unsafe { libmpv_sys::mpv_render_context_get_info(self.ctx, raw_param) };
         if res == 0 {
             match param {
                 RenderParam::NextFrameInfo(_) => {
