@@ -21,6 +21,7 @@ use std::convert::From;
 use std::ffi::{c_void, CStr, CString};
 use std::ptr;
 use std::collections::HashMap;
+use std::mem::MaybeUninit;
 
 pub struct RenderContext {
     ctx: *mut libmpv_sys::mpv_render_context,
@@ -168,11 +169,22 @@ impl<C> From<&RenderParam<C>> for libmpv_sys::mpv_render_param {
 }
 
 impl RenderContext {
-    pub(crate) fn new<C>(mpv: &libmpv_sys::mpv_handle, params: &Vec<RenderParam<C>>) -> Self {
+    pub(crate) fn new<C>(mpv: &mut libmpv_sys::mpv_handle, params: &Vec<RenderParam<C>>) -> Self {
         let mut raw_params: Vec<libmpv_sys::mpv_render_param> = Vec::new();
+        raw_params.reserve(params.len() + 1);
 
         for p in params.iter() {
             raw_params.push(p.into());
+        }
+        // the raw array must end with type = 0
+        raw_params.push(libmpv_sys::mpv_render_param { type_: 0, data: ptr::null_mut() });
+
+        unsafe {
+            let raw_array = Box::into_raw(raw_params.into_boxed_slice()) as *mut libmpv_sys::mpv_render_param;
+            let ctx: libmpv_sys::mpv_render_context = MaybeUninit::uninit().assume_init();
+            let ctx = Box::new(ctx);
+            let mut ctx = Box::into_raw(ctx);
+            libmpv_sys::mpv_render_context_create(&mut ctx, &mut *mpv, raw_array);
         }
 
         unimplemented!()
