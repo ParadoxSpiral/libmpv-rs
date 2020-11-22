@@ -16,7 +16,7 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-use crate::{mpv::mpv_err, Result};
+use crate::{mpv::mpv_err, Result, Error};
 use libmpv_sys::*;
 use std::collections::HashMap;
 use std::convert::From;
@@ -256,8 +256,8 @@ impl RenderContext {
     pub fn get_info<C>(&self, param: &RenderParam<C>) -> Result<RenderParam<C>> {
         let param = param.clone();
         let raw_param = mpv_render_param::from(param);
-        let res = unsafe { mpv_err((), mpv_render_context_get_info(self.ctx, raw_param)) };
-        if res.is_ok() {
+        let res = unsafe { mpv_render_context_get_info(self.ctx, raw_param) };
+        if res == 0 {
             match param {
                 RenderParam::NextFrameInfo(_) => {
                     let raw_frame_info = raw_param.data as *mut mpv_render_frame_info;
@@ -272,7 +272,7 @@ impl RenderContext {
                 _ => panic!("I don't know how to handle this info type."),
             }
         }
-        panic!("todo")
+        Err(Error::Raw(res))
     }
 }
 
