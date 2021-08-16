@@ -18,22 +18,19 @@
 
 use crate::{mpv::mpv_err, Error, Result};
 use libmpv_sys::{
-    self, mpv_handle, mpv_opengl_init_params, mpv_render_context, mpv_render_frame_info,
-    mpv_render_param,
+    self, mpv_handle, mpv_opengl_init_params, mpv_render_context, mpv_render_context_free,
+    mpv_render_context_render, mpv_render_frame_info, mpv_render_param,
 };
 use std::collections::HashMap;
 use std::convert::From;
 use std::ffi::{c_void, CStr};
+use std::os::raw::c_int;
 use std::ptr;
 
 type DeleterFn = unsafe fn(*mut c_void);
 
 pub struct RenderContext {
     ctx: *mut mpv_render_context,
-    // This is our little dirty bag of raw pointers that need specific
-    // deallocation. The rendercontext typically took ownership of these when
-    // renderparams were passed.
-    raw_ptrs: HashMap<*const c_void, DeleterFn>,
 }
 
 /// For initializing the mpv OpenGL state via RenderParam::OpenGLInitParams
@@ -154,8 +151,8 @@ unsafe extern "C" fn gpa_wrapper<GLContext>(ctx: *mut c_void, name: *const i8) -
     )
 }
 
-impl<C> From<&OpenGLInitParams<C>> for mpv_opengl_init_params {
-    fn from(val: &OpenGLInitParams<C>) -> Self {
+impl<C> From<OpenGLInitParams<C>> for mpv_opengl_init_params {
+    fn from(val: OpenGLInitParams<C>) -> Self {
         Self {
             get_proc_address: Some(gpa_wrapper::<OpenGLInitParams<C>>),
             get_proc_address_ctx: Box::into_raw(Box::new(val)) as *mut c_void,
@@ -164,9 +161,9 @@ impl<C> From<&OpenGLInitParams<C>> for mpv_opengl_init_params {
     }
 }
 
-impl<C> From<&RenderParam<C>> for mpv_render_param {
-    fn from(val: &RenderParam<C>) -> Self {
-        let type_ = u32::from(val);
+impl<C> From<RenderParam<C>> for mpv_render_param {
+    fn from(val: RenderParam<C>) -> Self {
+        let type_ = u32::from(&val);
         let data = match val {
             RenderParam::Invalid => ptr::null_mut(),
             RenderParam::ApiType(api_type) => match api_type {
@@ -178,30 +175,26 @@ impl<C> From<&RenderParam<C>> for mpv_render_param {
                 Box::into_raw(Box::new(mpv_opengl_init_params::from(params))) as *mut c_void
             }
             RenderParam::FBO(fbo) => Box::into_raw(Box::new(fbo)) as *mut c_void,
-            RenderParam::FlipY(flip) => {
-                Box::into_raw(if *flip { Box::new(1) } else { Box::new(0) }) as *mut c_void
-            }
+            RenderParam::FlipY(flip) => Box::into_raw(Box::new(flip as c_int)) as *mut c_void,
             RenderParam::Depth(depth) => Box::into_raw(Box::new(depth)) as *mut c_void,
             RenderParam::ICCProfile(bytes) => {
-                Box::into_raw(bytes.clone().into_boxed_slice()) as *mut c_void
+                Box::into_raw(bytes.into_boxed_slice()) as *mut c_void
             }
             RenderParam::AmbientLight(lux) => Box::into_raw(Box::new(lux)) as *mut c_void,
-            RenderParam::X11Display(ptr) => *ptr as *mut _,
-            RenderParam::WaylandDisplay(ptr) => *ptr as *mut _,
+            RenderParam::X11Display(ptr) => ptr as *mut _,
+            RenderParam::WaylandDisplay(ptr) => ptr as *mut _,
             RenderParam::AdvancedControl(adv_ctrl) => {
-                Box::into_raw(if *adv_ctrl { Box::new(1) } else { Box::new(0) }) as *mut c_void
+                Box::into_raw(Box::new(adv_ctrl as c_int)) as *mut c_void
             }
             RenderParam::NextFrameInfo(frame_info) => {
-                Box::into_raw(Box::new(frame_info.clone())) as *mut c_void
+                Box::into_raw(Box::new(frame_info)) as *mut c_void
             }
             RenderParam::BlockForTargetTime(block) => {
-                Box::into_raw(if *block { Box::new(1) } else { Box::new(0) }) as *mut c_void
+                Box::into_raw(Box::new(block as c_int)) as *mut c_void
             }
-            RenderParam::SkipRendering(skip_rendering) => Box::into_raw(if *skip_rendering {
-                Box::new(1)
-            } else {
-                Box::new(0)
-            }) as *mut c_void,
+            RenderParam::SkipRendering(skip_rendering) => {
+                Box::into_raw(Box::new(skip_rendering as c_int)) as *mut c_void
+            }
         };
         Self { type_, data }
     }
@@ -211,19 +204,26 @@ unsafe fn free_void_data<T>(ptr: *mut c_void) {
     Box::<T>::from_raw(ptr as *mut T);
 }
 
+unsafe fn free_init_params<C>(ptr: *mut c_void) {
+    let params = Box::from_raw(ptr as *mut mpv_opengl_init_params);
+    Box::from_raw(params.get_proc_address_ctx as *mut OpenGLInitParams<C>);
+}
+
 impl RenderContext {
-    pub fn new<C>(mpv: &mut mpv_handle, params: &[RenderParam<C>]) -> Result<Self> {
+    pub fn new<C>(
+        mpv: &mut mpv_handle,
+        params: impl IntoIterator<Item = RenderParam<C>>,
+    ) -> Result<Self> {
+        let params: Vec<_> = params.into_iter().collect();
         let mut raw_params: Vec<mpv_render_param> = Vec::new();
         raw_params.reserve(params.len() + 1);
         let mut raw_ptrs: HashMap<*const c_void, DeleterFn> = HashMap::new();
 
-        for p in params.iter() {
-            let raw_param: mpv_render_param = p.into();
-
+        for p in params {
             // The render params are type-erased after they are passed to mpv. This is where we last
             // know their real types, so we keep a deleter here.
             let deleter: Option<DeleterFn> = match p {
-                RenderParam::InitParams(_) => Some(free_void_data::<OpenGLInitParams<C>>),
+                RenderParam::InitParams(_) => Some(free_init_params::<C>),
                 RenderParam::FBO(_) => Some(free_void_data::<FBO>),
                 RenderParam::FlipY(_) => Some(free_void_data::<i32>),
                 RenderParam::Depth(_) => Some(free_void_data::<i32>),
@@ -232,6 +232,7 @@ impl RenderContext {
                 RenderParam::NextFrameInfo(_) => Some(free_void_data::<RenderFrameInfo>),
                 _ => None,
             };
+            let raw_param: mpv_render_param = p.into();
             if let Some(deleter) = deleter {
                 raw_ptrs.insert(raw_param.data, deleter);
             }
@@ -249,17 +250,20 @@ impl RenderContext {
             let ctx = Box::into_raw(Box::new(std::ptr::null_mut() as _));
             let err = libmpv_sys::mpv_render_context_create(ctx, &mut *mpv, raw_array);
             Box::from_raw(raw_array);
+            for (ptr, deleter) in raw_ptrs.iter() {
+                (deleter)(*ptr as _);
+            }
+
             mpv_err(
                 Self {
                     ctx: *Box::from_raw(ctx),
-                    raw_ptrs,
                 },
                 err,
             )
         }
     }
 
-    pub fn set_parameter<C>(&self, param: &RenderParam<C>) -> Result<()> {
+    pub fn set_parameter<C>(&self, param: RenderParam<C>) -> Result<()> {
         unsafe {
             mpv_err(
                 (),
@@ -271,34 +275,64 @@ impl RenderContext {
         }
     }
 
-    pub fn get_info<C>(&self, param: &RenderParam<C>) -> Result<RenderParam<C>> {
+    pub fn get_info<C>(&self, param: RenderParam<C>) -> Result<RenderParam<C>> {
+        let is_next_frame_info = matches!(param, RenderParam::NextFrameInfo(_));
         let raw_param = mpv_render_param::from(param);
         let res = unsafe { libmpv_sys::mpv_render_context_get_info(self.ctx, raw_param) };
         if res == 0 {
-            match param {
-                RenderParam::NextFrameInfo(_) => {
-                    let raw_frame_info = raw_param.data as *mut mpv_render_frame_info;
-                    unsafe {
-                        let raw_frame_info = *raw_frame_info;
-                        return Ok(RenderParam::NextFrameInfo(RenderFrameInfo {
-                            flags: raw_frame_info.flags.into(),
-                            target_time: raw_frame_info.target_time,
-                        }));
-                    }
-                }
-                _ => panic!("I don't know how to handle this info type."),
+            if !is_next_frame_info {
+                panic!("I don't know how to handle this info type.");
+            }
+            let raw_frame_info = raw_param.data as *mut mpv_render_frame_info;
+            unsafe {
+                let raw_frame_info = *raw_frame_info;
+                return Ok(RenderParam::NextFrameInfo(RenderFrameInfo {
+                    flags: raw_frame_info.flags.into(),
+                    target_time: raw_frame_info.target_time,
+                }));
             }
         }
         Err(Error::Raw(res))
+    }
+
+    pub fn render<GLContext>(&self, fbo: i32, width: i32, height: i32, flip: bool) -> Result<()> {
+        let mut raw_params: Vec<mpv_render_param> = Vec::with_capacity(3);
+        let mut raw_ptrs: HashMap<*const c_void, DeleterFn> = HashMap::new();
+
+        let raw_param: mpv_render_param =
+            RenderParam::<GLContext>::FBO(FBO { fbo, width, height }).into();
+        raw_ptrs.insert(raw_param.data, free_void_data::<FBO>);
+        raw_params.push(raw_param);
+        let raw_param: mpv_render_param = RenderParam::<GLContext>::FlipY(flip).into();
+        raw_ptrs.insert(raw_param.data, free_void_data::<i32>);
+        raw_params.push(raw_param);
+        // the raw array must end with type = 0
+        raw_params.push(mpv_render_param {
+            type_: 0,
+            data: ptr::null_mut(),
+        });
+
+        let raw_array = Box::into_raw(raw_params.into_boxed_slice()) as *mut mpv_render_param;
+
+        let ret = unsafe { mpv_err((), mpv_render_context_render(self.ctx, raw_array)) };
+        unsafe {
+            Box::from_raw(raw_array);
+        }
+
+        unsafe {
+            for (ptr, deleter) in raw_ptrs.iter() {
+                (deleter)(*ptr as _);
+            }
+        }
+
+        ret
     }
 }
 
 impl Drop for RenderContext {
     fn drop(&mut self) {
         unsafe {
-            for (ptr, deleter) in self.raw_ptrs.iter() {
-                (deleter)(*ptr as _);
-            }
+            mpv_render_context_free(self.ctx);
         }
     }
 }
