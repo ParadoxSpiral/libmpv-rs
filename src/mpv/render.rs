@@ -306,6 +306,39 @@ impl RenderContext {
         Err(Error::Raw(res))
     }
 
+    /// Render video.
+    ///
+    /// Typically renders the video to a target surface provided via `fbo`
+    /// (the details depend on the backend in use). Options like "panscan" are
+    /// applied to determine which part of the video should be visible and how the
+    /// video should be scaled. You can change these options at runtime by using the
+    /// mpv property API.
+    ///
+    /// The renderer will reconfigure itself every time the target surface
+    /// configuration (such as size) is changed.
+    ///
+    /// This function implicitly pulls a video frame from the internal queue and
+    /// renders it. If no new frame is available, the previous frame is redrawn.
+    /// The update callback set with [set_update_callback](Self::set_update_callback)
+    /// notifies you when a new frame was added. The details potentially depend on
+    /// the backends and the provided parameters.
+    ///
+    /// Generally, libmpv will invoke your update callback some time before the video
+    /// frame should be shown, and then lets this function block until the supposed
+    /// display time. This will limit your rendering to video FPS. You can prevent
+    /// this by setting the "video-timing-offset" global option to 0. (This applies
+    /// only to "audio" video sync mode.)
+    ///
+    /// # Arguments
+    ///
+    /// * `fbo` - A framebuffer object to render to. In OpenGL, 0 is the current backbuffer
+    /// * `width` - The width of the framebuffer in pixels. This is used for scaling the
+    ///             video properly.
+    /// * `height` - The height of the framebuffer in pixels. This is used for scaling the
+    ///              video properly.
+    /// * `flip` - Whether to draw the image upside down. This is needed for OpenGL because
+    ///            it uses a coordinate system with positive Y up, but videos use positive
+    ///            Y down.
     pub fn render<GLContext>(&self, fbo: i32, width: i32, height: i32, flip: bool) -> Result<()> {
         let mut raw_params: Vec<mpv_render_param> = Vec::with_capacity(3);
         let mut raw_ptrs: HashMap<*const c_void, DeleterFn> = HashMap::new();
