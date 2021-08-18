@@ -271,7 +271,7 @@ impl EventContext {
 
                 if let Err(e) = mpv_err((), end_file.error) {
                     Some(Err(e))
-                } else if end_file.reason.is_positive() {
+                } else if end_file.reason >= 0 {
                     Some(Ok(Event::EndFile(end_file.reason as _)))
                 } else {
                     None
