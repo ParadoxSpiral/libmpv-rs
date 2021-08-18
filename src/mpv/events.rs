@@ -16,11 +16,11 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-use libmpv_sys::mpv_event;
+use libmpv_sys::{mpv_event, mpv_set_wakeup_callback};
 
 use crate::{mpv::mpv_err, *};
 
-use std::ffi::CString;
+use std::ffi::{c_void, CString};
 use std::os::raw as ctype;
 use std::ptr::NonNull;
 use std::slice;
@@ -128,16 +128,28 @@ pub enum Event<'a> {
     Deprecated(mpv_event),
 }
 
+unsafe extern "C" fn wu_wrapper<F: Fn() + 'static>(ctx: *mut c_void) {
+    if ctx.is_null() {
+        panic!("ctx for wakeup wrapper is NULL");
+    }
+
+    (*(ctx as *mut F))();
+}
+
 /// Context to listen to events.
 pub struct EventContext {
     ctx: NonNull<libmpv_sys::mpv_handle>,
+    wakeup_callback_cleanup: Option<Box<dyn FnOnce()>>,
 }
 
 unsafe impl Send for EventContext {}
 
 impl EventContext {
     pub(crate) fn new(ctx: NonNull<libmpv_sys::mpv_handle>) -> Self {
-        EventContext { ctx }
+        EventContext {
+            ctx,
+            wakeup_callback_cleanup: None,
+        }
     }
 
     /// Enable an event.
@@ -320,6 +332,58 @@ impl EventContext {
             }
             mpv_event_id::QueueOverflow => Some(Ok(Event::QueueOverflow)),
             _ => Some(Ok(Event::Deprecated(event))),
+        }
+    }
+
+    /// Set a custom function that should be called when there are new events. Use this if
+    /// blocking in [wait_event](#method.wait_event) to wait for new events is not feasible.
+    ///
+    /// Keep in mind that the callback will be called from foreign threads. You must not make
+    /// any assumptions of the environment, and you must return as soon as possible (i.e. no
+    /// long blocking waits). Exiting the callback through any other means than a normal return
+    /// is forbidden (no throwing exceptions, no `longjmp()` calls). You must not change any
+    /// local thread state (such as the C floating point environment).
+    ///
+    /// You are not allowed to call any client API functions inside of the callback. In
+    /// particular, you should not do any processing in the callback, but wake up another
+    /// thread that does all the work. The callback is meant strictly for notification only,
+    /// and is called from arbitrary core parts of the player, that make no considerations for
+    /// reentrant API use or allowing the callee to spend a lot of time doing other things.
+    /// Keep in mind that it’s also possible that the callback is called from a thread while a
+    /// mpv API function is called (i.e. it can be reentrant).
+    ///
+    /// In general, the client API expects you to call [wait_event](#method.wait_event) to receive
+    /// notifications, and the wakeup callback is merely a helper utility to make this easier in
+    /// certain situations. Note that it’s possible that there’s only one wakeup callback
+    /// invocation for multiple events. You should call [wait_event](#method.wait_event) with no timeout until
+    /// `None` is returned, at which point the event queue is empty.
+    ///
+    /// If you actually want to do processing in a callback, spawn a thread that does nothing but
+    /// call [wait_event](#method.wait_event) in a loop and dispatches the result to a callback.
+    ///
+    /// Only one wakeup callback can be set.
+    pub fn set_wakeup_callback<F: Fn() + 'static>(&mut self, callback: F) {
+        if let Some(wakeup_callback_cleanup) = self.wakeup_callback_cleanup.take() {
+            wakeup_callback_cleanup();
+        }
+        let raw_callback = Box::into_raw(Box::new(callback));
+        self.wakeup_callback_cleanup = Some(Box::new(move || unsafe {
+            Box::from_raw(raw_callback);
+        }) as Box<dyn FnOnce()>);
+        unsafe {
+            mpv_set_wakeup_callback(
+                self.ctx.as_ptr(),
+                Some(wu_wrapper::<F>),
+                raw_callback as *mut c_void,
+            );
+        }
+    }
+}
+
+impl Drop for EventContext {
+    fn drop(&mut self) {
+        if let Some(wakeup_callback_cleanup) = self.wakeup_callback_cleanup.take() {
+            wakeup_callback_cleanup();
         }
     }
 }
