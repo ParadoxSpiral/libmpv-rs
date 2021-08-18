@@ -19,7 +19,8 @@
 use crate::{mpv::mpv_err, Error, Result};
 use libmpv_sys::{
     self, mpv_handle, mpv_opengl_init_params, mpv_render_context, mpv_render_context_free,
-    mpv_render_context_render, mpv_render_frame_info, mpv_render_param,
+    mpv_render_context_render, mpv_render_context_set_update_callback, mpv_render_frame_info,
+    mpv_render_param,
 };
 use std::collections::HashMap;
 use std::convert::From;
@@ -31,6 +32,7 @@ type DeleterFn = unsafe fn(*mut c_void);
 
 pub struct RenderContext {
     ctx: *mut mpv_render_context,
+    update_callback_cleanup: Option<Box<dyn FnOnce()>>,
 }
 
 /// For initializing the mpv OpenGL state via RenderParam::OpenGLInitParams
@@ -151,6 +153,14 @@ unsafe extern "C" fn gpa_wrapper<GLContext>(ctx: *mut c_void, name: *const i8) -
     )
 }
 
+unsafe extern "C" fn ru_wrapper<F: Fn() + 'static>(ctx: *mut c_void) {
+    if ctx.is_null() {
+        panic!("ctx for render_update wrapper is NULL");
+    }
+
+    (*(ctx as *mut F))();
+}
+
 impl<C> From<OpenGLInitParams<C>> for mpv_opengl_init_params {
     fn from(val: OpenGLInitParams<C>) -> Self {
         Self {
@@ -257,6 +267,7 @@ impl RenderContext {
             mpv_err(
                 Self {
                     ctx: *Box::from_raw(ctx),
+                    update_callback_cleanup: None,
                 },
                 err,
             )
@@ -327,10 +338,39 @@ impl RenderContext {
 
         ret
     }
+
+    /// Set the callback that notifies you when a new video frame is available, or if the video display
+    /// configuration somehow changed and requires a redraw. Similar to [EventContext::set_wakeup_callback](crate::events::EventContext::set_wakeup_callback), you
+    /// must not call any mpv API from the callback, and all the other listed restrictions apply (such
+    /// as not exiting the callback by throwing exceptions).
+    ///
+    /// This can be called from any thread, except from an update callback. In case of the OpenGL backend,
+    /// no OpenGL state or API is accessed.
+    ///
+    /// Calling this will raise an update callback immediately.
+    pub fn set_update_callback<F: Fn() + 'static>(&mut self, callback: F) {
+        if let Some(update_callback_cleanup) = self.update_callback_cleanup.take() {
+            update_callback_cleanup();
+        }
+        let raw_callback = Box::into_raw(Box::new(callback));
+        self.update_callback_cleanup = Some(Box::new(move || unsafe {
+            Box::from_raw(raw_callback);
+        }) as Box<dyn FnOnce()>);
+        unsafe {
+            mpv_render_context_set_update_callback(
+                self.ctx,
+                Some(ru_wrapper::<F>),
+                raw_callback as *mut c_void,
+            );
+        }
+    }
 }
 
 impl Drop for RenderContext {
     fn drop(&mut self) {
+        if let Some(update_callback_cleanup) = self.update_callback_cleanup.take() {
+            update_callback_cleanup();
+        }
         unsafe {
             mpv_render_context_free(self.ctx);
         }
