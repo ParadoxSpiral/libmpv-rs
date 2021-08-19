@@ -128,7 +128,7 @@ pub enum Event<'a> {
     Deprecated(mpv_event),
 }
 
-unsafe extern "C" fn wu_wrapper<F: Fn() + 'static>(ctx: *mut c_void) {
+unsafe extern "C" fn wu_wrapper<F: Fn() + Send + 'static>(ctx: *mut c_void) {
     if ctx.is_null() {
         panic!("ctx for wakeup wrapper is NULL");
     }
@@ -362,7 +362,7 @@ impl EventContext {
     /// call [wait_event](#method.wait_event) in a loop and dispatches the result to a callback.
     ///
     /// Only one wakeup callback can be set.
-    pub fn set_wakeup_callback<F: Fn() + 'static>(&mut self, callback: F) {
+    pub fn set_wakeup_callback<F: Fn() + Send + 'static>(&mut self, callback: F) {
         if let Some(wakeup_callback_cleanup) = self.wakeup_callback_cleanup.take() {
             wakeup_callback_cleanup();
         }

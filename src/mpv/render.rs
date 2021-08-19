@@ -153,7 +153,7 @@ unsafe extern "C" fn gpa_wrapper<GLContext>(ctx: *mut c_void, name: *const i8) -
     )
 }
 
-unsafe extern "C" fn ru_wrapper<F: Fn() + 'static>(ctx: *mut c_void) {
+unsafe extern "C" fn ru_wrapper<F: Fn() + Send + 'static>(ctx: *mut c_void) {
     if ctx.is_null() {
         panic!("ctx for render_update wrapper is NULL");
     }
@@ -381,7 +381,7 @@ impl RenderContext {
     /// no OpenGL state or API is accessed.
     ///
     /// Calling this will raise an update callback immediately.
-    pub fn set_update_callback<F: Fn() + 'static>(&mut self, callback: F) {
+    pub fn set_update_callback<F: Fn() + Send + 'static>(&mut self, callback: F) {
         if let Some(update_callback_cleanup) = self.update_callback_cleanup.take() {
             update_callback_cleanup();
         }
