@@ -41,7 +41,8 @@ impl Mpv {
     {
         if self
             .protocols_guard
-            .compare_and_swap(false, true, Ordering::AcqRel)
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .unwrap()
         {
             panic!("Protocol context already created")
         } else {
