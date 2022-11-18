@@ -57,16 +57,15 @@ impl Mpv {
     /// # Panics
     /// Panics if a context already exists
     pub fn create_event_context(&self) -> EventContext {
-        if self
+        match self
             .events_guard
-            .compare_and_swap(false, true, Ordering::AcqRel)
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
         {
-            panic!("Event context already creates")
-        } else {
-            EventContext {
+            Ok(_) => EventContext {
                 ctx: self.ctx,
                 _does_not_outlive: PhantomData::<&Self>,
-            }
+            },
+            Err(_) => panic!("Event context already exists"),
         }
     }
 }
@@ -189,14 +188,7 @@ impl<'parent> EventContext<'parent> {
 
     /// Diable all deprecated events.
     pub fn disable_deprecated_events(&self) -> Result<()> {
-        self.disable_event(libmpv_sys::mpv_event_id_MPV_EVENT_TRACKS_CHANGED)?;
-        self.disable_event(libmpv_sys::mpv_event_id_MPV_EVENT_TRACK_SWITCHED)?;
         self.disable_event(libmpv_sys::mpv_event_id_MPV_EVENT_IDLE)?;
-        self.disable_event(libmpv_sys::mpv_event_id_MPV_EVENT_PAUSE)?;
-        self.disable_event(libmpv_sys::mpv_event_id_MPV_EVENT_UNPAUSE)?;
-        self.disable_event(libmpv_sys::mpv_event_id_MPV_EVENT_SCRIPT_INPUT_DISPATCH)?;
-        self.disable_event(libmpv_sys::mpv_event_id_MPV_EVENT_METADATA_UPDATE)?;
-        self.disable_event(libmpv_sys::mpv_event_id_MPV_EVENT_CHAPTER_CHANGE)?;
         Ok(())
     }
 
@@ -291,10 +283,8 @@ impl<'parent> EventContext<'parent> {
 
                 if let Err(e) = mpv_err((), end_file.error) {
                     Some(Err(e))
-                } else if end_file.reason.is_positive() {
-                    Some(Ok(Event::EndFile(end_file.reason as _)))
                 } else {
-                    None
+                    Some(Ok(Event::EndFile(end_file.reason as _)))
                 }
             }
             mpv_event_id::FileLoaded => Some(Ok(Event::FileLoaded)),
