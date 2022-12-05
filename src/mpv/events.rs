@@ -168,12 +168,7 @@ impl<'parent> EventContext<'parent> {
 
     /// Enable all, except deprecated, events.
     pub fn enable_all_events(&self) -> Result<()> {
-        for i in (2..9)
-            .chain(14..15)
-            .chain(16..19)
-            .chain(20..23)
-            .chain(23..26)
-        {
+        for i in (2..9).chain(16..19).chain(20..23).chain(24..26) {
             self.enable_event(i)?;
         }
         Ok(())
