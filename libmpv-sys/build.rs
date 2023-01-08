@@ -19,7 +19,7 @@
 use std::env;
 use std::path::PathBuf;
 
-#[cfg(not(feature = "bindgen"))]
+#[cfg(not(feature = "use-bindgen"))]
 fn main() {
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     let crate_path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
@@ -32,7 +32,7 @@ fn main() {
     println!("cargo:rustc-link-lib=mpv");
 }
 
-#[cfg(feature = "bindgen")]
+#[cfg(feature = "use-bindgen")]
 fn main() {
     let bindings = bindgen::Builder::default()
         .header("include/client.h")
