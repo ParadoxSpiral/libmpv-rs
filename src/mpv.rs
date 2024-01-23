@@ -698,7 +698,7 @@ impl Mpv {
             if let Err(err) = ret {
                 return Err(Error::Loadfiles {
                     index: i,
-                    error: ::std::rc::Rc::new(err),
+                    error: ::std::boxed::Box::new(err),
                 });
             }
         }

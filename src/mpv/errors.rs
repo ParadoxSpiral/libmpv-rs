@@ -16,7 +16,7 @@
 // License along with this library; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-use std::{error, ffi::NulError, fmt, os::raw as ctype, rc::Rc, str::Utf8Error};
+use std::{error, ffi::NulError, fmt, os::raw as ctype, str::Utf8Error};
 
 #[allow(missing_docs)]
 pub type Result<T> = ::std::result::Result<T, Error>;
@@ -25,7 +25,7 @@ pub type Result<T> = ::std::result::Result<T, Error>;
 pub enum Error {
     Loadfiles {
         index: usize,
-        error: Rc<Error>,
+        error: Box<Error>,
     },
     VersionMismatch {
         linked: ctype::c_ulong,
