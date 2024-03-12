@@ -2,3 +2,4 @@
 /examples/target
 /mpv-sys/target
 Cargo.lock
+*.lib
