@@ -403,7 +403,7 @@ impl MpvInitializer {
     /// Set the value of a property.
     pub fn set_property<T: SetData>(&self, name: &str, data: T) -> Result<()> {
         let name = CString::new(name)?;
-        let format = T::get_format().as_mpv_format() as _;
+        let format = T::get_format().as_mpv_format();
         data.call_as_c_void(|ptr| {
             mpv_err((), unsafe {
                 libmpv_sys::mpv_set_property(self.ctx, name.as_ptr(), format, ptr)

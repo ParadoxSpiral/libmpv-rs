@@ -18,7 +18,10 @@
 
 use libmpv_sys::mpv_event;
 
-use crate::{mpv::mpv_err, *};
+use crate::{
+    events, mpv::mpv_err, mpv_format, EndFileReason, Error, Format, LogLevel, Mpv, MpvFormat,
+    MpvNode, Result,
+};
 
 use std::ffi::CString;
 use std::marker::PhantomData;
@@ -87,18 +90,18 @@ impl<'a> PropertyData<'a> {
     unsafe fn from_raw(format: MpvFormat, ptr: *mut ctype::c_void) -> Result<PropertyData<'a>> {
         assert!(!ptr.is_null());
         match format {
-            mpv_format::Flag => Ok(PropertyData::Flag(*(ptr as *mut bool))),
+            mpv_format::Flag => Ok(PropertyData::Flag(*ptr.cast::<bool>())),
             mpv_format::String => {
-                let char_ptr = *(ptr as *mut *mut ctype::c_char);
+                let char_ptr = *ptr.cast::<*mut ctype::c_char>();
                 Ok(PropertyData::Str(mpv_cstr_to_str!(char_ptr)?))
             }
             mpv_format::OsdString => {
-                let char_ptr = *(ptr as *mut *mut ctype::c_char);
+                let char_ptr = *ptr.cast::<*mut ctype::c_char>();
                 Ok(PropertyData::OsdStr(mpv_cstr_to_str!(char_ptr)?))
             }
-            mpv_format::Double => Ok(PropertyData::Double(*(ptr as *mut f64))),
-            mpv_format::Int64 => Ok(PropertyData::Int64(*(ptr as *mut i64))),
-            mpv_format::Node => Ok(PropertyData::Node(&*(ptr as *mut MpvNode))),
+            mpv_format::Double => Ok(PropertyData::Double(*ptr.cast::<f64>())),
+            mpv_format::Int64 => Ok(PropertyData::Int64(*ptr.cast::<i64>())),
+            mpv_format::Node => Ok(PropertyData::Node(&*ptr.cast::<MpvNode>())),
             mpv_format::None => unreachable!(),
             _ => unimplemented!(),
         }
@@ -237,7 +240,7 @@ impl<'parent> EventContext<'parent> {
             mpv_event_id::Shutdown => Some(Ok(Event::Shutdown)),
             mpv_event_id::LogMessage => {
                 let log_message =
-                    unsafe { *(event.data as *mut libmpv_sys::mpv_event_log_message) };
+                    unsafe { *event.data.cast::<libmpv_sys::mpv_event_log_message>() };
 
                 let prefix = unsafe { mpv_cstr_to_str!(log_message.prefix) };
                 Some(prefix.and_then(|prefix| {
@@ -250,7 +253,7 @@ impl<'parent> EventContext<'parent> {
                 }))
             }
             mpv_event_id::GetPropertyReply => {
-                let property = unsafe { *(event.data as *mut libmpv_sys::mpv_event_property) };
+                let property = unsafe { *event.data.cast::<libmpv_sys::mpv_event_property>() };
 
                 let name = unsafe { mpv_cstr_to_str!(property.name) };
                 Some(name.and_then(|name| {
@@ -274,7 +277,7 @@ impl<'parent> EventContext<'parent> {
             )),
             mpv_event_id::StartFile => Some(Ok(Event::StartFile)),
             mpv_event_id::EndFile => {
-                let end_file = unsafe { *(event.data as *mut libmpv_sys::mpv_event_end_file) };
+                let end_file = unsafe { *event.data.cast::<libmpv_sys::mpv_event_end_file>() };
 
                 if let Err(e) = mpv_err((), end_file.error) {
                     Some(Err(e))
@@ -285,7 +288,7 @@ impl<'parent> EventContext<'parent> {
             mpv_event_id::FileLoaded => Some(Ok(Event::FileLoaded)),
             mpv_event_id::ClientMessage => {
                 let client_message =
-                    unsafe { *(event.data as *mut libmpv_sys::mpv_event_client_message) };
+                    unsafe { *event.data.cast::<libmpv_sys::mpv_event_client_message>() };
                 let messages = unsafe {
                     slice::from_raw_parts_mut(client_message.args, client_message.num_args as _)
                 };
@@ -302,7 +305,7 @@ impl<'parent> EventContext<'parent> {
             mpv_event_id::Seek => Some(Ok(Event::Seek)),
             mpv_event_id::PlaybackRestart => Some(Ok(Event::PlaybackRestart)),
             mpv_event_id::PropertyChange => {
-                let property = unsafe { *(event.data as *mut libmpv_sys::mpv_event_property) };
+                let property = unsafe { *event.data.cast::<libmpv_sys::mpv_event_property>() };
 
                 // This happens if the property is not available. For example,
                 // if you reached EndFile while observing a property.
