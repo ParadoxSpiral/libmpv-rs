@@ -28,7 +28,7 @@ repository = "https://github.com/ParadoxSpiral/libmpv-rs"
 keywords = ["media", "playback", "mpv", "libmpv"]
 
 [build-dependencies.bindgen]
-version = "0.54"
+version = "0.62"
 optional = true
 
 # Workaround for https://github.com/rust-lang/rust-bindgen/issues/1313
